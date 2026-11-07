@@ -64,6 +64,89 @@ function formatRemaining(sec: number) {
   return h > 0 ? `Quedan ${h} h ${m} min` : `Quedan ${m} min`;
 }
 
+// ===== GUÍA DE PROGRAMACIÓN (Ahora / Después) =====
+interface EpgItem {
+  t: string; // hora de inicio "HH:MM" (hora local del canal)
+  title: string;
+}
+type EpgMap = Record<string, EpgItem[]>;
+
+interface NowNext {
+  current: EpgItem;
+  next: EpgItem | null;
+  progress: number; // 0 a 100
+}
+
+const COUNTRY_TZ: Record<string, string> = {
+  "Perú": "America/Lima",
+  "Chile": "America/Santiago",
+  "Argentina": "America/Argentina/Buenos_Aires",
+  "España": "Europe/Madrid",
+  "Ecuador": "America/Guayaquil",
+  "Bolivia": "America/La_Paz",
+  "Italia": "Europe/Rome",
+};
+
+function tzCountryKey(c: Channel): string | undefined {
+  return Object.keys(COUNTRY_TZ).find((k) => c.country.startsWith(k));
+}
+
+function tzForChannel(c: Channel): string {
+  const k = tzCountryKey(c);
+  return k ? COUNTRY_TZ[k] : "America/Lima";
+}
+
+function toMin(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesNow(tz: string, now: Date): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now);
+    const h = Number(parts.find((p) => p.type === "hour")?.value) % 24;
+    const m = Number(parts.find((p) => p.type === "minute")?.value);
+    return h * 60 + m;
+  } catch {
+    return now.getHours() * 60 + now.getMinutes();
+  }
+}
+
+function parseSchedule(text: string): { items: EpgItem[]; invalid: string[] } {
+  const items: EpgItem[] = [];
+  const invalid: string[] = [];
+  text.split("\n").forEach((raw) => {
+    const line = raw.trim();
+    if (!line) return;
+    const m = line.match(/^(\d{1,2}):(\d{2})\s+(.+)$/);
+    if (!m) { invalid.push(line); return; }
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+    if (h > 23 || mi > 59) { invalid.push(line); return; }
+    items.push({ t: `${String(h).padStart(2, "0")}:${m[2]}`, title: m[3].trim().slice(0, 80) });
+  });
+  items.sort((a, b) => toMin(a.t) - toMin(b.t));
+  return { items, invalid };
+}
+
+// Calcula qué se transmite ahora y qué sigue, según la hora actual del canal (se repite cada día)
+function getNowNext(items: EpgItem[] | undefined, tz: string, now: Date): NowNext | null {
+  if (!items || items.length === 0) return null;
+  const nowMin = minutesNow(tz, now);
+  let idx = -1;
+  for (let i = 0; i < items.length; i++) {
+    if (toMin(items[i].t) <= nowMin) idx = i;
+  }
+  if (idx === -1) idx = items.length - 1; // todavía no empieza el primero de hoy: sigue el último de ayer
+  const current = items[idx];
+  const next = items.length > 1 ? items[(idx + 1) % items.length] : null;
+  const start = toMin(current.t);
+  const end = next ? toMin(next.t) : start + 1440;
+  const duration = ((end - start + 1440) % 1440) || 1440;
+  const elapsed = (nowMin - start + 1440) % 1440;
+  return { current, next, progress: Math.min(100, Math.max(0, (elapsed / duration) * 100)) };
+}
+
 // ===== REPRODUCTOR ROBUSTO (MP4 / HLS, con respaldo y manejo de errores) =====
 function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie; fallbackUrl?: string; startAt?: number; onProgress?: (t: number, d: number) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -273,6 +356,36 @@ export default function Home() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
   const heroTouchX = useRef(0);
+
+  // Guía de programación de TV (Ahora / Después)
+  const [epg, setEpg] = useState<EpgMap>({});
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [epgChannelId, setEpgChannelId] = useState("");
+  const [epgText, setEpgText] = useState("");
+
+  useEffect(() => {
+    const loadEpg = async () => {
+      try {
+        const res = await fetch("/api/epg", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.schedule && typeof data.schedule === "object") setEpg(data.schedule);
+      } catch {
+        // sin conexión: se queda con lo que ya hay
+      }
+    };
+    loadEpg();
+    const id = setInterval(loadEpg, 300000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Reloj para actualizar "Ahora / Después" mientras se ve la pestaña TV
+  useEffect(() => {
+    if (activeTab !== "tv") return;
+    setNowTick(Date.now());
+    const id = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, [activeTab]);
 
   // Cargar ajustes guardados
   useEffect(() => {
@@ -1548,6 +1661,7 @@ export default function Home() {
   ]);
 
   const [activeChannel, setActiveChannel] = useState<Channel>(liveChannels[0]);
+  const nowNext = getNowNext(epg[activeChannel.id], tzForChannel(activeChannel), new Date(nowTick));
   const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>("Todos");
   const [searchGuide, setSearchGuide] = useState<string>("");
 
@@ -1783,6 +1897,55 @@ export default function Home() {
     }
   };
 
+  // Guarda la programación de TV en el servidor (requiere clave de administrador)
+  const saveEpg = async (next: EpgMap): Promise<boolean> => {
+    try {
+      let key = sessionStorage.getItem("cineverso_admin_key") || "";
+      if (!key) key = window.prompt("Clave de administrador:") || "";
+      if (!key) {
+        alert("Se necesita la clave de administrador para guardar.");
+        return false;
+      }
+      const res = await fetch("/api/epg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: key, schedule: next }),
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem("cineverso_admin_key");
+        alert("Clave de administrador incorrecta.");
+        return false;
+      }
+      if (!res.ok) {
+        alert("No se pudo guardar la programación en el servidor.");
+        return false;
+      }
+      sessionStorage.setItem("cineverso_admin_key", key);
+      return true;
+    } catch {
+      alert("Error de conexión al guardar. Intenta de nuevo.");
+      return false;
+    }
+  };
+
+  const handleSaveEpg = async () => {
+    if (!epgChannelId) {
+      alert("Elige primero un canal.");
+      return;
+    }
+    const { items, invalid } = parseSchedule(epgText);
+    if (invalid.length > 0) {
+      alert('Hay líneas con formato incorrecto (usa "HH:MM Título"):\n\n' + invalid.slice(0, 5).join("\n"));
+      return;
+    }
+    const next: EpgMap = { ...epg };
+    if (items.length === 0) delete next[epgChannelId];
+    else next[epgChannelId] = items;
+    if (!(await saveEpg(next))) return;
+    setEpg(next);
+    flashToast(items.length ? "Programación guardada" : "Programación eliminada");
+  };
+
   useEffect(() => {
     if (!isMounted) return;
     try {
@@ -2008,6 +2171,29 @@ export default function Home() {
     
     return matchesSearch && matchesType && matchesGenre && matchesYear;
   });
+
+  const tzKey = tzCountryKey(activeChannel);
+  const tzNote = tzKey && tzKey !== "Perú" ? ` · hora de ${tzKey}` : "";
+  const nowNextCard = nowNext ? (
+    <div className="space-y-2">
+      <div className="rounded-xl bg-[#111] border border-gray-900 p-3">
+        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide">
+          <span className="text-green-400">Ahora</span>
+          <span className="text-gray-500">Desde las {nowNext.current.t}{tzNote}</span>
+        </div>
+        <p className="text-sm font-bold text-white mt-1 truncate">{nowNext.current.title}</p>
+        <div className="h-1 bg-gray-800 rounded-full mt-2 overflow-hidden">
+          <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${nowNext.progress}%` }} />
+        </div>
+      </div>
+      {nowNext.next && (
+        <div className="rounded-xl bg-[#0d0d0d] border border-gray-900 p-3">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Después · {nowNext.next.t}</span>
+          <p className="text-sm font-semibold text-gray-200 mt-1 truncate">{nowNext.next.title}</p>
+        </div>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-clip pb-24 md:pb-0">
@@ -2324,11 +2510,6 @@ export default function Home() {
         <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-clip">
           <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-5rem)] bg-[#050505]">
             <div className="w-full lg:flex-1 sticky top-[4.5rem] z-30 lg:relative lg:top-auto lg:z-auto bg-black flex flex-col justify-between lg:overflow-y-auto">
-              <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate">
-                <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
-                <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
-              </div>
-
               {/* Contenedor estricto w-full aspect-video para evitar desbordes */}
               <div className="w-full aspect-video lg:h-full flex items-center justify-center relative bg-black shrink-0 overflow-hidden">
                 {activeChannel.embedUrl ? (
@@ -2361,16 +2542,24 @@ export default function Home() {
                   <div className="truncate">
                     <div className="flex items-center gap-2 truncate">
                       <h3 className="text-xs sm:text-sm font-bold text-white truncate">{activeChannel.name}</h3>
+                      <span className="flex items-center gap-1 text-[10px] font-extrabold text-red-500 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> EN VIVO
+                      </span>
                       <span className="hidden sm:inline-block text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">{activeChannel.country}</span>
                     </div>
-                    <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5 truncate">Emitiendo: <span className="text-gray-200 font-medium">{activeChannel.currentShow}</span></p>
+                    <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5 truncate">
+                      {nowNext ? "Ahora: " : "Emitiendo: "}
+                      <span className="text-gray-200 font-medium">{nowNext ? nowNext.current.title : activeChannel.currentShow}</span>
+                    </p>
                   </div>
                 </div>
                 <span className="text-[10px] sm:text-xs bg-[#181818] px-3 py-1 rounded-lg text-gray-300 border border-gray-800 font-bold shrink-0">{activeChannel.category}</span>
               </div>
+              {nowNextCard && <div className="hidden lg:block px-4 pb-4 bg-[#0a0a0a] shrink-0">{nowNextCard}</div>}
             </div>
 
             <div className="w-full lg:w-80 bg-[#0d0d0d] border-t lg:border-t-0 lg:border-l border-gray-900 flex flex-col lg:h-full shrink-0">
+              {nowNextCard && <div className="lg:hidden p-3 border-b border-gray-900 bg-[#0a0a0a]">{nowNextCard}</div>}
               <div className="p-3 sm:p-4 border-b border-gray-900 space-y-2 sm:space-y-3 bg-[#0a0a0a]">
                 <h3 className="text-sm font-bold text-white flex items-center justify-between">
                   <span>Guía de Canales</span>
@@ -2567,6 +2756,45 @@ export default function Home() {
                 {editingMovieId ? "Guardar Cambios de la Película" : "Publicar Contenido en la Web"}
               </button>
             </form>
+          </div>
+
+          <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">Programación de TV (Ahora / Después)</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Una línea por programa con el formato <span className="text-gray-300 font-mono">HH:MM Título</span>. Se repite todos los días y usa la hora local del canal (Perú = hora de Lima).
+              </p>
+            </div>
+            <select
+              value={epgChannelId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setEpgChannelId(id);
+                setEpgText((epg[id] || []).map((i) => `${i.t} ${i.title}`).join("\n"));
+              }}
+              className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+            >
+              <option value="">Elige un canal...</option>
+              {liveChannels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} — {c.country}{epg[c.id] && epg[c.id].length > 0 ? " ✓" : ""}
+                </option>
+              ))}
+            </select>
+            <textarea
+              rows={8}
+              value={epgText}
+              disabled={!epgChannelId}
+              onChange={(e) => setEpgText(e.target.value)}
+              placeholder={"06:00 Buenos Días Perú\n09:30 Noticias de la Mañana\n12:00 Almuerzo Show\n20:00 Noticiero Central"}
+              className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white font-mono focus:outline-none focus:border-green-500 disabled:opacity-50"
+            />
+            <button
+              onClick={handleSaveEpg}
+              className="w-full bg-[#181818] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-sm border border-gray-800 transition cursor-pointer"
+            >
+              Guardar programación del canal
+            </button>
           </div>
 
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-4">
