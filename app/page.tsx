@@ -359,7 +359,7 @@ export default function Home() {
 
   // Guía de programación de TV (Ahora / Después)
   const [epg, setEpg] = useState<EpgMap>({});
-  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [nowTick, setNowTick] = useState(0); // se llena al montar (Next no permite Date.now() al renderizar)
   const [epgChannelId, setEpgChannelId] = useState("");
   const [epgText, setEpgText] = useState("");
 
@@ -1661,7 +1661,7 @@ export default function Home() {
   ]);
 
   const [activeChannel, setActiveChannel] = useState<Channel>(liveChannels[0]);
-  const nowNext = getNowNext(epg[activeChannel.id], tzForChannel(activeChannel), new Date(nowTick));
+  const nowNext = nowTick > 0 ? getNowNext(epg[activeChannel.id], tzForChannel(activeChannel), new Date(nowTick)) : null;
   const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>("Todos");
   const [searchGuide, setSearchGuide] = useState<string>("");
 
