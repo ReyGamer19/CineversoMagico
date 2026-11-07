@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Play, Info, Plus, Search, Bell, Sparkles, Check, 
-  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download
+  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark
 } from "lucide-react";
 import Hls from "hls.js";
 
@@ -1469,7 +1469,7 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
       {/* Navegación Superior */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
         <div className="flex items-center gap-6 sm:gap-8">
@@ -2423,9 +2423,44 @@ export default function Home() {
         </div>
       )}
 
+      {/* BARRA DE NAVEGACIÓN INFERIOR (SOLO MÓVIL) */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/60 backdrop-blur-2xl border-t border-white/10"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="flex items-center justify-around px-2 pt-3 pb-3">
+          {[
+            { id: "inicio", label: "Inicio", Icon: HomeIcon },
+            { id: "explorar", label: "Explorar", Icon: Search },
+            { id: "tv", label: "TV", Icon: Tv },
+            { id: "milista", label: "Mi Lista", Icon: Bookmark },
+          ].map(({ id, label, Icon }) => {
+            const active = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id as typeof activeTab)}
+                aria-label={label}
+                aria-current={active ? "page" : undefined}
+                className="flex flex-1 flex-col items-center gap-1.5 cursor-pointer select-none active:scale-95 transition"
+              >
+                <Icon
+                  className={`w-7 h-7 transition-colors ${active ? "text-white" : "text-gray-400"}`}
+                  strokeWidth={active ? 2.2 : 1.8}
+                />
+                <span className={`text-[13px] leading-none transition-colors ${active ? "text-white font-semibold" : "text-gray-400 font-medium"}`}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
       {/* BANNER FLOTANTE DE INSTALACIÓN PWA */}
       {deferredPrompt && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#141414] border border-gray-800 p-4 rounded-2xl shadow-2xl flex items-center gap-4 text-white max-w-sm animate-bounce">
+        <div className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 bg-[#141414] border border-gray-800 p-4 rounded-2xl shadow-2xl flex items-center gap-4 text-white max-w-sm animate-bounce">
           <div className="p-3 bg-green-500/10 text-green-400 rounded-xl shrink-0">
             <Download className="w-6 h-6" />
           </div>
@@ -2444,7 +2479,7 @@ export default function Home() {
 
       {/* TOAST DE NOTIFICACIÓN */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-6 z-50 bg-[#0f0f0f] border border-green-500/50 text-white p-4 rounded-2xl shadow-2xl max-w-xs flex items-center gap-3">
+        <div className="fixed bottom-24 md:bottom-6 left-4 md:left-6 z-50 bg-[#0f0f0f] border border-green-500/50 text-white p-4 rounded-2xl shadow-2xl max-w-xs flex items-center gap-3">
           <Sparkle className="w-4 h-4 text-green-400 shrink-0" />
           <p className="text-xs text-gray-200">{toastMessage}</p>
         </div>
