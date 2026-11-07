@@ -1348,15 +1348,73 @@ export default function Home() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const merged = new Map();
-          [...defaultMovies, ...parsed].forEach(m => merged.set(m.id, m));
-          setCustomMovies(Array.from(merged.values()));
+          // Las películas por defecto SIEMPRE usan la versión del código (así los enlaces
+          // corregidos llegan a todos los dispositivos). Solo se conservan las agregadas
+          // por el admin que no son de las películas por defecto.
+          const defaultIds = new Set(defaultMovies.map((m) => String(m.id)));
+          const extras = parsed.filter((m: Movie) => !defaultIds.has(String(m.id)));
+          setCustomMovies([...defaultMovies, ...extras]);
         }
       }
     } catch (e) {
       console.error("Error cargando localStorage:", e);
     }
+
+    // Catálogo compartido: se carga del servidor para que todos los dispositivos vean lo mismo
+    const loadFromServer = async () => {
+      try {
+        const res = await fetch("/api/catalog", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.movies) && data.movies.length > 0) {
+          setCustomMovies(data.movies);
+        }
+      } catch {
+        // Sin conexión al servidor: se queda con el catálogo local
+      }
+    };
+    loadFromServer();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadFromServer();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(loadFromServer, 60000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
   }, []);
+
+  // Guarda el catálogo completo en el servidor (requiere clave de administrador)
+  const saveCatalog = async (list: Movie[]): Promise<boolean> => {
+    try {
+      let key = sessionStorage.getItem("cineverso_admin_key") || "";
+      if (!key) key = window.prompt("Clave de administrador:") || "";
+      if (!key) {
+        alert("Se necesita la clave de administrador para guardar.");
+        return false;
+      }
+      const res = await fetch("/api/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: key, movies: list }),
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem("cineverso_admin_key");
+        alert("Clave de administrador incorrecta.");
+        return false;
+      }
+      if (!res.ok) {
+        alert("No se pudo guardar en el servidor. Revisa la configuración de Supabase.");
+        return false;
+      }
+      sessionStorage.setItem("cineverso_admin_key", key);
+      return true;
+    } catch {
+      alert("Error de conexión al guardar. Intenta de nuevo.");
+      return false;
+    }
+  };
 
   useEffect(() => {
     if (!isMounted) return;
@@ -1404,7 +1462,7 @@ export default function Home() {
     originalLanguage: "ES"
   };
 
-  const handleSaveMovie = (e: React.FormEvent) => {
+  const handleSaveMovie = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
       alert("Acceso denegado. Solo el administrador puede gestionar películas.");
@@ -1427,6 +1485,7 @@ export default function Home() {
         videoUrl: newMovieVideoUrl
       } : m);
 
+      if (!(await saveCatalog(updatedList))) return;
       setCustomMovies(updatedList);
       setToastMessage("¡Contenido actualizado y guardado correctamente!");
       setEditingMovieId(null);
@@ -1452,6 +1511,7 @@ export default function Home() {
       };
 
       const newList = [createdMovie, ...customMovies];
+      if (!(await saveCatalog(newList))) return;
       setCustomMovies(newList);
       setToastMessage("¡Película publicada y respaldada con éxito!");
     }
@@ -1474,9 +1534,10 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDeleteMovie = (id: number | string) => {
+  const handleDeleteMovie = async (id: number | string) => {
     if (confirm("¿Estás seguro de eliminar este contenido del catálogo?")) {
       const filtered = customMovies.filter(m => m.id !== id);
+      if (!(await saveCatalog(filtered))) return;
       setCustomMovies(filtered);
       if (editingMovieId === id) {
         setEditingMovieId(null);
@@ -2040,19 +2101,33 @@ export default function Home() {
               <h3 className="text-lg font-bold text-white">
                 <span>Gestión del Catálogo ({customMovies.length} títulos)</span>
               </h3>
-              <button 
-                onClick={() => {
-                  if (confirm("¿Restaurar catálogo por defecto y limpiar caché corrupta?")) {
-                    localStorage.removeItem("cineverso_custom_movies");
-                    setCustomMovies(defaultMovies);
-                    alert("Catálogo restaurado correctamente.");
-                    window.location.reload();
-                  }
-                }}
-                className="flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer self-start sm:self-auto"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Forzar Restauración
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <button 
+                  onClick={async () => {
+                    if (await saveCatalog(customMovies)) {
+                      setToastMessage("¡Catálogo sincronizado con todos los dispositivos!");
+                      setTimeout(() => setToastMessage(""), 4000);
+                    }
+                  }}
+                  className="flex items-center justify-center gap-1.5 bg-green-950/40 text-green-400 hover:bg-green-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-green-900/50 transition cursor-pointer"
+                >
+                  <Globe className="w-3.5 h-3.5" /> Sincronizar con todos
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (confirm("¿Restaurar catálogo por defecto en TODOS los dispositivos?")) {
+                      if (!(await saveCatalog(defaultMovies))) return;
+                      localStorage.removeItem("cineverso_custom_movies");
+                      setCustomMovies(defaultMovies);
+                      alert("Catálogo restaurado correctamente.");
+                      window.location.reload();
+                    }
+                  }}
+                  className="flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Forzar Restauración
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-2">
