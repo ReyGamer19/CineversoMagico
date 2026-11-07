@@ -1239,7 +1239,6 @@ export default function Home() {
     }
   ];
 
-  // Solución de Hidratación: iniciamos con defaultMovies y cargamos localStorage tras el montaje
   const [customMovies, setCustomMovies] = useState<Movie[]>(defaultMovies);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -1260,7 +1259,6 @@ export default function Home() {
     }
   }, []);
 
-  // Guardado automático persistente
   useEffect(() => {
     if (!isMounted) return;
     try {
@@ -1471,13 +1469,13 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black">
+    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden">
       {/* Navegación Superior */}
-      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
-        <div className="flex items-center gap-8">
+      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
+        <div className="flex items-center gap-6 sm:gap-8">
           <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group">
-            <span className="bg-green-500 text-black font-black px-2 py-0.5 rounded text-xl shadow-lg shadow-green-500/20">H</span>
-            <span className="text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
+            <span className="bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
+            <span className="text-xl sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
               Cineverso Magico <Sparkle className="w-4 h-4 text-emerald-400 animate-pulse" />
             </span>
           </div>
@@ -1495,7 +1493,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-gray-300">
+        <div className="flex items-center gap-3 sm:gap-4 text-gray-300">
           <Search onClick={() => setActiveTab("explorar")} className="w-5 h-5 cursor-pointer hover:text-white" />
           <button className="hidden sm:flex items-center gap-1.5 text-xs bg-[#121212] px-3 py-1.5 rounded-full border border-gray-800 hover:bg-gray-800">
             <Sparkles className="w-3.5 h-3.5 text-yellow-400" /> Sorpréndeme
@@ -1507,7 +1505,7 @@ export default function Home() {
             className="flex items-center gap-2 cursor-pointer bg-[#121212] p-1 pr-3 rounded-full border border-gray-800 hover:border-green-500 transition"
           >
             <img src={activeProfile.avatar} alt={activeProfile.name} className="w-7 h-7 rounded-full object-cover bg-gray-900" />
-            <span className="text-xs font-bold text-white">{activeProfile.name}</span>
+            <span className="text-xs font-bold text-white max-w-[80px] sm:max-w-none truncate">{activeProfile.name}</span>
           </div>
         </div>
       </nav>
@@ -1515,37 +1513,37 @@ export default function Home() {
       {/* VISTA INICIO */}
       {activeTab === "inicio" && (
         <>
-          <div className="relative h-[85vh] w-full bg-cover bg-center flex items-center" style={{ backgroundImage: `url(${heroMovie.bgImage})` }}>
+          <div className="relative h-[80vh] sm:h-[85vh] w-full bg-cover bg-center flex items-center overflow-hidden" style={{ backgroundImage: `url(${heroMovie.bgImage})` }}>
             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/70" />
             <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/50 to-transparent" />
             
-            <div className="relative z-10 px-6 md:px-12 max-w-2xl mt-12">
-              <h1 className="text-4xl sm:text-6xl font-black tracking-tight uppercase leading-none text-white">
+            <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-2xl mt-12 w-full">
+              <h1 className="text-3xl sm:text-6xl font-black tracking-tight uppercase leading-none text-white">
                 {heroMovie.title}
-                {heroMovie.subtitle && <span className="block text-2xl sm:text-4xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
+                {heroMovie.subtitle && <span className="block text-xl sm:text-4xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
               </h1>
               
-              <div className="flex items-center gap-3 my-4 text-xs font-semibold">
+              <div className="flex items-center gap-3 my-3 sm:my-4 text-xs font-semibold">
                 <span className="text-green-400">★ {heroMovie.rating}</span>
                 <span className="text-gray-400">{heroMovie.year}</span>
                 <span className="text-gray-400">{heroMovie.duration}</span>
-                <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2.5 py-0.5 rounded">{heroMovie.tag}</span>
+                <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2 py-0.5 rounded">{heroMovie.tag}</span>
               </div>
 
-              <p className="text-gray-300 text-sm leading-relaxed mb-6 line-clamp-3">
+              <p className="text-gray-300 text-xs sm:text-sm leading-relaxed mb-6 line-clamp-3">
                 {heroMovie.desc}
               </p>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button 
                   onClick={() => setSelectedMovie(heroMovie)}
-                  className="flex items-center gap-2 bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition cursor-pointer"
+                  className="flex items-center gap-2 bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition cursor-pointer text-sm"
                 >
                   <Play className="w-5 h-5 fill-black" /> Reproducir
                 </button>
                 <button 
                   onClick={() => setSelectedMovie(heroMovie)}
-                  className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800 transition cursor-pointer"
+                  className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800 transition cursor-pointer text-sm"
                 >
                   <Info className="w-5 h-5" /> Más información
                 </button>
@@ -1559,14 +1557,14 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="px-6 md:px-12 space-y-10 -mt-20 relative z-20 pb-20">
+          <div className="px-4 sm:px-6 md:px-12 space-y-10 -mt-20 relative z-20 pb-20 w-full overflow-x-hidden">
             {customMovies.length > 0 && (
               <div>
                 <h2 className="text-lg font-bold mb-4 text-white">Tus Películas Subidas</h2>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none">
+                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none w-full">
                   {customMovies.map((item) => (
-                    <div key={item.id} onClick={() => setSelectedMovie(item)} className="min-w-[180px] group cursor-pointer">
-                      <img src={item.bgImage} alt={item.title} className="w-full h-48 object-cover rounded-xl border border-gray-900 group-hover:border-green-500 transition shadow-lg" />
+                    <div key={item.id} onClick={() => setSelectedMovie(item)} className="min-w-[150px] sm:min-w-[180px] group cursor-pointer shrink-0">
+                      <img src={item.bgImage} alt={item.title} className="w-full h-40 sm:h-48 object-cover rounded-xl border border-gray-900 group-hover:border-green-500 transition shadow-lg" />
                       <h4 className="text-xs font-semibold mt-2 text-gray-300 truncate">{item.title}</h4>
                       <span className="text-[10px] text-green-400 font-medium">{item.tag}</span>
                     </div>
@@ -1580,7 +1578,7 @@ export default function Home() {
 
       {/* VISTA EXPLORAR */}
       {activeTab === "explorar" && (
-        <div className="pt-24 px-6 md:px-12 pb-24 max-w-7xl mx-auto space-y-6">
+        <div className="pt-24 px-4 sm:px-6 md:px-12 pb-24 max-w-7xl mx-auto space-y-6 w-full overflow-x-hidden">
           <div className="relative max-w-xl">
             <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-500" />
             <input 
@@ -1633,7 +1631,7 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-none border-b border-gray-900">
+          <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-none border-b border-gray-900 w-full">
             <button
               onClick={() => setExploreGenreFilter("Todos")}
               className={`px-4 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer ${exploreGenreFilter === "Todos" ? "bg-white text-black font-bold" : "bg-[#121212] text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-800"}`}
@@ -1688,23 +1686,24 @@ export default function Home() {
         </div>
       )}
 
-      {/* VISTA TV EN VIVO */}
+      {/* VISTA TV EN VIVO - OPTIMIZADA PARA MÓVILES Y PANTALLAS COMPLETAS */}
       {activeTab === "tv" && (
-        <div className="pt-20 min-h-screen bg-[#050505]">
-          <div className="flex flex-col lg:flex-row h-[calc(100vh-5rem)] bg-[#050505] overflow-hidden">
-            <div className="flex-1 relative bg-black flex flex-col justify-between overflow-y-auto">
-              <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-3 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800">
-                <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
+        <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-hidden">
+          <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] bg-[#050505]">
+            <div className="w-full lg:flex-1 relative bg-black flex flex-col justify-between overflow-y-auto">
+              <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate">
+                <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
                 <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
               </div>
 
-              <div className="w-full aspect-video lg:h-full flex items-center justify-center relative bg-black">
+              {/* Contenedor estricto w-full aspect-video para evitar desbordes */}
+              <div className="w-full aspect-video lg:h-full flex items-center justify-center relative bg-black shrink-0 overflow-hidden">
                 {activeChannel.embedUrl ? (
                   <iframe
                     key={activeChannel.id}
                     src={`${activeChannel.embedUrl}${activeChannel.embedUrl.includes('?') ? '&' : '?'}autoplay=1&mute=0&rel=0&iv_load_policy=3`}
                     title={activeChannel.name}
-                    className="w-full h-full border-0"
+                    className="w-full h-full border-0 object-cover"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
@@ -1723,23 +1722,23 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="p-4 bg-[#0a0a0a] border-t border-gray-900 flex items-center justify-between z-20 shrink-0">
-                <div className="flex items-center gap-3">
-                  <img src={activeChannel.logo} alt={activeChannel.name} className="w-10 h-10 rounded-lg object-cover border border-gray-800" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-white">{activeChannel.name}</h3>
-                      <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">{activeChannel.country}</span>
+              <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex items-center justify-between z-20 shrink-0">
+                <div className="flex items-center gap-3 truncate">
+                  <img src={activeChannel.logo} alt={activeChannel.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg object-cover border border-gray-800 shrink-0" />
+                  <div className="truncate">
+                    <div className="flex items-center gap-2 truncate">
+                      <h3 className="text-xs sm:text-sm font-bold text-white truncate">{activeChannel.name}</h3>
+                      <span className="hidden sm:inline-block text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">{activeChannel.country}</span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">Emitiendo: <span className="text-gray-200 font-medium">{activeChannel.currentShow}</span></p>
+                    <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5 truncate">Emitiendo: <span className="text-gray-200 font-medium">{activeChannel.currentShow}</span></p>
                   </div>
                 </div>
-                <span className="text-xs bg-[#181818] px-3 py-1 rounded-lg text-gray-300 border border-gray-800 font-bold">{activeChannel.category}</span>
+                <span className="text-[10px] sm:text-xs bg-[#181818] px-3 py-1 rounded-lg text-gray-300 border border-gray-800 font-bold shrink-0">{activeChannel.category}</span>
               </div>
             </div>
 
-            <div className="w-full lg:w-80 bg-[#0d0d0d] border-l border-gray-900 flex flex-col h-full shrink-0">
-              <div className="p-4 border-b border-gray-900 space-y-3 bg-[#0a0a0a]">
+            <div className="w-full lg:w-80 bg-[#0d0d0d] border-t lg:border-t-0 lg:border-l border-gray-900 flex flex-col h-72 lg:h-full shrink-0">
+              <div className="p-3 sm:p-4 border-b border-gray-900 space-y-2 sm:space-y-3 bg-[#0a0a0a]">
                 <h3 className="text-sm font-bold text-white flex items-center justify-between">
                   <span>Guía de Canales</span>
                   <Radio className="w-4 h-4 text-green-400 animate-pulse" />
@@ -1769,7 +1768,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 space-y-5 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-thin">
                 {Object.entries(channelsGroupedByCountry).map(([countryName, channels]) => (
                   <div key={countryName} className="space-y-2">
                     <div className="sticky top-0 bg-[#0d0d0d]/95 backdrop-blur py-1.5 px-1 z-10 border-b border-gray-800/60 flex items-center justify-between">
@@ -1809,7 +1808,7 @@ export default function Home() {
 
       {/* VISTA MI LISTA */}
       {activeTab === "milista" && (
-        <div className="max-w-6xl mx-auto pt-28 px-6 pb-24 space-y-6">
+        <div className="max-w-6xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-6 overflow-x-hidden">
           <h2 className="text-3xl font-black text-white">Mi Lista ({myList.length})</h2>
           {myList.length === 0 ? (
             <p className="text-sm text-gray-500">No tienes películas añadidas a tu lista todavía.</p>
@@ -1827,15 +1826,15 @@ export default function Home() {
 
       {/* PANEL DE ADMINISTRACIÓN */}
       {activeTab === "admin" && isAdmin && (
-        <div className="max-w-4xl mx-auto pt-28 px-6 pb-24 space-y-10">
-          <div className="bg-[#0f0f0f] border border-green-500/30 p-8 rounded-3xl shadow-2xl space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-900">
+        <div className="max-w-4xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-10 overflow-x-hidden">
+          <div className="bg-[#0f0f0f] border border-green-500/30 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-900 gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-green-500/10 rounded-2xl text-green-400 border border-green-500/20">
                   <Film className="w-6 h-6" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-white">
+                  <h2 className="text-xl sm:text-2xl font-black text-white">
                     {editingMovieId ? "Editar Contenido" : "Panel de Propietario"}
                   </h2>
                   <p className="text-xs text-gray-400">
@@ -1852,7 +1851,7 @@ export default function Home() {
                     setNewMovieImage("");
                     setNewMovieVideoUrl("");
                   }}
-                  className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition"
+                  className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition self-start sm:self-auto"
                 >
                   Cancelar Edición
                 </button>
@@ -1938,8 +1937,8 @@ export default function Home() {
           </div>
 
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 className="text-lg font-bold text-white">
                 <span>Gestión del Catálogo ({customMovies.length} títulos)</span>
               </h3>
               <button 
@@ -1951,7 +1950,7 @@ export default function Home() {
                     window.location.reload();
                   }
                 }}
-                className="flex items-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer"
+                className="flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer self-start sm:self-auto"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Forzar Restauración
               </button>
@@ -1959,11 +1958,11 @@ export default function Home() {
 
             <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-2">
               {customMovies.map((movie) => (
-                <div key={movie.id} className="flex items-center justify-between bg-[#050505] p-3.5 rounded-2xl border border-gray-900 hover:border-gray-800 transition">
-                  <div className="flex items-center gap-3">
-                    <img src={movie.bgImage} alt={movie.title} className="w-12 h-16 object-cover rounded-xl border border-gray-800" />
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{movie.title}</h4>
+                <div key={movie.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#050505] p-3.5 rounded-2xl border border-gray-900 hover:border-gray-800 transition gap-3">
+                  <div className="flex items-center gap-3 truncate">
+                    <img src={movie.bgImage} alt={movie.title} className="w-12 h-16 object-cover rounded-xl border border-gray-800 shrink-0" />
+                    <div className="truncate">
+                      <h4 className="text-sm font-bold text-white truncate">{movie.title}</h4>
                       <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
                         <span className="bg-gray-900 px-2 py-0.5 rounded text-green-400 font-semibold">{movie.tag}</span>
                         <span>{movie.year}</span>
@@ -1972,7 +1971,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
                     <button 
                       onClick={() => handleEditClick(movie)}
                       className="flex items-center gap-1 bg-[#181818] hover:bg-emerald-950/40 text-emerald-400 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
@@ -1995,16 +1994,16 @@ export default function Home() {
 
       {/* VISTA CUENTA Y PERFILES */}
       {activeTab === "cuenta" && (
-        <div className="max-w-3xl mx-auto pt-24 px-6 pb-24 space-y-8">
-          <div className="flex items-center justify-between bg-[#0f0f0f] p-6 rounded-2xl border border-gray-900">
+        <div className="max-w-3xl mx-auto pt-24 px-4 sm:px-6 pb-24 space-y-8 overflow-x-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#0f0f0f] p-6 rounded-2xl border border-gray-900 gap-4">
             <div className="flex items-center gap-4">
-              <img src={activeProfile.avatar} alt={activeProfile.name} className="w-16 h-16 rounded-2xl object-cover bg-gray-900 border-2 border-green-500" />
+              <img src={activeProfile.avatar} alt={activeProfile.name} className="w-16 h-16 rounded-2xl object-cover bg-gray-900 border-2 border-green-500 shrink-0" />
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold">PERFIL ACTIVO</span>
-                <h2 className="text-2xl font-bold text-white">{activeProfile.name}</h2>
+                <h2 className="text-2xl font-bold text-white truncate max-w-[200px] sm:max-w-none">{activeProfile.name}</h2>
               </div>
             </div>
-            <button onClick={() => setShowAddProfileModal(true)} className="flex items-center gap-2 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer">
+            <button onClick={() => setShowAddProfileModal(true)} className="flex items-center justify-center gap-2 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer">
               <User className="w-4 h-4" /> Cambiar perfil
             </button>
           </div>
@@ -2018,18 +2017,18 @@ export default function Home() {
             <div className="bg-[#0f0f0f] p-4 rounded-2xl border border-gray-900 space-y-3">
               {profiles.map((p) => (
                 <div key={p.id} className="flex items-center justify-between bg-[#050505] p-3 rounded-xl border border-gray-900">
-                  <div className="flex items-center gap-3">
-                    <img src={p.avatar} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-gray-900" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-white">{p.name}</span>
-                        {p.id === activeProfile.id && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">En uso</span>}
+                  <div className="flex items-center gap-3 truncate">
+                    <img src={p.avatar} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-gray-900 shrink-0" />
+                    <div className="truncate">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-sm font-bold text-white truncate">{p.name}</span>
+                        {p.id === activeProfile.id && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold shrink-0">En uso</span>}
                       </div>
                       <span className="text-xs text-gray-600">Estándar</span>
                     </div>
                   </div>
                   {p.id !== activeProfile.id && (
-                    <button onClick={() => handleSelectProfile(p)} className="text-xs text-emerald-400 hover:underline cursor-pointer font-bold">Cambiar a este</button>
+                    <button onClick={() => handleSelectProfile(p)} className="text-xs text-emerald-400 hover:underline cursor-pointer font-bold shrink-0 ml-2">Cambiar</button>
                   )}
                 </div>
               ))}
@@ -2056,7 +2055,7 @@ export default function Home() {
               {isGuest ? (
                 <>
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 bg-green-500/10 text-green-400 rounded-xl">
+                    <div className="p-2.5 bg-green-500/10 text-green-400 rounded-xl shrink-0">
                       <User className="w-5 h-5" />
                     </div>
                     <div>
@@ -2111,11 +2110,11 @@ export default function Home() {
                 </>
               ) : (
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="truncate pr-2">
                     <span className="text-xs text-green-400 font-bold">Cuenta de Correo Verificada (Hasta 5 perfiles)</span>
-                    <p className="text-sm font-bold text-white">{email}</p>
+                    <p className="text-sm font-bold text-white truncate">{email}</p>
                   </div>
-                  <button onClick={() => { setIsGuest(true); setRegisterStep("form"); }} className="text-xs text-red-400 hover:underline cursor-pointer">Cerrar sesión</button>
+                  <button onClick={() => { setIsGuest(true); setRegisterStep("form"); }} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0">Cerrar sesión</button>
                 </div>
               )}
             </div>
@@ -2196,11 +2195,11 @@ export default function Home() {
       {/* MODAL DE INFORMACIÓN DE PELÍCULA (CON BOTONES FIJOS DE RETROCESO) */}
       {selectedMovie && !isPlaying && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto">
-          <div className="bg-[#141414] w-full min-h-screen relative shadow-2xl flex flex-col">
+          <div className="bg-[#141414] w-full min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
             {/* Botón de Retroceso Fijo Superior Izquierdo */}
             <button 
               onClick={() => setSelectedMovie(null)} 
-              className="fixed top-6 left-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center"
+              className="fixed top-4 left-4 sm:top-6 sm:left-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center"
             >
               <ArrowLeft className="w-6 h-6" />
             </button>
@@ -2208,20 +2207,20 @@ export default function Home() {
             {/* Botón Cerrar Fijo Superior Derecho */}
             <button 
               onClick={() => setSelectedMovie(null)} 
-              className="fixed top-6 right-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center"
+              className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center"
             >
               <X className="w-6 h-6" />
             </button>
 
-            <div className="relative h-[55vh] sm:h-[65vh] w-full bg-cover bg-center flex items-end" style={{ backgroundImage: `url(${selectedMovie.bgImage})` }}>
+            <div className="relative h-[55vh] sm:h-[65vh] w-full bg-cover bg-center flex items-end overflow-hidden" style={{ backgroundImage: `url(${selectedMovie.bgImage})` }}>
               <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-black/70" />
               <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
               
-              <div className="relative z-10 p-6 sm:p-14 space-y-4 max-w-4xl w-full">
-                <h2 className="text-4xl sm:text-7xl font-black tracking-wider uppercase leading-none text-red-600 drop-shadow-2xl">
+              <div className="relative z-10 p-4 sm:p-14 space-y-4 max-w-4xl w-full">
+                <h2 className="text-3xl sm:text-7xl font-black tracking-wider uppercase leading-none text-red-600 drop-shadow-2xl">
                   {selectedMovie.title}
                   {selectedMovie.subtitle && (
-                    <span className="block text-xl sm:text-3xl text-white tracking-widest mt-2 font-extrabold">{selectedMovie.subtitle}</span>
+                    <span className="block text-lg sm:text-3xl text-white tracking-widest mt-2 font-extrabold">{selectedMovie.subtitle}</span>
                   )}
                 </h2>
 
@@ -2232,10 +2231,10 @@ export default function Home() {
                   <span className="text-gray-300 text-xs bg-gray-800/80 px-2.5 py-0.5 rounded">{selectedMovie.genres ? selectedMovie.genres.join(", ") : selectedMovie.tag}</span>
                 </div>
 
-                <div className="flex items-center gap-3 pt-2">
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button 
                     onClick={() => setIsPlaying(true)}
-                    className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base"
+                    className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base"
                   >
                     <Play className="w-5 h-5 fill-black" /> Reproducir
                   </button>
@@ -2250,7 +2249,7 @@ export default function Home() {
                         setTimeout(() => setToastMessage(""), 3000);
                       }
                     }}
-                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base"
+                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 sm:px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base"
                   >
                     <Plus className="w-5 h-5" /> Mi Lista
                   </button>
@@ -2260,7 +2259,7 @@ export default function Home() {
                       setToastMessage("¡Enlace copiado al portapapeles!");
                       setTimeout(() => setToastMessage(""), 3000);
                     }}
-                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base"
+                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base"
                   >
                     <Share2 className="w-4 h-4" /> Compartir
                   </button>
@@ -2272,23 +2271,23 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="p-6 sm:p-14 space-y-6 bg-[#141414] flex-1">
-              <div className="flex items-center gap-8 border-b border-gray-800 text-sm font-bold">
+            <div className="p-4 sm:p-14 space-y-6 bg-[#141414] flex-1">
+              <div className="flex items-center gap-6 sm:gap-8 border-b border-gray-800 text-sm font-bold overflow-x-auto scrollbar-none">
                 <button 
                   onClick={() => setMovieModalTab("detalles")}
-                  className={`pb-3 relative cursor-pointer ${movieModalTab === "detalles" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
+                  className={`pb-3 relative cursor-pointer whitespace-nowrap ${movieModalTab === "detalles" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
                 >
                   Detalles
                 </button>
                 <button 
                   onClick={() => setMovieModalTab("reparto")}
-                  className={`pb-3 relative cursor-pointer ${movieModalTab === "reparto" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
+                  className={`pb-3 relative cursor-pointer whitespace-nowrap ${movieModalTab === "reparto" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
                 >
                   Reparto
                 </button>
                 <button 
                   onClick={() => setMovieModalTab("similares")}
-                  className={`pb-3 relative cursor-pointer ${movieModalTab === "similares" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
+                  className={`pb-3 relative cursor-pointer whitespace-nowrap ${movieModalTab === "similares" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
                 >
                   Más como esto
                 </button>
@@ -2349,19 +2348,19 @@ export default function Home() {
         </div>
       )}
 
-      {/* REPRODUCTOR FLOTANTE MODERNO */}
+      {/* REPRODUCTOR FLOTANTE MODERNO - ADAPTADO A MÓVILES */}
       {selectedMovie && isPlaying && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col justify-between">
+        <div className="fixed inset-0 bg-black z-50 flex flex-col justify-between overflow-x-hidden">
           <div className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent z-20">
             <button 
               onClick={() => setIsPlaying(false)}
               className="flex items-center gap-2 text-white font-bold hover:text-green-400 transition cursor-pointer"
             >
-              <ArrowLeft className="w-5 h-5" /> {selectedMovie.title}
+              <ArrowLeft className="w-5 h-5" /> <span className="truncate max-w-[250px] sm:max-w-none">{selectedMovie.title}</span>
             </button>
           </div>
 
-          <div className="flex-1 flex items-center justify-center relative bg-black">
+          <div className="flex-1 flex items-center justify-center relative bg-black overflow-hidden">
             <video 
               controls 
               autoPlay
@@ -2374,11 +2373,11 @@ export default function Home() {
             </video>
           </div>
 
-          <div className="p-4 bg-[#0a0a0a] border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 z-20">
-            <div className="flex items-center gap-3">
+          <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 z-20">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button 
                 onClick={() => setIsPlaying(false)}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer text-gray-300"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer text-gray-300"
               >
                 <ArrowLeft className="w-4 h-4 text-green-400" /> Anterior
               </button>
@@ -2389,13 +2388,13 @@ export default function Home() {
                     elem.requestFullscreen().catch(() => {});
                   }
                 }}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
               <button 
                 onClick={() => alert("Transmitiendo a dispositivo externo...")}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
               >
                 <Cast className="w-4 h-4 text-green-400" /> Transmitir
               </button>
@@ -2407,13 +2406,13 @@ export default function Home() {
                     setTimeout(() => setToastMessage(""), 3000);
                   }
                 }}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
               >
                 <Plus className="w-4 h-4 text-green-400" /> Mi Lista
               </button>
             </div>
 
-            <div className="flex items-center gap-3 bg-[#121212] px-4 py-2 rounded-xl border border-gray-800">
+            <div className="flex items-center gap-3 bg-[#121212] px-4 py-2 rounded-xl border border-gray-800 shrink-0">
               <div className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center text-xs font-bold">ES</div>
               <div>
                 <h5 className="text-xs font-bold text-white">Servidor Sol</h5>
@@ -2427,7 +2426,7 @@ export default function Home() {
       {/* BANNER FLOTANTE DE INSTALACIÓN PWA */}
       {deferredPrompt && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#141414] border border-gray-800 p-4 rounded-2xl shadow-2xl flex items-center gap-4 text-white max-w-sm animate-bounce">
-          <div className="p-3 bg-green-500/10 text-green-400 rounded-xl">
+          <div className="p-3 bg-green-500/10 text-green-400 rounded-xl shrink-0">
             <Download className="w-6 h-6" />
           </div>
           <div>
@@ -2446,14 +2445,14 @@ export default function Home() {
       {/* TOAST DE NOTIFICACIÓN */}
       {toastMessage && (
         <div className="fixed bottom-6 left-6 z-50 bg-[#0f0f0f] border border-green-500/50 text-white p-4 rounded-2xl shadow-2xl max-w-xs flex items-center gap-3">
-          <Sparkle className="w-4 h-4 text-green-400" />
+          <Sparkle className="w-4 h-4 text-green-400 shrink-0" />
           <p className="text-xs text-gray-200">{toastMessage}</p>
         </div>
       )}
 
       {/* MODAL CREAR PERFIL */}
       {showAddProfileModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0c0c0c] border border-emerald-500/30 w-full max-w-lg rounded-2xl p-6 relative space-y-6 shadow-2xl">
             <button onClick={() => { setShowAddProfileModal(false); setUsernameError(""); }} className="absolute top-4 right-4 text-gray-400 hover:text-white cursor-pointer">
               <X className="w-5 h-5" />
