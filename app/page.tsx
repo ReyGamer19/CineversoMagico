@@ -1849,8 +1849,8 @@ export default function Home() {
       {/* VISTA TV EN VIVO - OPTIMIZADA PARA MÓVILES Y PANTALLAS COMPLETAS */}
       {activeTab === "tv" && (
         <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-hidden">
-          <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] bg-[#050505]">
-            <div className="w-full lg:flex-1 relative bg-black flex flex-col justify-between overflow-y-auto">
+          <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-5rem)] bg-[#050505]">
+            <div className="w-full lg:flex-1 relative bg-black flex flex-col justify-between lg:overflow-y-auto">
               <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate">
                 <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
                 <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
@@ -1897,7 +1897,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="w-full lg:w-80 bg-[#0d0d0d] border-t lg:border-t-0 lg:border-l border-gray-900 flex flex-col h-72 lg:h-full shrink-0">
+            <div className="w-full lg:w-80 bg-[#0d0d0d] border-t lg:border-t-0 lg:border-l border-gray-900 flex flex-col lg:h-full shrink-0">
               <div className="p-3 sm:p-4 border-b border-gray-900 space-y-2 sm:space-y-3 bg-[#0a0a0a]">
                 <h3 className="text-sm font-bold text-white flex items-center justify-between">
                   <span>Guía de Canales</span>
@@ -1928,10 +1928,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-thin">
+              <div className="flex-1 lg:overflow-y-auto p-3 pb-6 space-y-4 scrollbar-thin">
                 {Object.entries(channelsGroupedByCountry).map(([countryName, channels]) => (
                   <div key={countryName} className="space-y-2">
-                    <div className="sticky top-0 bg-[#0d0d0d]/95 backdrop-blur py-1.5 px-1 z-10 border-b border-gray-800/60 flex items-center justify-between">
+                    <div className="lg:sticky lg:top-0 bg-[#0d0d0d]/95 backdrop-blur py-1.5 px-1 z-10 border-b border-gray-800/60 flex items-center justify-between">
                       <h4 className="text-xs font-black uppercase tracking-wider text-green-400 flex items-center gap-1.5">
                         {countryName}
                       </h4>
