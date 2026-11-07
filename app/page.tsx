@@ -48,8 +48,24 @@ interface Channel {
   embedUrl?: string;
 }
 
+interface ContinueItem {
+  id: number | string;
+  title: string;
+  img: string;
+  t: number; // segundo donde se quedó
+  d: number; // duración total
+  updatedAt: number;
+}
+
+function formatRemaining(sec: number) {
+  const totalMin = Math.max(1, Math.round(sec / 60));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `Quedan ${h} h ${m} min` : `Quedan ${m} min`;
+}
+
 // ===== REPRODUCTOR ROBUSTO (MP4 / HLS, con respaldo y manejo de errores) =====
-function MoviePlayer({ movie, fallbackUrl }: { movie: Movie; fallbackUrl?: string }) {
+function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie; fallbackUrl?: string; startAt?: number; onProgress?: (t: number, d: number) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
     (u, i, arr): u is string => !!u && arr.indexOf(u) === i
@@ -98,6 +114,45 @@ function MoviePlayer({ movie, fallbackUrl }: { movie: Movie; fallbackUrl?: strin
     return () => {
       video.removeEventListener("error", goNext);
       if (hls) hls.destroy();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUrl, failed, retryKey]);
+
+  // Reanudar donde se quedó y guardar el progreso (solo videos con duración finita)
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || failed) return;
+    let last = 0;
+    let resumed = false;
+
+    const onMeta = () => {
+      if (resumed) return;
+      resumed = true;
+      if (startAt && isFinite(v.duration) && startAt > 5 && startAt < v.duration - 20) {
+        v.currentTime = startAt;
+      }
+    };
+    const report = () => {
+      if (!onProgress || !isFinite(v.duration) || v.duration <= 0) return;
+      onProgress(v.currentTime, v.duration);
+    };
+    const onTime = () => {
+      const now = Date.now();
+      if (now - last < 5000) return;
+      last = now;
+      report();
+    };
+
+    v.addEventListener("loadedmetadata", onMeta);
+    v.addEventListener("timeupdate", onTime);
+    v.addEventListener("pause", report);
+    v.addEventListener("ended", report);
+    return () => {
+      v.removeEventListener("loadedmetadata", onMeta);
+      v.removeEventListener("timeupdate", onTime);
+      v.removeEventListener("pause", report);
+      v.removeEventListener("ended", report);
+      report();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUrl, failed, retryKey]);
@@ -205,12 +260,248 @@ export default function Home() {
     "Misterio", "Romance", "Ciencia ficción", "Suspenso", "Bélica", "Western"
   ];
 
-  // Configuración del dispositivo
+  // Configuración del dispositivo (se guarda solo en este dispositivo)
   const [tvMode, setTvMode] = useState(false);
   const [skipAdsNotice, setSkipAdsNotice] = useState(true);
-  const [continueWatchingList, setContinueWatchingList] = useState([
-    { id: 1, title: "El caballero oscuro", progress: "Quedan 2 h 32 min", img: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=400&auto=format&fit=crop" }
-  ]);
+  const [showAdNotice, setShowAdNotice] = useState(false);
+  const [continueWatchingList, setContinueWatchingList] = useState<ContinueItem[]>([]);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Cargar ajustes guardados
+  useEffect(() => {
+    try {
+      const tv = localStorage.getItem("cineverso_tv_mode");
+      if (tv !== null) {
+        setTvMode(tv === "1");
+      } else if (/SmartTV|SMART-TV|Tizen|Web0S|webOS|HbbTV|Android TV|AFTM|AFTT|AFTS|BRAVIA|CrKey|Roku/i.test(navigator.userAgent)) {
+        setTvMode(true); // Smart TV detectada: activa el Modo TV por defecto
+      }
+      const ads = localStorage.getItem("cineverso_skip_ads");
+      if (ads !== null) setSkipAdsNotice(ads === "1");
+      const prog = localStorage.getItem("cineverso_progress");
+      if (prog) {
+        const parsed = JSON.parse(prog);
+        if (Array.isArray(parsed)) setContinueWatchingList(parsed);
+      }
+    } catch {
+      // ignorar errores de lectura
+    }
+    setSettingsLoaded(true);
+  }, []);
+
+  // Guardar ajustes cuando cambian
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    try {
+      localStorage.setItem("cineverso_tv_mode", tvMode ? "1" : "0");
+      localStorage.setItem("cineverso_skip_ads", skipAdsNotice ? "1" : "0");
+      localStorage.setItem("cineverso_progress", JSON.stringify(continueWatchingList));
+    } catch {
+      // ignorar errores de escritura
+    }
+  }, [tvMode, skipAdsNotice, continueWatchingList, settingsLoaded]);
+
+  // Guarda el progreso de reproducción de una película ("Continuar viendo")
+  const saveProgress = (movie: Movie, t: number, d: number) => {
+    if (!isFinite(t) || !isFinite(d) || d <= 0) return;
+    setContinueWatchingList((prev) => {
+      const rest = prev.filter((x) => String(x.id) !== String(movie.id));
+      if (t < 15 || t / d > 0.95) return rest; // recién empezada o ya terminada
+      return [
+        { id: movie.id, title: movie.title, img: movie.bgImage || movie.img || "", t, d, updatedAt: Date.now() },
+        ...rest,
+      ].slice(0, 12);
+    });
+  };
+
+  // Iniciar reproducción (muestra el aviso de anuncios si no está omitido)
+  const startPlayback = () => {
+    if (skipAdsNotice) setIsPlaying(true);
+    else setShowAdNotice(true);
+  };
+
+  const flashToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3000);
+  };
+
+  // ===== MODO TV: interfaz grande + navegación con control remoto / teclado =====
+  const tvStateRef = useRef({ isPlaying, selectedMovie, showAdNotice, activeTab });
+  tvStateRef.current = { isPlaying, selectedMovie, showAdNotice, activeTab };
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!tvMode) {
+      root.classList.remove("tv-mode");
+      root.style.fontSize = "";
+      return;
+    }
+    root.classList.add("tv-mode");
+    root.style.fontSize = "125%";
+    return () => {
+      root.classList.remove("tv-mode");
+      root.style.fontSize = "";
+    };
+  }, [tvMode]);
+
+  useEffect(() => {
+    if (!tvMode) return;
+
+    const FOCUSABLE =
+      'button, a[href], input, select, textarea, video[controls], [tabindex]:not([tabindex="-1"])';
+
+    // Hace enfocables los elementos clicables que no son botones (tarjetas, canales, etc.)
+    const makeClickablesFocusable = () => {
+      document.querySelectorAll<HTMLElement>(".cursor-pointer").forEach((el) => {
+        if (/^(button|a|input|select|textarea)$/i.test(el.tagName)) return;
+        if (!el.hasAttribute("tabindex")) {
+          el.setAttribute("tabindex", "0");
+          el.setAttribute("role", "button");
+        }
+      });
+    };
+    makeClickablesFocusable();
+    let raf = 0;
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(makeClickablesFocusable);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    const getCandidates = () => {
+      const overlays = document.querySelectorAll(".fixed.inset-0");
+      const overlay = overlays.length ? overlays[overlays.length - 1] : null;
+      return Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+        if (el.hasAttribute("disabled")) return false;
+        if (overlay && !overlay.contains(el)) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return false;
+        const st = getComputedStyle(el);
+        return st.visibility !== "hidden" && st.display !== "none";
+      });
+    };
+
+    const focusEl = (el: HTMLElement) => {
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    };
+
+    const move = (dir: "up" | "down" | "left" | "right") => {
+      const cands = getCandidates();
+      if (!cands.length) return;
+      const cur = document.activeElement as HTMLElement | null;
+
+      if (!cur || !cands.includes(cur)) {
+        const inView = cands.filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.bottom > 0 && r.top < window.innerHeight;
+        });
+        const pool = inView.length ? inView : cands;
+        pool.sort((a, b) => {
+          const ra = a.getBoundingClientRect();
+          const rb = b.getBoundingClientRect();
+          return ra.top - rb.top || ra.left - rb.left;
+        });
+        focusEl(pool[0]);
+        return;
+      }
+
+      const cr = cur.getBoundingClientRect();
+      const cx = cr.left + cr.width / 2;
+      const cy = cr.top + cr.height / 2;
+      let best: HTMLElement | null = null;
+      let bestScore = Infinity;
+
+      for (const el of cands) {
+        if (el === cur) continue;
+        const r = el.getBoundingClientRect();
+        const dx = r.left + r.width / 2 - cx;
+        const dy = r.top + r.height / 2 - cy;
+        let primary = 0;
+        let secondary = 0;
+        if (dir === "right") { if (dx <= 4) continue; primary = dx; secondary = Math.abs(dy); }
+        else if (dir === "left") { if (dx >= -4) continue; primary = -dx; secondary = Math.abs(dy); }
+        else if (dir === "down") { if (dy <= 4) continue; primary = dy; secondary = Math.abs(dx); }
+        else { if (dy >= -4) continue; primary = -dy; secondary = Math.abs(dx); }
+        const score = primary + secondary * 2.5;
+        if (score < bestScore) { bestScore = score; best = el; }
+      }
+
+      if (best) {
+        focusEl(best);
+      } else if (dir === "up" || dir === "down") {
+        window.scrollBy({ top: dir === "down" ? 320 : -320, behavior: "smooth" });
+      }
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName || "";
+      const inputType = tag === "INPUT" ? (t as HTMLInputElement).type : "";
+      const typing =
+        tag === "TEXTAREA" || (tag === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(inputType));
+      const key = e.key;
+      const code = e.keyCode;
+
+      // Botón "Atrás" del control (Escape, Backspace, Tizen 10009, webOS 461)
+      if (key === "Escape" || key === "BrowserBack" || code === 10009 || code === 461 || (key === "Backspace" && !typing)) {
+        const st = tvStateRef.current;
+        if (st.showAdNotice) { e.preventDefault(); setShowAdNotice(false); return; }
+        if (st.isPlaying) { e.preventDefault(); setIsPlaying(false); return; }
+        if (st.selectedMovie) { e.preventDefault(); setSelectedMovie(null); return; }
+        if (st.activeTab !== "inicio") { e.preventDefault(); setActiveTab("inicio"); return; }
+        return;
+      }
+
+      // Play / pausa con teclas multimedia
+      if (key === "MediaPlayPause" || key === "MediaPlay" || key === "MediaPause") {
+        const v = document.querySelector("video");
+        if (v) { e.preventDefault(); if (v.paused) v.play().catch(() => {}); else v.pause(); }
+        return;
+      }
+
+      // Con el video enfocado: izquierda/derecha adelanta o retrocede 10 s
+      if (tag === "VIDEO") {
+        const v = t as HTMLVideoElement;
+        if ((key === "ArrowLeft" || key === "ArrowRight") && isFinite(v.duration)) {
+          e.preventDefault();
+          v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + (key === "ArrowRight" ? 10 : -10)));
+          return;
+        }
+        if (key === "Enter" || key === " ") {
+          e.preventDefault();
+          if (v.paused) v.play().catch(() => {}); else v.pause();
+          return;
+        }
+      }
+
+      if (tag === "SELECT") return;
+
+      const dirMap: Record<string, "up" | "down" | "left" | "right"> = {
+        ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+      };
+      const dir = dirMap[key];
+      if (dir) {
+        if (typing && (dir === "left" || dir === "right")) return; // permite mover el cursor al escribir
+        e.preventDefault();
+        move(dir);
+        return;
+      }
+
+      // Enter / espacio sobre tarjetas y canales (elementos que no son botones nativos)
+      if ((key === "Enter" || key === " ") && t && t.getAttribute("role") === "button" && !/^(BUTTON|A|INPUT)$/.test(tag)) {
+        e.preventDefault();
+        t.click();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      observer.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [tvMode]);
 
   // CANALES DE TV EN VIVO COMPLETO
   const [liveChannels] = useState<Channel[]>([
@@ -1630,6 +1921,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-clip pb-24 md:pb-0">
+      {tvMode && (
+        <style>{`
+          html.tv-mode *:focus { outline: none; }
+          html.tv-mode *:focus-visible {
+            outline: 4px solid #22c55e !important;
+            outline-offset: 4px;
+            border-radius: 14px;
+            box-shadow: 0 0 0 10px rgba(34, 197, 94, 0.22);
+          }
+          html.tv-mode button:focus-visible,
+          html.tv-mode [role="button"]:focus-visible {
+            transform: scale(1.05);
+            transition: transform 0.15s ease;
+          }
+        `}</style>
+      )}
       {/* Navegación Superior */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
         <div className="flex items-center gap-6 sm:gap-8 min-w-0">
@@ -1696,7 +2003,7 @@ export default function Home() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <button 
-                  onClick={() => { setSelectedMovie(heroMovie); setIsPlaying(true); }}
+                  onClick={() => { setSelectedMovie(heroMovie); startPlayback(); }}
                   className="flex items-center gap-2 bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition cursor-pointer text-sm"
                 >
                   <Play className="w-5 h-5 fill-black" /> Reproducir
@@ -1718,6 +2025,36 @@ export default function Home() {
           </div>
 
           <div className="px-4 sm:px-6 md:px-12 space-y-10 -mt-20 relative z-20 pb-20 w-full overflow-x-hidden">
+            {continueWatchingList.length > 0 && (
+              <div>
+                <h2 className="text-lg font-bold mb-4 text-white">Continuar viendo</h2>
+                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none w-full">
+                  {continueWatchingList.map((item) => {
+                    const pct = Math.min(100, Math.max(0, Math.round((item.t / item.d) * 100)));
+                    return (
+                      <div
+                        key={String(item.id)}
+                        onClick={() => {
+                          const m = customMovies.find((x) => String(x.id) === String(item.id));
+                          if (m) { setSelectedMovie(m); startPlayback(); }
+                        }}
+                        className="min-w-[200px] sm:min-w-[240px] group cursor-pointer shrink-0"
+                      >
+                        <div className="relative">
+                          <img src={item.img} alt={item.title} className="w-full h-28 sm:h-32 object-cover rounded-xl border border-gray-900 group-hover:border-green-500 transition shadow-lg" />
+                          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-800/80 rounded-b-xl overflow-hidden">
+                            <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                        <h4 className="text-xs font-semibold mt-2 text-gray-300 truncate">{item.title}</h4>
+                        <span className="text-[10px] text-gray-500">{formatRemaining(item.d - item.t)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {customMovies.length > 0 && (
               <div>
                 <h2 className="text-lg font-bold mb-4 text-white">Tus Películas Subidas</h2>
@@ -2301,10 +2638,7 @@ export default function Home() {
             </div>
 
             <div className="bg-[#0f0f0f] p-4 rounded-2xl border border-gray-900 space-y-4">
-              <div 
-                onClick={() => setTvMode(!tvMode)}
-                className="flex items-center justify-between cursor-pointer select-none hover:bg-[#151515] p-2 rounded-xl transition"
-              >
+              <div className="flex items-center justify-between gap-3 p-2 rounded-xl">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#181818] rounded-lg text-gray-400"><Tv className="w-4 h-4" /></div>
                   <div>
@@ -2312,18 +2646,19 @@ export default function Home() {
                     <p className="text-xs text-gray-500">Interfaz más grande y navegación con mando o control remoto.</p>
                   </div>
                 </div>
-                <input 
-                  type="checkbox" 
-                  checked={tvMode} 
-                  onChange={(e) => setTvMode(e.target.checked)} 
-                  className="w-5 h-5 accent-green-500 cursor-pointer"
-                />
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={tvMode}
+                  aria-label="Modo TV"
+                  onClick={() => { setTvMode(!tvMode); flashToast(!tvMode ? "Modo TV activado" : "Modo TV desactivado"); }}
+                  className={`relative w-12 h-7 rounded-full transition shrink-0 cursor-pointer ${tvMode ? "bg-green-500" : "bg-gray-700"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform ${tvMode ? "translate-x-5" : ""}`} />
+                </button>
               </div>
 
-              <div 
-                onClick={() => setSkipAdsNotice(!skipAdsNotice)}
-                className="flex items-center justify-between cursor-pointer select-none hover:bg-[#151515] p-2 rounded-xl transition"
-              >
+              <div className="flex items-center justify-between gap-3 p-2 rounded-xl">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#181818] rounded-lg text-gray-400"><Shield className="w-4 h-4" /></div>
                   <div>
@@ -2331,25 +2666,35 @@ export default function Home() {
                     <p className="text-xs text-gray-500">No mostrar el aviso antes de reproducir.</p>
                   </div>
                 </div>
-                <input 
-                  type="checkbox" 
-                  checked={skipAdsNotice} 
-                  onChange={(e) => setSkipAdsNotice(e.target.checked)} 
-                  className="w-5 h-5 accent-green-500 cursor-pointer"
-                />
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={skipAdsNotice}
+                  aria-label="Omitir aviso de anuncios"
+                  onClick={() => { setSkipAdsNotice(!skipAdsNotice); flashToast(!skipAdsNotice ? "El aviso de anuncios ya no se mostrará" : "Se mostrará el aviso antes de reproducir"); }}
+                  className={`relative w-12 h-7 rounded-full transition shrink-0 cursor-pointer ${skipAdsNotice ? "bg-green-500" : "bg-gray-700"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform ${skipAdsNotice ? "translate-x-5" : ""}`} />
+                </button>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-gray-900 p-2">
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-900 p-2">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#181818] rounded-lg text-gray-400"><Trash2 className="w-4 h-4" /></div>
                   <div>
                     <h4 className="text-sm font-bold text-white">Borrar "Continuar viendo"</h4>
-                    <p className="text-xs text-gray-500">Solo el progreso guardado en este dispositivo.</p>
+                    <p className="text-xs text-gray-500">Solo el progreso guardado en este dispositivo ({continueWatchingList.length} {continueWatchingList.length === 1 ? "título" : "títulos"}).</p>
                   </div>
                 </div>
                 <button 
-                  onClick={() => { setContinueWatchingList([]); alert("Historial borrado."); }}
-                  className="bg-[#181818] hover:bg-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg text-white border border-gray-800 cursor-pointer transition"
+                  onClick={() => {
+                    if (continueWatchingList.length === 0) { flashToast("No hay nada que borrar"); return; }
+                    if (confirm("¿Borrar todo tu historial de Continuar viendo en este dispositivo?")) {
+                      setContinueWatchingList([]);
+                      flashToast("Historial de Continuar viendo borrado");
+                    }
+                  }}
+                  className="bg-[#181818] hover:bg-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg text-white border border-gray-800 cursor-pointer transition shrink-0"
                 >
                   Borrar
                 </button>
@@ -2407,7 +2752,7 @@ export default function Home() {
 
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button 
-                    onClick={() => setIsPlaying(true)}
+                    onClick={() => startPlayback()}
                     className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base"
                   >
                     <Play className="w-5 h-5 fill-black" /> Reproducir
@@ -2535,7 +2880,13 @@ export default function Home() {
           </div>
 
           <div className="flex-1 flex items-center justify-center relative bg-black overflow-hidden">
-            <MoviePlayer key={String(selectedMovie.id)} movie={selectedMovie} fallbackUrl={heroMovie.videoUrl} />
+            <MoviePlayer
+              key={String(selectedMovie.id)}
+              movie={selectedMovie}
+              fallbackUrl={heroMovie.videoUrl}
+              startAt={continueWatchingList.find((x) => String(x.id) === String(selectedMovie.id))?.t}
+              onProgress={(t, d) => saveProgress(selectedMovie, t, d)}
+            />
           </div>
 
           <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 z-20">
@@ -2595,7 +2946,7 @@ export default function Home() {
 
       {/* BARRA DE NAVEGACIÓN INFERIOR (SOLO MÓVIL) */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/60 backdrop-blur-2xl border-t border-white/10"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 transform-gpu bg-black/60 backdrop-blur-2xl border-t border-white/10"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-around px-2 pt-3 pb-3">
@@ -2724,6 +3075,44 @@ export default function Home() {
               </button>
               <button onClick={handleCreateProfile} className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs transition cursor-pointer">
                 Crear perfil
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AVISO DE ANUNCIOS ANTES DE REPRODUCIR */}
+      {showAdNotice && selectedMovie && (
+        <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0f0f0f] border border-green-500/30 w-full max-w-md rounded-2xl p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-green-500/10 text-green-400 rounded-xl shrink-0"><Shield className="w-6 h-6" /></div>
+              <h3 className="text-lg font-bold text-white">Aviso antes de reproducir</h3>
+            </div>
+            <p className="text-sm text-gray-300 leading-relaxed">
+              Vas a ver <span className="font-bold text-white">{selectedMovie.title}</span>. Algunos servidores externos pueden mostrar anuncios o ventanas emergentes que Cineverso Mágico no controla. Si aparece alguno, ciérralo y sigue viendo.
+            </p>
+            <label className="flex items-center gap-3 text-xs text-gray-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={skipAdsNotice}
+                onChange={(e) => setSkipAdsNotice(e.target.checked)}
+                className="w-5 h-5 accent-green-500 cursor-pointer"
+              />
+              No volver a mostrar este aviso
+            </label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAdNotice(false)}
+                className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-sm border border-gray-800 transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setShowAdNotice(false); setIsPlaying(true); }}
+                className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer"
+              >
+                Continuar
               </button>
             </div>
           </div>
