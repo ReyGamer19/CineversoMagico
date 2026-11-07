@@ -96,7 +96,7 @@ function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie
       });
     };
 
-    if (isHls && Hls.isSupported()) {
+    if (isHls && !video.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
       hls = new Hls();
       hls.loadSource(currentUrl);
       hls.attachMedia(video);
@@ -195,6 +195,8 @@ function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie
       playsInline
       preload="auto"
       controlsList="nodownload"
+      disableRemotePlayback={false}
+      {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
       className="w-full h-full object-contain bg-black"
     >
       Tu navegador no soporta el reproductor.
@@ -323,6 +325,75 @@ export default function Home() {
   const flashToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3000);
+  };
+
+  // ===== TRANSMITIR A TV / PC / SMART TV (Chromecast, Android TV, AirPlay) =====
+  const [castState, setCastState] = useState<"idle" | "connecting" | "connected">("idle");
+
+  const handleCast = async () => {
+    const v = document.querySelector("video") as any;
+    if (!v) {
+      flashToast("Inicia la reproducción para poder transmitir");
+      return;
+    }
+    try {
+      // Chrome / Edge / Android: selector nativo con los dispositivos cercanos (Chromecast, Android TV, TVs compatibles)
+      if (v.remote && typeof v.remote.prompt === "function") {
+        if (typeof v.currentSrc === "string" && v.currentSrc.startsWith("blob:")) {
+          alert(
+            "Este video usa transmisión HLS y este navegador no permite enviarlo con este botón. " +
+            "Usa el menú de Chrome (⋮) → \"Transmitir...\" y elige tu TV, o prueba con un video en formato MP4."
+          );
+          return;
+        }
+        v.remote.onconnecting = () => setCastState("connecting");
+        v.remote.onconnect = () => {
+          setCastState("connected");
+          flashToast("Transmitiendo a tu dispositivo");
+        };
+        v.remote.ondisconnect = () => {
+          setCastState("idle");
+          flashToast("Transmisión finalizada");
+        };
+        await v.remote.prompt();
+        return;
+      }
+
+      // Safari (iPhone, iPad, Mac): AirPlay
+      if (typeof v.webkitShowPlaybackTargetPicker === "function") {
+        if (!v.__airplayBound) {
+          v.__airplayBound = true;
+          v.addEventListener("webkitcurrentplaybacktargetiswirelesschanged", () => {
+            setCastState(v.webkitCurrentPlaybackTargetIsWireless ? "connected" : "idle");
+          });
+        }
+        v.webkitShowPlaybackTargetPicker();
+        return;
+      }
+
+      alert(
+        "Tu navegador no permite transmitir desde la página. Usa Chrome o Edge (Chromecast / Smart TV) " +
+        "o Safari (AirPlay). También puedes abrir cineversomagico.com directamente en el navegador de tu Smart TV."
+      );
+    } catch (err: any) {
+      const name = err?.name;
+      if (name === "NotAllowedError" || name === "AbortError") return; // cerraste el selector
+      if (name === "NotFoundError") {
+        alert(
+          "No se encontraron dispositivos cercanos. Revisa que tu TV o Chromecast esté encendido y conectado " +
+          "a la misma red Wi-Fi que este dispositivo."
+        );
+        return;
+      }
+      if (name === "NotSupportedError" || name === "InvalidStateError") {
+        alert(
+          "Este video no se puede transmitir con este botón. Prueba con un video MP4 con enlace público (https), " +
+          "o usa el menú de Chrome (⋮) → \"Transmitir...\"."
+        );
+        return;
+      }
+      alert("No se pudo iniciar la transmisión. Inténtalo de nuevo.");
+    }
   };
 
   // ===== MODO TV: interfaz grande + navegación con control remoto / teclado =====
@@ -2914,10 +2985,15 @@ export default function Home() {
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
               <button 
-                onClick={() => alert("Transmitiendo a dispositivo externo...")}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                onClick={handleCast}
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  castState === "idle"
+                    ? "bg-[#181818] hover:bg-gray-800 border-gray-800"
+                    : "bg-green-500/15 border-green-500/60 text-green-300"
+                }`}
               >
-                <Cast className="w-4 h-4 text-green-400" /> Transmitir
+                <Cast className={`w-4 h-4 text-green-400 ${castState === "connecting" ? "animate-pulse" : ""}`} />
+                {castState === "idle" ? "Transmitir" : castState === "connecting" ? "Conectando..." : "Transmitiendo"}
               </button>
               <button 
                 onClick={() => {
