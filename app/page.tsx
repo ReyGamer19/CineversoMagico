@@ -1629,7 +1629,7 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
+    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-clip pb-24 md:pb-0">
       {/* Navegación Superior */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
         <div className="flex items-center gap-6 sm:gap-8 min-w-0">
@@ -1848,9 +1848,9 @@ export default function Home() {
 
       {/* VISTA TV EN VIVO - OPTIMIZADA PARA MÓVILES Y PANTALLAS COMPLETAS */}
       {activeTab === "tv" && (
-        <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-hidden">
+        <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-clip">
           <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-5rem)] bg-[#050505]">
-            <div className="w-full lg:flex-1 relative bg-black flex flex-col justify-between lg:overflow-y-auto">
+            <div className="w-full lg:flex-1 sticky top-[4.5rem] z-30 lg:relative lg:top-auto lg:z-auto bg-black flex flex-col justify-between lg:overflow-y-auto">
               <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate">
                 <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
                 <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
