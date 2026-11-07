@@ -269,6 +269,11 @@ export default function Home() {
   const [continueWatchingList, setContinueWatchingList] = useState<ContinueItem[]>([]);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
+  // Carrusel del banner principal
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [heroPaused, setHeroPaused] = useState(false);
+  const heroTouchX = useRef(0);
+
   // Cargar ajustes guardados
   useEffect(() => {
     try {
@@ -1806,7 +1811,7 @@ export default function Home() {
 
   const isAdmin = activeProfile.name.toLowerCase() === "rey";
 
-  const heroMovie: Movie = customMovies[2] || customMovies[0] || {
+  const fallbackHero: Movie = {
     id: 101,
     title: "APOCALYPSE Z",
     subtitle: "NEW WORLD",
@@ -1823,6 +1828,20 @@ export default function Home() {
     production: "Nostromo Pictures",
     originalLanguage: "ES"
   };
+
+  // Hasta 5 películas del catálogo rotan en el banner principal
+  const heroSlides: Movie[] = customMovies.filter((m) => m.bgImage).slice(0, 5);
+  const slides: Movie[] = heroSlides.length > 0 ? heroSlides : [fallbackHero];
+  const safeIndex = heroIndex % slides.length;
+  const heroMovie: Movie = slides[safeIndex];
+
+  // Cambio automático cada 7 segundos (se pausa con el mouse encima, al abrir una película o en otra pestaña)
+  useEffect(() => {
+    if (slides.length < 2 || heroPaused || activeTab !== "inicio" || selectedMovie) return;
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setTimeout(() => setHeroIndex((i) => (i + 1) % slides.length), 7000);
+    return () => clearTimeout(id);
+  }, [heroIndex, heroPaused, slides.length, activeTab, selectedMovie]);
 
   const handleSaveMovie = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2051,11 +2070,36 @@ export default function Home() {
       {/* VISTA INICIO */}
       {activeTab === "inicio" && (
         <>
-          <div className="relative h-[80vh] sm:h-[85vh] w-full bg-cover bg-center flex items-center overflow-hidden" style={{ backgroundImage: `url(${heroMovie.bgImage})` }}>
+          <div
+            className="relative h-[80vh] sm:h-[85vh] w-full flex items-center overflow-hidden bg-[#050505]"
+            onPointerEnter={(e) => { if (e.pointerType === "mouse") setHeroPaused(true); }}
+            onPointerLeave={(e) => { if (e.pointerType === "mouse") setHeroPaused(false); }}
+            onTouchStart={(e) => { heroTouchX.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              const dx = e.changedTouches[0].clientX - heroTouchX.current;
+              if (Math.abs(dx) > 50 && slides.length > 1) {
+                setHeroIndex((i) => (dx < 0 ? (i + 1) % slides.length : (i - 1 + slides.length) % slides.length));
+              }
+            }}
+          >
+            <style>{`
+              @keyframes heroFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+              .hero-fade { animation: heroFade 0.7s ease both; }
+              @media (prefers-reduced-motion: reduce) { .hero-fade { animation: none; } }
+            `}</style>
+
+            {slides.map((m, i) => (
+              <div
+                key={String(m.id)}
+                aria-hidden="true"
+                className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out"
+                style={{ backgroundImage: `url(${m.bgImage})`, opacity: i === safeIndex ? 1 : 0 }}
+              />
+            ))}
             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/70" />
             <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/50 to-transparent" />
             
-            <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-2xl mt-12 w-full">
+            <div key={String(heroMovie.id)} className="hero-fade relative z-10 px-4 sm:px-6 md:px-12 max-w-2xl mt-12 w-full">
               <h1 className="text-3xl sm:text-6xl font-black tracking-tight uppercase leading-none text-white">
                 {heroMovie.title}
                 {heroMovie.subtitle && <span className="block text-xl sm:text-4xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
@@ -2093,6 +2137,27 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            {slides.length > 1 && (
+              <div className="absolute bottom-24 sm:bottom-28 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+                {slides.map((m, i) => (
+                  <button
+                    key={String(m.id)}
+                    type="button"
+                    aria-label={`Ver ${m.title}`}
+                    aria-current={i === safeIndex}
+                    onClick={() => setHeroIndex(i)}
+                    className="group py-3 px-0.5 cursor-pointer"
+                  >
+                    <span
+                      className={`block h-1.5 rounded-full transition-all duration-500 ${
+                        i === safeIndex ? "w-7 bg-white" : "w-1.5 bg-white/40 group-hover:bg-white/70"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="px-4 sm:px-6 md:px-12 space-y-10 -mt-20 relative z-20 pb-20 w-full overflow-x-hidden">
