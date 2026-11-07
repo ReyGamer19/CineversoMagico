@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -16,20 +16,26 @@ export const metadata: Metadata = {
   title: "Cineverso Mágico",
   description: "Tu plataforma de streaming en vivo, películas y series",
   manifest: "/manifest.json",
+};
+
+// themeColor y viewport deben ir aquí (no dentro de metadata) en Next.js moderno.
+// viewportFit "cover" permite que la barra inferior respete el área segura del iPhone.
+export const viewport: Viewport = {
   themeColor: "#050505",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased overflow-x-hidden`}
     >
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#050505" />
-      </head>
-      <body className="min-h-full flex flex-col bg-[#050505] text-white">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#050505] text-white overflow-x-hidden w-full max-w-[100vw]">
+        {children}
+      </body>
     </html>
   );
 }

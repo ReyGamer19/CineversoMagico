@@ -48,6 +48,105 @@ interface Channel {
   embedUrl?: string;
 }
 
+// ===== REPRODUCTOR ROBUSTO (MP4 / HLS, con respaldo y manejo de errores) =====
+function MoviePlayer({ movie, fallbackUrl }: { movie: Movie; fallbackUrl?: string }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
+    (u, i, arr): u is string => !!u && arr.indexOf(u) === i
+  );
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const currentUrl = sources[sourceIndex];
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !currentUrl || failed) return;
+
+    let hls: Hls | null = null;
+    const isHls = /\.m3u8(\?|$)/i.test(currentUrl);
+
+    const goNext = () => {
+      if (sourceIndex < sources.length - 1) {
+        setSourceIndex((i) => i + 1);
+      } else {
+        setFailed(true);
+      }
+    };
+
+    const tryPlay = () => {
+      video.play().catch(() => {
+        // Si el navegador bloquea el autoplay con sonido, el usuario puede tocar play.
+      });
+    };
+
+    if (isHls && Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(currentUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) goNext();
+      });
+    } else {
+      video.src = currentUrl;
+      video.load();
+      tryPlay();
+    }
+
+    video.addEventListener("error", goNext);
+    return () => {
+      video.removeEventListener("error", goNext);
+      if (hls) hls.destroy();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUrl, failed, retryKey]);
+
+  if (failed || !currentUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center gap-4 p-6 max-w-sm">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <h4 className="text-lg font-bold text-white">No se pudo reproducir este video</h4>
+        <p className="text-xs text-gray-400">
+          El enlace del video no responde, está roto o tiene un formato que tu navegador no soporta (usa MP4 con H.264 o HLS .m3u8).
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => { setFailed(false); setSourceIndex(0); setRetryKey((k) => k + 1); }}
+            className="flex items-center gap-2 bg-white text-black font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+          >
+            <RefreshCw className="w-4 h-4" /> Reintentar
+          </button>
+          {currentUrl && (
+            <a
+              href={currentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-[#181818] border border-gray-800 text-white font-bold px-4 py-2 rounded-xl text-xs"
+            >
+              Abrir enlace
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      controls
+      autoPlay
+      playsInline
+      preload="auto"
+      controlsList="nodownload"
+      className="w-full h-full object-contain bg-black"
+    >
+      Tu navegador no soporta el reproductor.
+    </video>
+  );
+}
+
 export default function Home() {
   const myAvatars = [
     { name: "Bebé Jefazo 1", file: "/avatares/bebe jefazo1.png" },
@@ -1472,11 +1571,11 @@ export default function Home() {
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
       {/* Navegación Superior */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
-        <div className="flex items-center gap-6 sm:gap-8">
+        <div className="flex items-center gap-6 sm:gap-8 min-w-0">
           <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group">
             <span className="bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
-            <span className="text-xl sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
-              Cineverso Magico <Sparkle className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span className="text-base sm:text-2xl whitespace-nowrap font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
+              Cineverso Magico <Sparkle className="hidden sm:block w-4 h-4 text-emerald-400 animate-pulse" />
             </span>
           </div>
           <div className="hidden md:flex gap-6 text-sm font-medium text-gray-300">
@@ -1536,7 +1635,7 @@ export default function Home() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <button 
-                  onClick={() => setSelectedMovie(heroMovie)}
+                  onClick={() => { setSelectedMovie(heroMovie); setIsPlaying(true); }}
                   className="flex items-center gap-2 bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition cursor-pointer text-sm"
                 >
                   <Play className="w-5 h-5 fill-black" /> Reproducir
@@ -2361,16 +2460,7 @@ export default function Home() {
           </div>
 
           <div className="flex-1 flex items-center justify-center relative bg-black overflow-hidden">
-            <video 
-              controls 
-              autoPlay
-              playsInline
-              controlsList="nodownload"
-              className="w-full h-full object-contain"
-              src={selectedMovie.videoUrl || heroMovie.videoUrl}
-            >
-              Tu navegador no soporta el reproductor.
-            </video>
+            <MoviePlayer key={String(selectedMovie.id)} movie={selectedMovie} fallbackUrl={heroMovie.videoUrl} />
           </div>
 
           <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 z-20">
@@ -2383,9 +2473,14 @@ export default function Home() {
               </button>
               <button 
                 onClick={() => {
-                  const elem = document.documentElement;
-                  if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(() => {});
+                  const v = document.querySelector("video") as any;
+                  if (!v) return;
+                  if (v.webkitEnterFullscreen) {
+                    v.webkitEnterFullscreen(); // iPhone / iPad
+                  } else if (v.requestFullscreen) {
+                    v.requestFullscreen().catch(() => {});
+                  } else if (v.webkitRequestFullscreen) {
+                    v.webkitRequestFullscreen();
                   }
                 }}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
