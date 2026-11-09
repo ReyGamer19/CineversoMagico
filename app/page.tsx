@@ -5518,6 +5518,8 @@ export default function Home() {
   const [searchGuide, setSearchGuide] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [tvPlaybackError, setTvPlaybackError] = useState<string>("");
+  const [tvRetryKey, setTvRetryKey] = useState(0);
 
   useEffect(() => {
     // No iniciar descargas de TV mientras el usuario está en otra sección.
@@ -5530,27 +5532,61 @@ export default function Home() {
     let disposed = false;
     let networkRetries = 0;
     let mediaRecoveries = 0;
+    let switchedToNative = false;
+    const source = activeChannel.videoUrl;
+    setTvPlaybackError("");
 
-    const playWhenReady = () => {
-      if (!disposed) {
-        // En móviles el navegador puede bloquear autoplay con sonido; los controles
-        // permanecen disponibles para que la persona inicie la reproducción.
-        video.play().catch(() => {});
-      }
+    const showError = (message: string) => {
+      if (!disposed) setTvPlaybackError(message);
     };
+    const playWhenReady = () => {
+      if (disposed) return;
+      setTvPlaybackError("");
+      // iOS/Android pueden bloquear autoplay con sonido. Los controles nativos
+      // siguen disponibles para iniciar manualmente la señal.
+      video.play().catch(() => {});
+    };
+    const onVideoError = () => {
+      if (disposed) return;
+      const code = video.error?.code;
+      const messages: Record<number, string> = {
+        1: "La reproducción fue interrumpida. Pulsa Reintentar.",
+        2: "Problema de conexión con el servidor del canal.",
+        3: "El dispositivo no puede decodificar el formato de este canal.",
+        4: "El enlace no es compatible o el servidor no permite reproducirlo aquí.",
+      };
+      showError(messages[code || 0] || "No se pudo iniciar esta señal. Comprueba el enlace del canal.");
+    };
+
+    // Un sitio HTTPS no puede reproducir fuentes HTTP por bloqueo de contenido mixto.
+    if (typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(source)) {
+      showError("Este canal usa un enlace HTTP y el navegador bloquea su reproducción dentro de una página HTTPS. Se necesita una fuente HTTPS válida del canal.");
+      return;
+    }
 
     const nativeHls = video.canPlayType("application/vnd.apple.mpegurl");
     const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    // Safari en iOS/iPadOS funciona mejor con su reproductor HLS nativo.
-    // Android/Chrome usa HLS.js cuando Media Source Extensions está disponible.
     const useNativeHls = Boolean(nativeHls) && (isAppleMobile || !Hls.isSupported());
 
-    if (useNativeHls) {
-      video.src = activeChannel.videoUrl;
-      video.addEventListener("loadedmetadata", playWhenReady);
-      video.addEventListener("canplay", playWhenReady);
+    video.addEventListener("error", onVideoError);
+
+    const attachNative = () => {
+      if (disposed) return;
+      switchedToNative = true;
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      video.removeAttribute("src");
+      video.src = source;
       video.load();
+      video.addEventListener("loadedmetadata", playWhenReady, { once: true });
+      video.addEventListener("canplay", playWhenReady, { once: true });
+    };
+
+    if (useNativeHls) {
+      attachNative();
     } else if (Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
@@ -5568,39 +5604,41 @@ export default function Home() {
         fragLoadingMaxRetry: 4,
         fragLoadingRetryDelay: 1000,
       });
-
       hls.on(Hls.Events.MANIFEST_PARSED, playWhenReady);
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (disposed || !hls || !data.fatal) return;
-
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 3) {
           networkRetries += 1;
           hls.startLoad();
           return;
         }
-
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
           mediaRecoveries += 1;
           hls.recoverMediaError();
           return;
         }
-
-        // No insistir indefinidamente si el servidor o el formato no son válidos.
+        // Si el navegador también ofrece HLS nativo, intentar esa ruta como respaldo.
+        if (nativeHls && !switchedToNative) {
+          attachNative();
+          return;
+        }
+        showError(data.type === Hls.ErrorTypes.NETWORK_ERROR
+          ? "El servidor del canal no responde o bloquea la conexión."
+          : "El formato o códec de esta señal no es compatible con este dispositivo.");
         hls.destroy();
         hls = null;
       });
-      hls.loadSource(activeChannel.videoUrl);
+      hls.loadSource(source);
       hls.attachMedia(video);
     } else if (nativeHls) {
-      // Último recurso para navegadores con HLS nativo, aunque no sean Apple.
-      video.src = activeChannel.videoUrl;
-      video.addEventListener("loadedmetadata", playWhenReady);
-      video.addEventListener("canplay", playWhenReady);
-      video.load();
+      attachNative();
+    } else {
+      showError("Este navegador no admite HLS para este canal. Se necesita una fuente MP4/HLS compatible.");
     }
 
     return () => {
       disposed = true;
+      video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadedmetadata", playWhenReady);
       video.removeEventListener("canplay", playWhenReady);
       if (hls) hls.destroy();
@@ -5608,7 +5646,7 @@ export default function Home() {
       video.removeAttribute("src");
       video.load();
     };
-  }, [activeChannel, activeTab]);
+  }, [activeChannel, activeTab, tvRetryKey]);
 
   const countryOrder = ["Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽", "Internacional 🌍"];
   
@@ -6651,6 +6689,20 @@ export default function Home() {
                   >
                     Tu navegador no soporta video en vivo.
                   </video>
+                )}
+                {!activeChannel.embedUrl && tvPlaybackError && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/90 p-5 text-center">
+                    <AlertCircle className="h-10 w-10 text-amber-400" />
+                    <p className="max-w-md text-sm font-semibold text-white">No se pudo reproducir {activeChannel.name}</p>
+                    <p className="max-w-md text-xs leading-relaxed text-gray-300">{tvPlaybackError}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setTvPlaybackError(""); setTvRetryKey((key) => key + 1); }}
+                      className="rounded-xl bg-green-500 px-5 py-2.5 text-sm font-bold text-black"
+                    >
+                      Reintentar señal
+                    </button>
+                  </div>
                 )}
               </div>
 
