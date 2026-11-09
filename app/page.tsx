@@ -5528,32 +5528,81 @@ export default function Home() {
 
     let hls: Hls | null = null;
     let disposed = false;
+    let networkRetries = 0;
+    let mediaRecoveries = 0;
 
     const playWhenReady = () => {
-      if (!disposed) video.play().catch(() => {});
+      if (!disposed) {
+        // En móviles el navegador puede bloquear autoplay con sonido; los controles
+        // permanecen disponibles para que la persona inicie la reproducción.
+        video.play().catch(() => {});
+      }
     };
 
-    if (Hls.isSupported()) {
+    const nativeHls = video.canPlayType("application/vnd.apple.mpegurl");
+    const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    // Safari en iOS/iPadOS funciona mejor con su reproductor HLS nativo.
+    // Android/Chrome usa HLS.js cuando Media Source Extensions está disponible.
+    const useNativeHls = Boolean(nativeHls) && (isAppleMobile || !Hls.isSupported());
+
+    if (useNativeHls) {
+      video.src = activeChannel.videoUrl;
+      video.addEventListener("loadedmetadata", playWhenReady);
+      video.addEventListener("canplay", playWhenReady);
+      video.load();
+    } else if (Hls.isSupported()) {
       hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
         startLevel: -1,
-        startFragPrefetch: true,
         capLevelToPlayerSize: true,
-        maxBufferLength: 15,
-        maxMaxBufferLength: 30,
-        backBufferLength: 10,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 40,
+        backBufferLength: 15,
+        manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingTimeOut: 20000,
+        fragLoadingTimeOut: 30000,
+        fragLoadingMaxRetry: 4,
+        fragLoadingRetryDelay: 1000,
+      });
+
+      hls.on(Hls.Events.MANIFEST_PARSED, playWhenReady);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (disposed || !hls || !data.fatal) return;
+
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
+          networkRetries += 1;
+          hls.startLoad();
+          return;
+        }
+
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
+          mediaRecoveries += 1;
+          hls.recoverMediaError();
+          return;
+        }
+
+        // No insistir indefinidamente si el servidor o el formato no son válidos.
+        hls.destroy();
+        hls = null;
       });
       hls.loadSource(activeChannel.videoUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, playWhenReady);
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    } else if (nativeHls) {
+      // Último recurso para navegadores con HLS nativo, aunque no sean Apple.
       video.src = activeChannel.videoUrl;
       video.addEventListener("loadedmetadata", playWhenReady);
-      video.play().catch(() => {});
+      video.addEventListener("canplay", playWhenReady);
+      video.load();
     }
 
     return () => {
       disposed = true;
       video.removeEventListener("loadedmetadata", playWhenReady);
+      video.removeEventListener("canplay", playWhenReady);
       if (hls) hls.destroy();
       video.pause();
       video.removeAttribute("src");
