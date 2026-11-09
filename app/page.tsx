@@ -147,6 +147,12 @@ function getNowNext(items: EpgItem[] | undefined, tz: string, now: Date): NowNex
   return { current, next, progress: Math.min(100, Math.max(0, (elapsed / duration) * 100)) };
 }
 
+// Un sitio HTTPS no puede reproducir enlaces http:// (contenido mixto). Esos canales se sirven
+// a través de /api/stream, que los descarga en el servidor y los devuelve por HTTPS.
+const proxyUrl = (u: string) => `/api/stream?url=${encodeURIComponent(u)}`;
+const needsProxy = (u: string) =>
+  typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(u);
+
 // ===== REPRODUCTOR ROBUSTO (MP4 / HLS, con respaldo y manejo de errores) =====
 function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie; fallbackUrl?: string; startAt?: number; onProgress?: (t: number, d: number) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -895,7 +901,7 @@ export default function Home() {
       name: "Canal Claro",
       shortCode: "CC",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Canal Claro",
       videoUrl: "https://jmp2.uk/plu-68224482c5d53e1351aaf2f2.m3u8"
@@ -958,7 +964,7 @@ export default function Home() {
       category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECN%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cartoon Network",
-      videoUrl: "http://45.167.1.138:8000/play/a00w"
+      videoUrl: "http://45.167.1.138:8000/play/a00w/index.m3u8"
     },
     {
       id: "chile-27-central-tv",
@@ -1005,7 +1011,7 @@ export default function Home() {
       name: "Cinecanal Pacific",
       shortCode: "CP",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECP%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cinecanal Pacific",
       videoUrl: "http://138.121.15.230:9002/CINECANAL/index.m3u8"
@@ -1205,7 +1211,7 @@ export default function Home() {
       name: "ESPN 3",
       shortCode: "E3",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE3%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN 3",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN_3/ESPN_3.isml/ESPN_3.m3u8"
@@ -1465,7 +1471,7 @@ export default function Home() {
       name: "MTV",
       shortCode: "M",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EM%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de MTV",
       videoUrl: "http://15.204.246.24:8080/MTVHD/index.m3u8"
@@ -1518,7 +1524,7 @@ export default function Home() {
       category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EN%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Nickelodeon",
-      videoUrl: "http://181.78.79.131:8000/play/a0qm"
+      videoUrl: "http://181.78.79.131:8000/play/a0qm/index.m3u8"
     },
     {
       id: "chile-83-nina-tv",
@@ -1775,7 +1781,7 @@ export default function Home() {
       name: "Star Channel",
       shortCode: "SC",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ESC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Star Channel",
       videoUrl: "http://138.121.15.230:9002/STAR-CHANNEL/index.m3u8"
@@ -1815,7 +1821,7 @@ export default function Home() {
       name: "TCM",
       shortCode: "T",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ET%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TCM",
       videoUrl: "https://streaming.onnethn.com/TCM_HD/playlist.m3u8"
@@ -1835,7 +1841,7 @@ export default function Home() {
       name: "Telemundo Internacional",
       shortCode: "TI",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETI%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Telemundo Internacional",
       videoUrl: "http://45.173.231.22:8000/play/a01h/index.m3u8"
@@ -1885,7 +1891,7 @@ export default function Home() {
       name: "TLC",
       shortCode: "T",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ET%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TLC",
       videoUrl: "http://38.134.250.110:8000/play/a00n/index.m3u8"
@@ -1905,7 +1911,7 @@ export default function Home() {
       name: "TNT Sports",
       shortCode: "TS",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETS%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TNT Sports",
       videoUrl: "http://209.45.101.130:8040/play/a03s/index.m3u8"
@@ -1925,7 +1931,7 @@ export default function Home() {
       name: "Turf Movil",
       shortCode: "TM",
       country: "Chile 🇨🇱",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETM%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Turf Movil",
       videoUrl: "https://tvturf4.janus.cl/playlist/stream.m3u8?d=w&id="
@@ -2078,7 +2084,7 @@ export default function Home() {
       category: "Señal Abierta",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EVCT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de V Classic TV",
-      videoUrl: "http://186.148.196.100:8000/play/a02z"
+      videoUrl: "http://186.148.196.100:8000/play/a02z/index.m3u8"
     },
     {
       id: "chile-139-via-x",
@@ -2125,7 +2131,7 @@ export default function Home() {
       name: "A&E",
       shortCode: "AE",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EAE%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de A&E",
       videoUrl: "http://138.121.15.230:9002/A&E/index.m3u8"
@@ -2245,7 +2251,7 @@ export default function Home() {
       name: "AXN",
       shortCode: "A",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EA%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de AXN",
       videoUrl: "http://181.78.8.199:8000/play/a0cu/index.m3u8"
@@ -2375,7 +2381,7 @@ export default function Home() {
       name: "Cinecanal Pacific",
       shortCode: "CP",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECP%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cinecanal Pacific",
       videoUrl: "http://138.121.15.230:9002/CINECANAL/index.m3u8"
@@ -2435,7 +2441,7 @@ export default function Home() {
       name: "ESPN 2",
       shortCode: "E2",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE2%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN 2",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN_2/ESPN_2.isml/ESPN_2.m3u8"
@@ -2445,7 +2451,7 @@ export default function Home() {
       name: "ESPN 4",
       shortCode: "E4",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE4%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN 4",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN_4/ESPN_4.isml/ESPN_4.m3u8"
@@ -2455,7 +2461,7 @@ export default function Home() {
       name: "ESPN 5",
       shortCode: "E5",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE5%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN 5",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN_5/ESPN_5.isml/ESPN_5.m3u8"
@@ -2465,7 +2471,7 @@ export default function Home() {
       name: "ESPN 6",
       shortCode: "E6",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE6%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN 6",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN_6/ESPN_6.isml/ESPN_6.m3u8"
@@ -2475,7 +2481,7 @@ export default function Home() {
       name: "ESPN 7",
       shortCode: "E7",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE7%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN 7",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN_7/ESPN_7.isml/ESPN_7.m3u8"
@@ -2485,7 +2491,7 @@ export default function Home() {
       name: "ESPN",
       shortCode: "E",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN",
       videoUrl: "https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.m3u8"
@@ -2515,7 +2521,7 @@ export default function Home() {
       name: "FX",
       shortCode: "F",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EF%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de FX",
       videoUrl: "http://15.204.246.24:8080/FXHD/index.m3u8"
@@ -2545,7 +2551,7 @@ export default function Home() {
       name: "History",
       shortCode: "H",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EH%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de History",
       videoUrl: "http://15.204.246.24:8080/HistoryHD/index.m3u8"
@@ -2615,7 +2621,7 @@ export default function Home() {
       name: "L1 Max",
       shortCode: "LM",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ELM%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de L1 Max",
       videoUrl: "http://190.93.224.42/LIGA-1-MAX/index.m3u8"
@@ -2745,7 +2751,7 @@ export default function Home() {
       name: "Ovacion TV",
       shortCode: "OT",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EOT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Ovacion TV",
       videoUrl: "http://cdn2.ujjina.com:1935/iptvovacion1/liveovacion1tv/playlist.m3u8"
@@ -2965,7 +2971,7 @@ export default function Home() {
       name: "RumbaMix",
       shortCode: "R",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ER%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de RumbaMix",
       videoUrl: "https://live-evg5.tv360.bitel.com.pe/bitel/mixtvSRT/playlist.m3u8"
@@ -3015,7 +3021,7 @@ export default function Home() {
       name: "Space",
       shortCode: "S",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ES%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Space",
       videoUrl: "http://45.171.64.30:6060/play/a04n/index.m3u8"
@@ -3035,7 +3041,7 @@ export default function Home() {
       name: "Star",
       shortCode: "S",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ES%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Star",
       videoUrl: "http://15.204.246.24:8080/STARCHANNELHD/index.m3u8"
@@ -3055,7 +3061,7 @@ export default function Home() {
       name: "Studio Universal",
       shortCode: "SU",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ESU%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Studio Universal",
       videoUrl: "http://15.204.246.24:8080/StudioUniversalHD/index.m3u8"
@@ -3105,7 +3111,7 @@ export default function Home() {
       name: "TOP LATINO",
       shortCode: "TL",
       country: "Perú 🇵🇪",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETL%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TOP LATINO",
       videoUrl: "http://38.87.224.20:2220/play/a02b/index.m3u8"
@@ -3425,7 +3431,7 @@ export default function Home() {
       name: "A24",
       shortCode: "A",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Noticias",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EA%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de A24",
       videoUrl: "http://138.59.227.20:8000/play/a05u/index.m3u8"
@@ -3455,7 +3461,7 @@ export default function Home() {
       name: "Allegro HD",
       shortCode: "AH",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EAH%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Allegro HD",
       videoUrl: "http://158.172.155.130:8000/play/a0dn/index.m3u8"
@@ -3475,7 +3481,7 @@ export default function Home() {
       name: "AMC",
       shortCode: "A",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EA%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de AMC",
       videoUrl: "http://15.204.246.24:8080/AMCHD/index.m3u8"
@@ -3485,7 +3491,7 @@ export default function Home() {
       name: "AMC Series",
       shortCode: "AS",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EAS%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de AMC Series",
       videoUrl: "http://45.171.64.30:6060/play/a005/index.m3u8"
@@ -3775,7 +3781,7 @@ export default function Home() {
       name: "Canal 26",
       shortCode: "C2",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Noticias",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EC2%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Canal 26",
       videoUrl: "https://stream-gtlc.telecentro.net.ar/hls/canal26hls/main.m3u8"
@@ -3865,7 +3871,7 @@ export default function Home() {
       name: "Showsport",
       shortCode: "S",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ES%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Showsport",
       videoUrl: "https://livestream.lumpentv.com.ar/hls/lumpen.m3u8"
@@ -3965,7 +3971,7 @@ export default function Home() {
       name: "DeporTV",
       shortCode: "D",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ED%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de DeporTV",
       videoUrl: "http://158.172.155.130:8000/play/a09y/index.m3u8"
@@ -3975,7 +3981,7 @@ export default function Home() {
       name: "Discovery Channel",
       shortCode: "DC",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EDC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Discovery Channel",
       videoUrl: "http://45.184.109.10/live/69393EAE6ADBC65A68F942022362A202/20.m3u8"
@@ -4025,27 +4031,17 @@ export default function Home() {
       name: "Encuentro",
       shortCode: "E",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Encuentro",
       videoUrl: "http://138.59.227.20:8000/play/a05s/index.m3u8"
-    },
-    {
-      id: "argentina-334-espn-extra",
-      name: "ESPN Extra",
-      shortCode: "EE",
-      country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EEE%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de ESPN Extra",
-      videoUrl: "https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.mpd"
     },
     {
       id: "argentina-335-espn-premiun",
       name: "ESPN PREMIUN",
       shortCode: "EP",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EEP%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de ESPN PREMIUN",
       videoUrl: "http://158.172.155.130:8000/play/a0ao/index.m3u8"
@@ -4055,7 +4051,7 @@ export default function Home() {
       name: "FIFA+",
       shortCode: "F",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EF%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de FIFA+",
       videoUrl: "https://6c849fb3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctbXhfRklGQVBsdXNTcGFuaXNoLTFfSExT/playlist.m3u8"
@@ -4065,7 +4061,7 @@ export default function Home() {
       name: "Fox Sports",
       shortCode: "FS",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EFS%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Fox Sports",
       videoUrl: "http://138.59.227.20:8000/play/a085/index.m3u8"
@@ -4085,7 +4081,7 @@ export default function Home() {
       name: "Kpop Mix",
       shortCode: "KM",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EKM%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Kpop Mix",
       videoUrl: "https://cloud.tvomix.com/KPOPMIX/index.m3u8"
@@ -4205,7 +4201,7 @@ export default function Home() {
       name: "Net",
       shortCode: "N",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EN%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Net",
       videoUrl: "http://45.226.205.96:48000/play/a09p/index.m3u8"
@@ -4305,7 +4301,7 @@ export default function Home() {
       name: "Sony Channel",
       shortCode: "SC",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ESC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Sony Channel",
       videoUrl: "http://138.121.15.230:9002/SONY/index.m3u8"
@@ -4315,7 +4311,7 @@ export default function Home() {
       name: "Studio Universal",
       shortCode: "SU",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ESU%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Studio Universal",
       videoUrl: "http://45.184.109.10/live/69393EAE6ADBC65A68F942022362A202/53.m3u8"
@@ -4355,7 +4351,7 @@ export default function Home() {
       name: "Telemundo Internacional",
       shortCode: "TI",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETI%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Telemundo Internacional",
       videoUrl: "http://45.173.231.22:8000/play/a01h/index.m3u8"
@@ -4375,7 +4371,7 @@ export default function Home() {
       name: "TNT",
       shortCode: "T",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ET%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TNT",
       videoUrl: "http://45.134.141.161:2200/ARG/TNT/index.m3u8"
@@ -4385,7 +4381,7 @@ export default function Home() {
       name: "TNT NOVELAS",
       shortCode: "TN",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETN%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TNT NOVELAS",
       videoUrl: "http://158.172.155.130:8000/play/a0at/index.m3u8"
@@ -4395,30 +4391,30 @@ export default function Home() {
       name: "TNT Sports",
       shortCode: "TS",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETS%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TNT Sports",
       videoUrl: "http://45.184.109.10/live/69393EAE6ADBC65A68F942022362A202/86.m3u8"
     },
     {
       id: "argentina-371-tnt-sports",
-      name: "TNT Sports",
+      name: "TNT Sports 2",
       shortCode: "TS",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETS%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de TNT Sports",
-      videoUrl: "http://181.78.79.131:8000/play/a0mo"
+      currentShow: "Señal en vivo de TNT Sports 2",
+      videoUrl: "http://181.78.79.131:8000/play/a0mo/index.m3u8"
     },
     {
       id: "argentina-372-tnt-sports-premium",
       name: "TNT Sports Premium",
       shortCode: "TSP",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETSP%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TNT Sports Premium",
-      videoUrl: "http://181.78.79.131:8000/play/a0q9"
+      videoUrl: "http://181.78.79.131:8000/play/a0q9/index.m3u8"
     },
     {
       id: "argentina-373-tv-canal-72",
@@ -4455,7 +4451,7 @@ export default function Home() {
       name: "TyC Sports",
       shortCode: "TS",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETS%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de TyC Sports",
       videoUrl: "https://amg26268-amg26268c14-freelivesports-emea-10267.playouts.now.amagi.tv/ts-us-e2-n2/playlist/amg26268-sportsstudio-tycsports-freelivesportsemea/playlist.m3u8"
@@ -4475,7 +4471,7 @@ export default function Home() {
       name: "Urban Mix",
       shortCode: "UM",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EUM%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Urban Mix",
       videoUrl: "https://cloud.tvomix.com/URBANMIX/index.m3u8"
@@ -4485,7 +4481,7 @@ export default function Home() {
       name: "Xtrema Accion",
       shortCode: "XA",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EXA%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Xtrema Accion",
       videoUrl: "https://stmv6.voxtvhd.com.br/cineaccion/cineaccion/playlist.m3u8"
@@ -4505,7 +4501,7 @@ export default function Home() {
       name: "Xtrema Cine Clasico",
       shortCode: "XCC",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EXCC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Xtrema Cine Clasico",
       videoUrl: "https://stmv6.voxtvhd.com.br/cineclasico/cineclasico/playlist.m3u8"
@@ -4515,7 +4511,7 @@ export default function Home() {
       name: "Xtrema Terror",
       shortCode: "XT",
       country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EXT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Xtrema Terror",
       videoUrl: "https://stmv6.voxtvhd.com.br/cineterror/cineterror/playlist.m3u8"
@@ -4585,7 +4581,7 @@ export default function Home() {
       name: "Cinecanal Pacific",
       shortCode: "CP",
       country: "Bolivia 🇧🇴",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECP%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cinecanal Pacific",
       videoUrl: "http://138.121.15.230:9002/CINECANAL/index.m3u8"
@@ -4841,16 +4837,6 @@ export default function Home() {
       videoUrl: "https://tvstream.upea.bo/hls/oSs0jSWumTFIIVY97559.m3u8"
     },
     {
-      id: "bolivia-415-xtotv",
-      name: "XTOTV",
-      shortCode: "X",
-      country: "Bolivia 🇧🇴",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EX%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de XTOTV",
-      videoUrl: "https://www.sccbolivia.com/dash/720p.mpd"
-    },
-    {
       id: "bolivia-416-zuraca-tv",
       name: "Zuraca TV",
       shortCode: "ZT",
@@ -4885,7 +4871,7 @@ export default function Home() {
       name: "16 Anni e Incinta",
       shortCode: "16A",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3E16A%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de 16 Anni e Incinta",
       videoUrl: "https://jmp2.uk/plu-60940a07d88ba90007b9cb71.m3u8"
@@ -4955,7 +4941,7 @@ export default function Home() {
       name: "Andromeda Italy",
       shortCode: "AI",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EAI%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Andromeda Italy",
       videoUrl: "https://jmp2.uk/plu-60802d37ee238e0007c94e64.m3u8"
@@ -5065,7 +5051,7 @@ export default function Home() {
       name: "Camera dei Deputati",
       shortCode: "CDD",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Noticias",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECDD%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Camera dei Deputati",
       videoUrl: "https://video-ar.radioradicale.it/diretta/camera2/playlist.m3u8"
@@ -5135,7 +5121,7 @@ export default function Home() {
       name: "Cin Cin",
       shortCode: "CC",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cin Cin",
       videoUrl: "https://jmp2.uk/plu-65cb78b83a116800079e2e35.m3u8"
@@ -5145,7 +5131,7 @@ export default function Home() {
       name: "Class CNBC",
       shortCode: "CC",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Noticias",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Class CNBC",
       videoUrl: "https://www.dailymotion.com/cdn/live/video/x91c8ww.m3u8?sec=D9OwEfHs-e7O6pQ-qlnROg"
@@ -5155,7 +5141,7 @@ export default function Home() {
       name: "Comedy Central",
       shortCode: "CC",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Comedy Central",
       videoUrl: "http://team-tv.co:81/comedy/index.m3u8"
@@ -5175,7 +5161,7 @@ export default function Home() {
       name: "Discovery Channel",
       shortCode: "DC",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EDC%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Discovery Channel",
       videoUrl: "https://streaming.aurora.enhanced.live/live/mpc/enl0eG1mLmVncmVzcy5mZDJ2eHI=/out/v1/IT_SIMULCAST/DISCOVERYCHANNEL/CMAF/index.m3u8"
@@ -5185,7 +5171,7 @@ export default function Home() {
       name: "Discovery Turbo",
       shortCode: "DT",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EDT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Discovery Turbo",
       videoUrl: "https://streaming.aurora.enhanced.live/live/mpc/enl0eG1mLmVncmVzcy5mZDJ2eHI=/out/v1/IT_SIMULCAST/TURBO/CMAF/index.m3u8"
@@ -5205,7 +5191,7 @@ export default function Home() {
       name: "DMAX",
       shortCode: "D",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ED%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de DMAX",
       videoUrl: "https://streaming.aurora.enhanced.live/live/mpc/enl0eG1mLmVncmVzcy5mZDJ2eHI=/out/v1/IT_SIMULCAST/DMAX/CMAF/index.m3u8"
@@ -5225,7 +5211,7 @@ export default function Home() {
       name: "FIFA+",
       shortCode: "F",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Deportes",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EF%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de FIFA+",
       videoUrl: "https://5d95f7d7.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWl0X0ZJRkFQbHVzSXRhbGlhbl9ITFM/playlist.m3u8"
@@ -5235,7 +5221,7 @@ export default function Home() {
       name: "Food Network",
       shortCode: "FN",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EFN%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Food Network",
       videoUrl: "https://streaming.aurora.enhanced.live/live/mpc/enl0eG1mLmVncmVzcy5mZDJ2eHI=/out/v1/IT_SIMULCAST/FOODNETWORK/CMAF/index.m3u8"
@@ -5345,7 +5331,7 @@ export default function Home() {
       name: "Cinema Italiano",
       shortCode: "CI",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECI%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cinema Italiano",
       videoUrl: "https://jmp2.uk/plu-608aa7d8359b270007861489.m3u8"
@@ -5355,7 +5341,7 @@ export default function Home() {
       name: "Cinema Orientale",
       shortCode: "CO",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECO%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Cinema Orientale",
       videoUrl: "https://jmp2.uk/plu-6786235bd648bf0008c2780a.m3u8"
@@ -5375,7 +5361,7 @@ export default function Home() {
       name: "Documentari",
       shortCode: "D",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ED%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Documentari",
       videoUrl: "https://jmp2.uk/plu-608aa8a5709d6b0007b132fe.m3u8"
@@ -5425,7 +5411,7 @@ export default function Home() {
       name: "Film Storici",
       shortCode: "FS",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EFS%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Film Storici",
       videoUrl: "https://jmp2.uk/plu-68750875759366af05a151ce.m3u8"
@@ -5435,7 +5421,7 @@ export default function Home() {
       name: "Film Thriller",
       shortCode: "FT",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EFT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Film Thriller",
       videoUrl: "https://jmp2.uk/plu-608aa5e995132a00075f7005.m3u8"
@@ -5445,20 +5431,10 @@ export default function Home() {
       name: "Legami Letali",
       shortCode: "LL",
       country: "Italia 🇮🇹",
-      category: "Señal Abierta",
+      category: "Entretenimiento",
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ELL%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Legami Letali",
       videoUrl: "https://jmp2.uk/plu-64808a8c536e0c0008a276d1.m3u8"
-    },
-    {
-      id: "deportes-476-espn-extra",
-      name: "ESPN Extra",
-      shortCode: "EE",
-      country: "Deportes ⚽",
-      category: "Deportes",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EEE%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de ESPN Extra",
-      videoUrl: "https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.mpd"
     },
     {
       id: "deportes-477-tv-deportes",
@@ -5532,8 +5508,12 @@ export default function Home() {
     let disposed = false;
     let networkRetries = 0;
     let mediaRecoveries = 0;
-    let switchedToNative = false;
+    let nativeMode = false;
     const source = activeChannel.videoUrl;
+    // Los enlaces http:// van por el proxy. Si un enlace https:// falla por CORS o porque el
+    // servidor rechaza la conexión directa, se reintenta una vez a través del proxy.
+    let proxied = needsProxy(source);
+    const currentSource = () => (proxied ? proxyUrl(source) : source);
     setTvPlaybackError("");
 
     const showError = (message: string) => {
@@ -5546,8 +5526,29 @@ export default function Home() {
       // siguen disponibles para iniciar manualmente la señal.
       video.play().catch(() => {});
     };
+
+    const attachNative = () => {
+      if (disposed) return;
+      nativeMode = true;
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      video.removeAttribute("src");
+      video.src = currentSource();
+      video.load();
+      video.addEventListener("loadedmetadata", playWhenReady, { once: true });
+      video.addEventListener("canplay", playWhenReady, { once: true });
+    };
+
     const onVideoError = () => {
       if (disposed) return;
+      // En modo nativo, si falló la conexión directa, probar a través del proxy
+      if (nativeMode && !proxied) {
+        proxied = true;
+        attachNative();
+        return;
+      }
       const code = video.error?.code;
       const messages: Record<number, string> = {
         1: "La reproducción fue interrumpida. Pulsa Reintentar.",
@@ -5558,36 +5559,7 @@ export default function Home() {
       showError(messages[code || 0] || "No se pudo iniciar esta señal. Comprueba el enlace del canal.");
     };
 
-    // Un sitio HTTPS no puede reproducir fuentes HTTP por bloqueo de contenido mixto.
-    if (typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(source)) {
-      showError("Este canal usa un enlace HTTP y el navegador bloquea su reproducción dentro de una página HTTPS. Se necesita una fuente HTTPS válida del canal.");
-      return;
-    }
-
-    const nativeHls = video.canPlayType("application/vnd.apple.mpegurl");
-    const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const useNativeHls = Boolean(nativeHls) && (isAppleMobile || !Hls.isSupported());
-
-    video.addEventListener("error", onVideoError);
-
-    const attachNative = () => {
-      if (disposed) return;
-      switchedToNative = true;
-      if (hls) {
-        hls.destroy();
-        hls = null;
-      }
-      video.removeAttribute("src");
-      video.src = source;
-      video.load();
-      video.addEventListener("loadedmetadata", playWhenReady, { once: true });
-      video.addEventListener("canplay", playWhenReady, { once: true });
-    };
-
-    if (useNativeHls) {
-      attachNative();
-    } else if (Hls.isSupported()) {
+    const startHls = () => {
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -5607,6 +5579,15 @@ export default function Home() {
       hls.on(Hls.Events.MANIFEST_PARSED, playWhenReady);
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (disposed || !hls || !data.fatal) return;
+        // Conexión directa bloqueada (CORS, servidor que la rechaza): reintentar con el proxy
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !proxied) {
+          proxied = true;
+          networkRetries = 0;
+          hls.destroy();
+          hls = null;
+          startHls();
+          return;
+        }
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 3) {
           networkRetries += 1;
           hls.startLoad();
@@ -5618,18 +5599,32 @@ export default function Home() {
           return;
         }
         // Si el navegador también ofrece HLS nativo, intentar esa ruta como respaldo.
-        if (nativeHls && !switchedToNative) {
+        if (nativeHls && !nativeMode) {
           attachNative();
           return;
         }
         showError(data.type === Hls.ErrorTypes.NETWORK_ERROR
-          ? "El servidor del canal no responde o bloquea la conexión."
+          ? "El canal no responde en este momento (puede estar caído o fuera de línea)."
           : "El formato o códec de esta señal no es compatible con este dispositivo.");
         hls.destroy();
         hls = null;
       });
-      hls.loadSource(source);
+      hls.loadSource(currentSource());
       hls.attachMedia(video);
+    };
+
+    const nativeHls = video.canPlayType("application/vnd.apple.mpegurl");
+    const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const useNativeHls = Boolean(nativeHls) && (isAppleMobile || !Hls.isSupported());
+    const isMp4 = /\.mp4(\?|$)/i.test(source);
+
+    video.addEventListener("error", onVideoError);
+
+    if (isMp4 || useNativeHls) {
+      attachNative();
+    } else if (Hls.isSupported()) {
+      startHls();
     } else if (nativeHls) {
       attachNative();
     } else {
