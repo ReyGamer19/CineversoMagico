@@ -398,6 +398,11 @@ export default function Home() {
       }
       const ads = localStorage.getItem("cineverso_skip_ads");
       if (ads !== null) setSkipAdsNotice(ads === "1");
+      const ml = localStorage.getItem("cineverso_mylist");
+      if (ml) {
+        const parsedList = JSON.parse(ml);
+        if (Array.isArray(parsedList)) setMyList(parsedList);
+      }
       const prog = localStorage.getItem("cineverso_progress");
       if (prog) {
         const parsed = JSON.parse(prog);
@@ -416,10 +421,11 @@ export default function Home() {
       localStorage.setItem("cineverso_tv_mode", tvMode ? "1" : "0");
       localStorage.setItem("cineverso_skip_ads", skipAdsNotice ? "1" : "0");
       localStorage.setItem("cineverso_progress", JSON.stringify(continueWatchingList));
+      localStorage.setItem("cineverso_mylist", JSON.stringify(myList));
     } catch {
       // ignorar errores de escritura
     }
-  }, [tvMode, skipAdsNotice, continueWatchingList, settingsLoaded]);
+  }, [tvMode, skipAdsNotice, continueWatchingList, myList, settingsLoaded]);
 
   // Guarda el progreso de reproducción de una película ("Continuar viendo")
   const saveProgress = (movie: Movie, t: number, d: number) => {
@@ -1712,9 +1718,6 @@ export default function Home() {
   // Autenticación por Gmail
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [registerStep, setRegisterStep] = useState<"form" | "verify" | "success">("form");
-  const [verificationCode, setVerificationCode] = useState("");
-  const [inputCode, setInputCode] = useState("");
   const [isGuest, setIsGuest] = useState(true);
 
   // Perfiles
@@ -1972,7 +1975,155 @@ export default function Home() {
     }
   }, []);
 
-  const isAdmin = activeProfile.name.toLowerCase() === "rey";
+  // ===== CUENTAS REALES (correo + contraseña) y sincronización en la nube =====
+  const [accountUser, setAccountUser] = useState<{ id: string; email: string; isAdmin: boolean } | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+
+  // Aplica los datos guardados en la nube de la cuenta
+  const applyCloudData = (data: any) => {
+    if (!data || typeof data !== "object") return;
+    if (Array.isArray(data.profiles) && data.profiles.length > 0) {
+      setProfiles(data.profiles);
+      const active = data.profiles.find((p: Profile) => p.id === data.activeProfileId) || data.profiles[0];
+      setActiveProfile(active);
+    }
+    if (Array.isArray(data.myList)) setMyList(data.myList);
+    if (Array.isArray(data.progress)) setContinueWatchingList(data.progress);
+  };
+
+  // Al abrir la página: ¿ya hay una sesión iniciada?
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/account", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled && json.user) {
+            setAccountUser(json.user);
+            setIsGuest(false);
+            applyCloudData(json.data);
+          }
+        }
+      } catch {
+        // sin conexión: se queda como invitado
+      }
+      if (!cancelled) setCloudReady(true);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Al volver a la pestaña, trae lo último de la nube (por ejemplo, lo que viste en otro dispositivo)
+  useEffect(() => {
+    if (!accountUser) return;
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/account", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.user) applyCloudData(json.data);
+      } catch {
+        // ignorar
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountUser]);
+
+  // Guarda en la nube cada cambio de perfiles, Mi Lista y Continuar viendo
+  useEffect(() => {
+    if (!cloudReady || !accountUser) return;
+    const id = setTimeout(() => {
+      fetch("/api/account", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: { v: 1, profiles, activeProfileId: activeProfile.id, myList, progress: continueWatchingList },
+        }),
+      }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [profiles, activeProfile.id, myList, continueWatchingList, cloudReady, accountUser]);
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authLoading) return;
+    const mail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+      alert("Ingresa un correo válido.");
+      return;
+    }
+    if (password.length < 6) {
+      alert("La contraseña debe tener mínimo 6 caracteres.");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await fetch("/api/account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: authMode, email: mail, password }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(json.error || "No se pudo completar la acción. Inténtalo de nuevo.");
+        return;
+      }
+      setAccountUser(json.user);
+      setIsGuest(false);
+      setPassword("");
+      if (json.data) {
+        applyCloudData(json.data);
+      } else if (!json.user.isAdmin && profiles.length === 1 && profiles[0].name === "Rey") {
+        // Cuenta nueva: el primer perfil lleva el nombre del correo
+        const base = mail.split("@")[0];
+        const renamed: Profile = { ...profiles[0], name: base.charAt(0).toUpperCase() + base.slice(1, 20) };
+        setProfiles([renamed]);
+        setActiveProfile(renamed);
+      }
+      flashToast(authMode === "register" ? "¡Cuenta creada! Ya se sincroniza en todos tus dispositivos" : "Sesión iniciada");
+    } catch {
+      alert("Error de conexión. Inténtalo de nuevo.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+    } catch {
+      // ignorar
+    }
+    setAccountUser(null);
+    setIsGuest(true);
+    const guest: Profile = { id: "1", name: "Rey", avatar: "/avatares/bojack1.png", isKid: false };
+    setProfiles([guest]);
+    setActiveProfile(guest);
+    setMyList([]);
+    setContinueWatchingList([]);
+    try {
+      ["cineverso_profiles", "cineverso_mylist", "cineverso_progress"].forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignorar
+    }
+    setEmail("");
+    setPassword("");
+    setActiveTab("inicio");
+    flashToast("Sesión cerrada");
+  };
+
+  // Administrador: con cuenta, lo decide el servidor (ADMIN_EMAIL); como invitado se mantiene el perfil "Rey"
+  const isAdmin = accountUser ? accountUser.isAdmin : activeProfile.name.toLowerCase() === "rey";
 
   const fallbackHero: Movie = {
     id: 101,
@@ -2092,34 +2243,6 @@ export default function Home() {
       }
       setToastMessage("Contenido eliminado correctamente.");
       setTimeout(() => setToastMessage(""), 4000);
-    }
-  };
-
-  const handleSendCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.toLowerCase().endsWith("@gmail.com")) {
-      alert("Por favor ingresa una dirección de correo Gmail válida.");
-      return;
-    }
-    if (password.length < 6) {
-      alert("La contraseña debe tener mínimo 6 caracteres.");
-      return;
-    }
-
-    const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setVerificationCode(generatedCode);
-    setRegisterStep("verify");
-    alert(`[Gmail Verificación]\n\nSe envió un código de 6 dígitos a ${email}.\nTu código de verificación es: ${generatedCode}`);
-  };
-
-  const handleVerifyCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (inputCode === verificationCode) {
-      setRegisterStep("success");
-      setIsGuest(false);
-      alert("¡Cuenta de Gmail autenticada correctamente!");
-    } else {
-      alert("El código ingresado es incorrecto.");
     }
   };
 
@@ -2316,7 +2439,7 @@ export default function Home() {
                   <Info className="w-5 h-5" /> Más información
                 </button>
                 <button 
-                  onClick={() => setMyList(prev => [...prev, heroMovie.title])}
+                  onClick={() => setMyList(prev => (prev.includes(heroMovie.title) ? prev : [...prev, heroMovie.title]))}
                   className="p-2.5 rounded-full bg-[#121212]/90 border border-gray-800 hover:bg-gray-800 transition cursor-pointer"
                 >
                   <Plus className="w-5 h-5" />
@@ -2927,7 +3050,7 @@ export default function Home() {
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-white">Cuenta</h3>
             <div className="bg-[#0f0f0f] p-6 rounded-2xl border border-gray-900 space-y-4">
-              {isGuest ? (
+              {!accountUser ? (
                 <>
                   <div className="flex items-start gap-3">
                     <div className="p-2.5 bg-green-500/10 text-green-400 rounded-xl shrink-0">
@@ -2935,61 +3058,64 @@ export default function Home() {
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white">Estás como Invitado (Máximo 3 perfiles)</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Crea tu cuenta con Gmail para desbloquear hasta 5 perfiles y guardar tu lista.</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Inicia sesión o crea tu cuenta para sincronizar tus perfiles, Mi Lista y Continuar viendo en todos tus dispositivos (hasta 5 perfiles).</p>
                     </div>
                   </div>
 
-                  {registerStep === "form" && (
-                    <form onSubmit={handleSendCode} className="space-y-3 pt-2">
-                      <input 
-                        type="email" 
-                        required
-                        placeholder="tu@gmail.com" 
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 text-white"
-                      />
-                      <input 
-                        type="password" 
-                        required
-                        placeholder="Contraseña (mínimo 6)" 
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 text-white"
-                      />
-                      <button type="submit" className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer">
-                        Crear cuenta y verificar con Gmail
-                      </button>
-                    </form>
-                  )}
+                  <div className="flex gap-1 p-1 bg-[#050505] rounded-xl border border-gray-900">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode("login")}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${authMode === "login" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}
+                    >
+                      Iniciar sesión
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode("register")}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${authMode === "register" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}
+                    >
+                      Crear cuenta
+                    </button>
+                  </div>
 
-                  {registerStep === "verify" && (
-                    <form onSubmit={handleVerifyCode} className="space-y-3 pt-2">
-                      <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300">
-                        Código enviado a <b>{email}</b>. Ingrésalo para verificar.
-                      </div>
-                      <input 
-                        type="text" 
-                        required
-                        maxLength={6}
-                        placeholder="Código de 6 dígitos" 
-                        value={inputCode}
-                        onChange={(e) => setInputCode(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest font-mono text-white focus:border-green-500"
-                      />
-                      <button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer">
-                        Verificar código de Gmail
-                      </button>
-                    </form>
-                  )}
+                  <form onSubmit={handleAuth} className="space-y-3">
+                    <input 
+                      type="email" 
+                      required
+                      autoComplete="email"
+                      placeholder="tu@correo.com" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 text-white"
+                    />
+                    <input 
+                      type="password" 
+                      required
+                      autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                      placeholder="Contraseña (mínimo 6)" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 text-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer"
+                    >
+                      {authLoading ? "Un momento..." : authMode === "login" ? "Entrar" : "Crear mi cuenta"}
+                    </button>
+                  </form>
                 </>
               ) : (
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div className="truncate pr-2">
-                    <span className="text-xs text-green-400 font-bold">Cuenta de Correo Verificada (Hasta 5 perfiles)</span>
-                    <p className="text-sm font-bold text-white truncate">{email}</p>
+                    <span className="text-xs text-green-400 font-bold">
+                      Cuenta sincronizada (hasta 5 perfiles){accountUser.isAdmin ? " · Administrador" : ""}
+                    </span>
+                    <p className="text-sm font-bold text-white truncate">{accountUser.email}</p>
                   </div>
-                  <button onClick={() => { setIsGuest(true); setRegisterStep("form"); }} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0">Cerrar sesión</button>
+                  <button onClick={handleLogout} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0">Cerrar sesión</button>
                 </div>
               )}
             </div>
@@ -3066,12 +3192,14 @@ export default function Home() {
             </div>
           </div>
 
-          <button 
-            onClick={() => { setIsGuest(true); alert("Has salido del modo invitado."); }} 
-            className="w-full flex items-center justify-center gap-2 p-3.5 bg-[#121212] hover:bg-gray-800 text-red-400 font-bold rounded-2xl text-xs border border-gray-800 transition cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" /> Salir del modo invitado
-          </button>
+          {accountUser && (
+            <button 
+              onClick={handleLogout} 
+              className="w-full flex items-center justify-center gap-2 p-3.5 bg-[#121212] hover:bg-gray-800 text-red-400 font-bold rounded-2xl text-xs border border-gray-800 transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" /> Cerrar sesión
+            </button>
+          )}
         </div>
       )}
 
