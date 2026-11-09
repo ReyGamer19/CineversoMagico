@@ -5520,31 +5520,46 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
+    // No iniciar descargas de TV mientras el usuario está en otra sección.
+    if (activeTab !== "tv") return;
+
     const video = videoRef.current;
     if (!video || activeChannel.embedUrl || !activeChannel.videoUrl) return;
 
     let hls: Hls | null = null;
+    let disposed = false;
+
+    const playWhenReady = () => {
+      if (!disposed) video.play().catch(() => {});
+    };
 
     if (Hls.isSupported()) {
-      hls = new Hls();
+      hls = new Hls({
+        startLevel: -1,
+        startFragPrefetch: true,
+        capLevelToPlayerSize: true,
+        maxBufferLength: 15,
+        maxMaxBufferLength: 30,
+        backBufferLength: 10,
+      });
       hls.loadSource(activeChannel.videoUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
-      });
+      hls.on(Hls.Events.MANIFEST_PARSED, playWhenReady);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = activeChannel.videoUrl;
-      video.addEventListener("loadedmetadata", () => {
-        video.play().catch(() => {});
-      });
+      video.addEventListener("loadedmetadata", playWhenReady);
+      video.play().catch(() => {});
     }
 
     return () => {
-      if (hls) {
-        hls.destroy();
-      }
+      disposed = true;
+      video.removeEventListener("loadedmetadata", playWhenReady);
+      if (hls) hls.destroy();
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
     };
-  }, [activeChannel]);
+  }, [activeChannel, activeTab]);
 
   const countryOrder = ["Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽", "Internacional 🌍"];
   
@@ -6662,6 +6677,7 @@ export default function Home() {
                           key={ch.id}
                           onClick={() => setActiveChannel(ch)}
                           className={`p-2.5 rounded-xl flex items-center gap-3 cursor-pointer transition border ${activeChannel.id === ch.id ? "bg-[#1c1c1c] border-green-500/80 shadow-md shadow-green-950/30" : "hover:bg-[#151515] border-transparent"}`}
+                          style={{ contentVisibility: "auto", containIntrinsicSize: "56px" }}
                         >
                           <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center font-black text-xs text-gray-200 border border-gray-800 shrink-0 overflow-hidden">
                             <span>{ch.shortCode || ch.name.slice(0, 2).toUpperCase()}</span>
