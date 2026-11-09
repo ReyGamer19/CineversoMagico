@@ -1,12 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { lookup } from "node:dns/promises";
 import net from "node:net";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+// Con cacheComponents activado no se permiten "dynamic", "runtime" ni "preferredRegion":
+// la ruta es dinámica por usar connection() y corre en Node.js por defecto.
 export const maxDuration = 60;
-// São Paulo: más cerca de Perú/Chile/Argentina. Quita esta línea si no la quieres.
-export const preferredRegion = "gru1";
 
 const MAX_PLAYLIST_BYTES = 2_000_000;
 
@@ -51,6 +49,7 @@ function rewritePlaylist(body: string, base: URL): string {
 }
 
 export async function GET(req: NextRequest) {
+  await connection();
   // No servir como proxy a páginas de otros sitios
   if (req.headers.get("sec-fetch-site") === "cross-site") return text("No permitido", 403);
 
