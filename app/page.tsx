@@ -2050,6 +2050,55 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [profiles, activeProfile.id, myList, continueWatchingList, cloudReady, accountUser]);
 
+  // Pasos de verificación por correo (código de 6 dígitos)
+  const [authStep, setAuthStep] = useState<"form" | "verify">("form");
+  const [otpCode, setOtpCode] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
+
+  const postAccount = async (payload: Record<string, unknown>) => {
+    const res = await fetch("/api/account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    return { res, json };
+  };
+
+  // Entra a la cuenta después de iniciar sesión o de verificar el código
+  const finishLogin = (json: any, mail: string, isNew: boolean) => {
+    setAccountUser(json.user);
+    setIsGuest(false);
+    setPassword("");
+    setOtpCode("");
+    setPendingEmail("");
+    setAuthStep("form");
+    if (json.data) {
+      applyCloudData(json.data);
+    } else if (!json.user.isAdmin && profiles.length === 1 && profiles[0].name === "Rey") {
+      // Cuenta nueva: el primer perfil lleva el nombre del correo
+      const base = mail.split("@")[0];
+      const renamed: Profile = { ...profiles[0], name: base.charAt(0).toUpperCase() + base.slice(1, 20) };
+      setProfiles([renamed]);
+      setActiveProfile(renamed);
+    }
+    flashToast(isNew ? "¡Cuenta verificada! Ya se sincroniza en todos tus dispositivos" : "Sesión iniciada");
+  };
+
+  const goToVerify = (mail: string) => {
+    setPendingEmail(mail);
+    setOtpCode("");
+    setAuthStep("verify");
+    setResendCooldown(60);
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading) return;
@@ -2064,29 +2113,63 @@ export default function Home() {
     }
     setAuthLoading(true);
     try {
-      const res = await fetch("/api/account", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: authMode, email: mail, password }),
-      });
-      const json = await res.json().catch(() => ({}));
+      const { res, json } = await postAccount({ action: authMode, email: mail, password });
+      if (res.status === 403 && json.needsVerification) {
+        goToVerify(mail);
+        flashToast("Te enviamos un código a tu correo");
+        return;
+      }
       if (!res.ok) {
         alert(json.error || "No se pudo completar la acción. Inténtalo de nuevo.");
         return;
       }
-      setAccountUser(json.user);
-      setIsGuest(false);
-      setPassword("");
-      if (json.data) {
-        applyCloudData(json.data);
-      } else if (!json.user.isAdmin && profiles.length === 1 && profiles[0].name === "Rey") {
-        // Cuenta nueva: el primer perfil lleva el nombre del correo
-        const base = mail.split("@")[0];
-        const renamed: Profile = { ...profiles[0], name: base.charAt(0).toUpperCase() + base.slice(1, 20) };
-        setProfiles([renamed]);
-        setActiveProfile(renamed);
+      if (json.pending) {
+        goToVerify(mail);
+        flashToast("Te enviamos un código de 6 dígitos a tu correo");
+        return;
       }
-      flashToast(authMode === "register" ? "¡Cuenta creada! Ya se sincroniza en todos tus dispositivos" : "Sesión iniciada");
+      finishLogin(json, mail, authMode === "register");
+    } catch {
+      alert("Error de conexión. Inténtalo de nuevo.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authLoading) return;
+    const code = otpCode.replace(/\s/g, "");
+    if (!/^\d{6,8}$/.test(code)) {
+      alert("Escribe el código de 6 dígitos que llegó a tu correo.");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const { res, json } = await postAccount({ action: "verify", email: pendingEmail, code });
+      if (!res.ok) {
+        alert(json.error || "Código incorrecto o vencido.");
+        return;
+      }
+      finishLogin(json, pendingEmail, true);
+    } catch {
+      alert("Error de conexión. Inténtalo de nuevo.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0 || authLoading) return;
+    setAuthLoading(true);
+    try {
+      const { res, json } = await postAccount({ action: "resend", email: pendingEmail });
+      if (!res.ok) {
+        alert(json.error || "No se pudo reenviar el código.");
+        return;
+      }
+      setResendCooldown(60);
+      flashToast("Te enviamos un código nuevo");
     } catch {
       alert("Error de conexión. Inténtalo de nuevo.");
     } finally {
@@ -2118,6 +2201,8 @@ export default function Home() {
     }
     setEmail("");
     setPassword("");
+    setAuthStep("form");
+    setOtpCode("");
     setActiveTab("inicio");
     flashToast("Sesión cerrada");
   };
@@ -3062,6 +3147,48 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {authStep === "verify" ? (
+                    <form onSubmit={handleVerify} className="space-y-3">
+                      <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-xs text-gray-300 leading-relaxed">
+                        Te enviamos un código de 6 dígitos a <span className="font-bold text-white">{pendingEmail}</span>. Escríbelo aquí para activar tu cuenta. Si no lo ves, revisa la carpeta de spam.
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={8}
+                        placeholder="Código"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/[^\d]/g, ""))}
+                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-2xl text-center tracking-[0.4em] font-bold focus:outline-none focus:border-green-500 text-white"
+                      />
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className="w-full bg-green-500 hover:bg-green-400 disabled:opacity-60 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer"
+                      >
+                        {authLoading ? "Verificando..." : "Verificar y entrar"}
+                      </button>
+                      <div className="flex items-center justify-between text-xs">
+                        <button
+                          type="button"
+                          onClick={handleResend}
+                          disabled={resendCooldown > 0 || authLoading}
+                          className="text-green-400 hover:underline disabled:text-gray-600 disabled:no-underline cursor-pointer"
+                        >
+                          {resendCooldown > 0 ? `Reenviar código en ${resendCooldown}s` : "Reenviar código"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setAuthStep("form"); setOtpCode(""); }}
+                          className="text-gray-400 hover:underline cursor-pointer"
+                        >
+                          Cambiar correo
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
                   <div className="flex gap-1 p-1 bg-[#050505] rounded-xl border border-gray-900">
                     <button
                       type="button"
@@ -3106,6 +3233,8 @@ export default function Home() {
                       {authLoading ? "Un momento..." : authMode === "login" ? "Entrar" : "Crear mi cuenta"}
                     </button>
                   </form>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="flex items-center justify-between gap-3">

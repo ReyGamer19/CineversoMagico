@@ -31,15 +31,30 @@ const publicUser = (u: SbUser) => ({
   isAdmin: !!ADMIN_EMAIL && (u.email || "").toLowerCase() === ADMIN_EMAIL,
 });
 
-async function passwordLogin(email: string, password: string): Promise<Session | null> {
+type LoginResult = { session: Session | null; reason: string };
+
+async function passwordLogin(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: headersFor(ANON_KEY),
     body: JSON.stringify({ email, password }),
     cache: "no-store",
   });
-  if (!res.ok) return null;
-  return (await res.json()) as Session;
+  if (res.ok) return { session: (await res.json()) as Session, reason: "" };
+  const err = await res.json().catch(() => ({}));
+  return { session: null, reason: `${err?.error_code || ""} ${err?.msg || err?.message || ""}` };
+}
+
+// Llamada simple a un endpoint de autenticación de Supabase con la clave publicable
+async function authCall(path: string, payload: unknown) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+    method: "POST",
+    headers: headersFor(ANON_KEY),
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  const json = await res.json().catch(() => ({}));
+  return { res, json };
 }
 
 async function refreshLogin(refreshToken: string): Promise<Session | null> {
@@ -148,38 +163,78 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { headers: noStore });
   }
 
-  if (action !== "login" && action !== "register") return fail("Acción inválida", 400);
+  if (!["login", "register", "verify", "resend"].includes(action)) return fail("Acción inválida", 400);
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  const password = typeof body.password === "string" ? body.password : "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return fail("Ingresa un correo válido", 400);
-  if (password.length < 6 || password.length > 72) return fail("La contraseña debe tener entre 6 y 72 caracteres", 400);
 
-  try {
-    if (action === "register") {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-        method: "POST",
-        headers: headersFor(SECRET_KEY),
-        body: JSON.stringify({ email, password, email_confirm: true }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const text = `${err?.error_code || ""} ${err?.msg || err?.message || ""}`;
-        if (/exists|already|registered/i.test(text)) return fail("Ese correo ya tiene una cuenta. Inicia sesión.", 409);
-        if (/weak/i.test(text)) return fail("La contraseña es muy débil. Usa una más larga o con números.", 422);
-        return fail("No se pudo crear la cuenta. Inténtalo de nuevo.", 502);
-      }
-    }
-
-    const session = await passwordLogin(email, password);
-    if (!session || !session.access_token) {
-      return fail(action === "login" ? "Correo o contraseña incorrectos" : "Cuenta creada, pero no se pudo iniciar sesión. Intenta entrar.", 401);
-    }
+  // Termina el inicio de sesión: guarda las cookies y devuelve usuario + datos
+  const finish = async (session: Session) => {
     setSessionCookies(store, session);
-
     const user: SbUser = session.user && session.user.id ? { id: session.user.id, email: session.user.email } : { id: "", email };
     const data = user.id ? await loadUserData(user.id) : null;
     return NextResponse.json({ user: publicUser(user), data }, { headers: noStore });
+  };
+
+  try {
+    // Reenviar el código de verificación
+    if (action === "resend") {
+      const { res } = await authCall("resend", { type: "signup", email });
+      if (!res.ok) {
+        if (res.status === 429) return fail("Espera un minuto antes de pedir otro código.", 429);
+        return fail("No se pudo reenviar el código. Inténtalo de nuevo.", 502);
+      }
+      return NextResponse.json({ ok: true }, { headers: noStore });
+    }
+
+    // Confirmar el código de 6 dígitos que llegó al correo
+    if (action === "verify") {
+      const code = typeof body.code === "string" ? body.code.replace(/\s/g, "") : "";
+      if (!/^\d{6,8}$/.test(code)) return fail("Escribe el código de 6 dígitos", 400);
+      const { res, json } = await authCall("verify", { type: "signup", email, token: code });
+      if (!res.ok || !json?.access_token) return fail("Código incorrecto o vencido. Pide uno nuevo.", 401);
+      return await finish(json as Session);
+    }
+
+    const password = typeof body.password === "string" ? body.password : "";
+    if (password.length < 6 || password.length > 72) return fail("La contraseña debe tener entre 6 y 72 caracteres", 400);
+
+    // Crear cuenta: Supabase envía el código de verificación al correo
+    if (action === "register") {
+      const { res, json } = await authCall("signup", { email, password });
+      if (!res.ok) {
+        const text = `${json?.error_code || ""} ${json?.msg || json?.message || ""}`;
+        if (res.status === 429 || /rate|seconds|too many/i.test(text)) {
+          return fail("Se enviaron muchos correos. Espera un minuto e inténtalo de nuevo.", 429);
+        }
+        if (/weak/i.test(text)) return fail("La contraseña es muy débil. Usa una más larga o con números.", 422);
+        if (/exists|already|registered/i.test(text)) return fail("Ese correo ya tiene una cuenta. Inicia sesión.", 409);
+        if (/invalid/i.test(text) && /email/i.test(text)) return fail("Ese correo no es válido.", 400);
+        return fail("No se pudo crear la cuenta. Inténtalo de nuevo.", 502);
+      }
+      // Correo que ya tiene una cuenta confirmada: Supabase responde sin identidades
+      const identities = json?.identities ?? json?.user?.identities;
+      if (Array.isArray(identities) && identities.length === 0) {
+        return fail("Ese correo ya tiene una cuenta. Inicia sesión.", 409);
+      }
+      // Si la confirmación estuviera desactivada, ya viene la sesión
+      if (json?.access_token) return await finish(json as Session);
+      return NextResponse.json({ pending: true, email }, { headers: noStore });
+    }
+
+    // Iniciar sesión
+    const { session, reason } = await passwordLogin(email, password);
+    if (!session || !session.access_token) {
+      if (/email_not_confirmed|not confirmed/i.test(reason)) {
+        await authCall("resend", { type: "signup", email }).catch(() => null);
+        return NextResponse.json(
+          { error: "Tu correo aún no está verificado. Te enviamos un código.", needsVerification: true, email },
+          { status: 403, headers: noStore }
+        );
+      }
+      return fail("Correo o contraseña incorrectos", 401);
+    }
+    return await finish(session);
   } catch {
     return fail("Error de conexión", 502);
   }
