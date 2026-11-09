@@ -5549,6 +5549,14 @@ export default function Home() {
         attachNative();
         return;
       }
+      // Con hls.js activo, un error de decodificación se intenta recuperar antes de mostrarlo
+      // (el segundo intento cambia el códec de audio, que arregla muchas señales con AC-3/MP2)
+      if (hls && !nativeMode && mediaRecoveries < 2) {
+        mediaRecoveries += 1;
+        if (mediaRecoveries === 2) hls.swapAudioCodec();
+        hls.recoverMediaError();
+        return;
+      }
       const code = video.error?.code;
       const messages: Record<number, string> = {
         1: "La reproducción fue interrumpida. Pulsa Reintentar.",
@@ -5556,7 +5564,7 @@ export default function Home() {
         3: "El dispositivo no puede decodificar el formato de este canal.",
         4: "El enlace no es compatible o el servidor no permite reproducirlo aquí.",
       };
-      showError(messages[code || 0] || "No se pudo iniciar esta señal. Comprueba el enlace del canal.");
+      showError((messages[code || 0] || "No se pudo iniciar esta señal. Comprueba el enlace del canal.") + ` [video:${code ?? 0}]`);
     };
 
     const startHls = () => {
@@ -5595,6 +5603,7 @@ export default function Home() {
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
           mediaRecoveries += 1;
+          if (mediaRecoveries === 2) hls.swapAudioCodec();
           hls.recoverMediaError();
           return;
         }
@@ -5603,9 +5612,9 @@ export default function Home() {
           attachNative();
           return;
         }
-        showError(data.type === Hls.ErrorTypes.NETWORK_ERROR
+        showError((data.type === Hls.ErrorTypes.NETWORK_ERROR
           ? "El canal no responde en este momento (puede estar caído o fuera de línea)."
-          : "El formato o códec de esta señal no es compatible con este dispositivo.");
+          : "El formato o códec de esta señal no es compatible con este dispositivo.") + ` [${data.details}]`);
         hls.destroy();
         hls = null;
       });
