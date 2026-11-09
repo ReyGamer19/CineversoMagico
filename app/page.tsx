@@ -5572,17 +5572,24 @@ export default function Home() {
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        capLevelToPlayerSize: true,
+        // Empieza asumiendo ~3 Mbps (antes ~0,5): arranca en mejor calidad y sube antes a la máxima
+        abrEwmaDefaultEstimate: 3_000_000,
+        // No limitar la calidad al tamaño del reproductor (se ve más nítido en pantallas pequeñas)
+        capLevelToPlayerSize: false,
+        // Pide el primer fragmento mientras todavía carga la lista de calidades
+        startFragPrefetch: true,
         maxBufferLength: 20,
         maxMaxBufferLength: 40,
         backBufferLength: 15,
-        manifestLoadingTimeOut: 20000,
-        manifestLoadingMaxRetry: 4,
-        manifestLoadingRetryDelay: 1000,
-        levelLoadingTimeOut: 20000,
-        fragLoadingTimeOut: 30000,
-        fragLoadingMaxRetry: 4,
-        fragLoadingRetryDelay: 1000,
+        // Tiempos más cortos: un canal caído falla rápido en vez de quedarse cargando
+        manifestLoadingTimeOut: 10000,
+        manifestLoadingMaxRetry: 2,
+        manifestLoadingRetryDelay: 800,
+        levelLoadingTimeOut: 10000,
+        levelLoadingMaxRetry: 3,
+        fragLoadingTimeOut: 20000,
+        fragLoadingMaxRetry: 3,
+        fragLoadingRetryDelay: 800,
       });
       hls.on(Hls.Events.MANIFEST_PARSED, playWhenReady);
       hls.on(Hls.Events.ERROR, (_event, data) => {
