@@ -1681,7 +1681,23 @@ export default function Home() {
       }
       return out;
     };
+    // Recordamos a dónde movimos el foco nosotros. Si el navegador de la TV
+    // (LG, Samsung...) intenta moverlo otra vez por su cuenta, lo devolvemos.
+    let ourTarget: HTMLElement | null = null;
+    let ourTime = 0;
+    let lastArrowTime = 0;
+    const onFocusIn = (ev: FocusEvent) => {
+      if (!ourTarget) return;
+      if (Date.now() - ourTime < 250 && ev.target !== ourTarget && document.contains(ourTarget)) {
+        const t = ourTarget;
+        try { t.focus({ preventScroll: true }); } catch (e) { t.focus(); }
+      }
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+
     const focusEl = (el: HTMLElement) => {
+      ourTarget = el;
+      ourTime = Date.now();
       try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
       try {
         el.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1816,11 +1832,21 @@ export default function Home() {
         e.preventDefault();
         return;
       }
-      if (moveFocus(dir)) e.preventDefault();
+      // Siempre bloqueamos la navegación propia de la TV para que no se mueva doble
+      e.preventDefault();
+      // Ignora la tecla repetida/rebotada que algunos controles envían dos veces seguidas
+      const now = Date.now();
+      if (now - lastArrowTime < 140) return;
+      lastArrowTime = now;
+      moveFocus(dir);
     };
 
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Fase de captura: actuamos antes que el navegador de la TV
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("focusin", onFocusIn, true);
+    };
   }, []);
 
   // Al abrir la ficha o el reproductor, el foco va al botón principal; al cerrar, vuelve donde estaba
@@ -2112,7 +2138,6 @@ export default function Home() {
         bgImage: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         img: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         videoUrl: newMovieVideoUrl,
-        backupVideoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
         duration: "1 h 50 min",
         genres: [newMovieCategory],
         cast: "Elenco Estelar",
@@ -3450,12 +3475,19 @@ export default function Home() {
               onTimeUpdate={(e) => recordProgress(e.currentTarget, selectedMovie, false)}
               onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
               onEnded={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
-              onError={() => {
-                if (!usingBackup && selectedMovie.backupVideoUrl) {
+              onError={(e) => {
+                const err = e.currentTarget.error;
+                const code = err ? err.code : 0;
+                const isSample = (selectedMovie.backupVideoUrl || "").indexOf("gtv-videos-bucket") !== -1;
+                if (!usingBackup && selectedMovie.backupVideoUrl && !isSample) {
                   setUsingBackup(true);
-                } else {
-                  setPlayerError("Este video no se puede reproducir en este dispositivo. Usa MP4 (video H.264 + audio AAC) con enlace https directo.");
+                  return;
                 }
+                setVideoLoading(false);
+                if (code === 2) setPlayerError("Se cortó la conexión con el servidor del video. Pulsa Reintentar.");
+                else if (code === 3) setPlayerError("Esta TV no puede decodificar este video (formato H.265/HEVC, 10 bits o audio Dolby). Necesita una versión en MP4 H.264 + AAC.");
+                else if (code === 4) setPlayerError("El enlace no funciona o el formato no es compatible con esta TV (por ejemplo MKV o H.265). Necesita MP4 H.264 + AAC.");
+                else setPlayerError("Este video no se puede reproducir en este dispositivo.");
               }}
             >
               Tu navegador no soporta el reproductor.
@@ -3469,6 +3501,19 @@ export default function Home() {
             {playerError && (
               <div style={{ position: "absolute", left: 0, right: 0, bottom: 24, textAlign: "center", padding: "0 16px" }}>
                 <span className="inline-block bg-red-950/90 border border-red-800 text-red-200 text-sm px-4 py-3 rounded-xl">{playerError}</span>
+                <button
+                  onClick={() => {
+                    setPlayerError("");
+                    setUsingBackup(false);
+                    const v = playerRef.current;
+                    if (v) {
+                      try { v.load(); const pr = v.play(); if (pr && pr.catch) pr.catch(() => {}); } catch (err) {}
+                    }
+                  }}
+                  className="ml-3 inline-block bg-white text-black font-bold text-sm px-4 py-3 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                >
+                  Reintentar
+                </button>
               </div>
             )}
           </div>

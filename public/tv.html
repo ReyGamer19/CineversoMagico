@@ -336,12 +336,16 @@ a { color: inherit; text-decoration: none; }
     else if (video.currentTime > 5) progress[String(playing.id)] = { time: video.currentTime, duration: video.duration };
   });
   video.addEventListener("error", function () {
+    var code = video.error ? video.error.code : 0;
     if (playing && playing.backupVideoUrl && !usedBackup) {
       usedBackup = true; video.src = playing.backupVideoUrl;
       try { video.load(); video.play(); } catch (e) {}
       return;
     }
-    msg("Este video no se puede reproducir en esta TV. Formato recomendado: MP4 (H.264 + AAC) con enlace https.");
+    if (code === 2) msg("Se cortó la conexión con el servidor del video. Sal y vuelve a intentarlo.");
+    else if (code === 3) msg("Esta TV no puede decodificar este video (H.265/HEVC, 10 bits o audio Dolby). Necesita MP4 H.264 + AAC.");
+    else if (code === 4) msg("El enlace no funciona o el formato no es compatible con esta TV (MKV o H.265). Necesita MP4 H.264 + AAC.");
+    else msg("Este video no se puede reproducir en esta TV.");
   });
   function msg(t) { loading(false); $("playerMsgText").innerHTML = esc(t); show($("playerMsg")); }
   function closePlayer() {
@@ -385,8 +389,15 @@ a { color: inherit; text-decoration: none; }
     for (var i = 0; i < all.length; i++) if (visible(all[i])) out.push(all[i]);
     return out;
   }
+  var ourTarget = null, ourTime = 0, lastArrow = 0;
+  document.addEventListener("focus", function (ev) {
+    if (ourTarget && new Date().getTime() - ourTime < 250 && ev.target !== ourTarget) {
+      try { ourTarget.focus(); } catch (e) {}
+    }
+  }, true);
   function focusEl(el) {
     if (!el) return;
+    ourTarget = el; ourTime = new Date().getTime();
     try { el.focus(); } catch (e) {}
     // Desplaza la fila horizontal para que la tarjeta se vea
     var rail = el.parentNode;
@@ -471,8 +482,15 @@ a { color: inherit; text-decoration: none; }
       return;
     }
     var dir = k === 37 ? "left" : k === 38 ? "up" : k === 39 ? "right" : k === 40 ? "down" : null;
-    if (dir) { e.preventDefault(); move(dir); }
-  }, false);
+    if (dir) {
+      e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      var now = new Date().getTime();
+      if (now - lastArrow < 140) return;
+      lastArrow = now;
+      move(dir);
+    }
+  }, true);
 
   // Registrar teclas multimedia en Samsung Tizen (si se permite)
   try {
