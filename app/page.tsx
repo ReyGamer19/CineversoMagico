@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Play, Info, Plus, Search, Bell, Sparkles, Check, 
-  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark, Shuffle
+  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark, Shuffle, ThumbsUp, ThumbsDown
 } from "lucide-react";
 import Hls from "hls.js";
 
@@ -13,6 +13,17 @@ interface Profile {
   avatar: string;
   isKid: boolean;
   pin?: string;
+  pinHash?: string;
+}
+
+interface Episode {
+  id: string;
+  season: number;
+  number: number;
+  title: string;
+  videoUrl: string;
+  duration?: string;
+  addedAt?: number;
 }
 
 interface Movie {
@@ -36,6 +47,8 @@ interface Movie {
   originalLanguage?: string;
   ageRating?: string;
   trailerUrl?: string;
+  episodes?: Episode[];
+  addedAt?: number;
 }
 
 interface ProgressItem {
@@ -45,6 +58,8 @@ interface ProgressItem {
   time: number;
   duration: number;
   updatedAt: number;
+  episodeId?: string;
+  episodeLabel?: string;
 }
 
 interface AccountUser {
@@ -230,6 +245,7 @@ export default function Home() {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [movieModalTab, setMovieModalTab] = useState<"detalles" | "reparto" | "similares">("detalles");
+  const [modalSeason, setModalSeason] = useState(1);
   const [myList, setMyList] = useState<string[]>([]);
 
   // Estado para el Instalador PWA
@@ -1328,6 +1344,11 @@ export default function Home() {
   const [newMovieCast, setNewMovieCast] = useState("");
   const [newMovieTrailer, setNewMovieTrailer] = useState("");
   const [detectingDuration, setDetectingDuration] = useState(false);
+  const [newEpisodes, setNewEpisodes] = useState<Episode[]>([]);
+  const [epSeason, setEpSeason] = useState("1");
+  const [epNumber, setEpNumber] = useState("1");
+  const [epTitle, setEpTitle] = useState("");
+  const [epUrl, setEpUrl] = useState("");
   const [editingMovieId, setEditingMovieId] = useState<number | string | null>(null);
 
   // Catálogo Base por defecto
@@ -1405,6 +1426,15 @@ export default function Home() {
 
   const [customMovies, setCustomMovies] = useState<Movie[]>(defaultMovies);
   const [isMounted, setIsMounted] = useState(false);
+
+  // Perfil Niños: solo contenido infantil (ATP / +7, o Animación y Familia sin clasificación)
+  const isKidFriendly = (m: Movie) => {
+    if (m.ageRating) return m.ageRating === "ATP" || m.ageRating === "+7";
+    const g = (m.genres && m.genres.length ? m.genres : [m.tag]).map((x) => String(x || "").toLowerCase());
+    return g.some((x) => x.indexOf("anim") !== -1 || x.indexOf("famil") !== -1 || x.indexOf("infantil") !== -1);
+  };
+  const kidsMode = !!activeProfile.isKid;
+  const catalog: Movie[] = kidsMode ? customMovies.filter(isKidFriendly) : customMovies;
 
   // ¿Este dispositivo es del administrador? (solo afecta a la interfaz; el servidor
   // vuelve a comprobar la clave ADMIN_PASSWORD antes de guardar cualquier cosa)
@@ -1729,6 +1759,10 @@ export default function Home() {
       });
   };
 
+  useEffect(() => {
+    if (kidsMode && (activeTab === "tv" || activeTab === "admin")) setActiveTab("inicio");
+  }, [kidsMode, activeTab]);
+
   const handleAdminLogout = () => {
     try {
       localStorage.removeItem("cineverso_admin_key");
@@ -1760,7 +1794,7 @@ export default function Home() {
   // Portada que cambia sola (hasta 5 títulos)
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
-  const heroList = customMovies.slice(0, 5);
+  const heroList = catalog.slice(0, 5);
   useEffect(() => {
     if (heroList.length < 2 || heroPaused) return;
     const t = setInterval(() => setHeroIndex((i) => (i + 1) % heroList.length), 9000);
@@ -1769,7 +1803,7 @@ export default function Home() {
   const [heroTrailerOn, setHeroTrailerOn] = useState(false);
   const [heroTrailerReady, setHeroTrailerReady] = useState(false);
   const [heroMuted, setHeroMuted] = useState(true);
-  const heroMovie: Movie = heroList[heroIndex % Math.max(1, heroList.length)] || customMovies[0] || {
+  const heroMovie: Movie = heroList[heroIndex % Math.max(1, heroList.length)] || catalog[0] || customMovies[0] || {
     id: 101,
     title: "APOCALYPSE Z",
     subtitle: "NEW WORLD",
@@ -2074,13 +2108,18 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [tvMode, activeTab, selectedMovie]);
 
+  const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
+  const currentEpisodeRef = useRef<Episode | null>(null);
+  currentEpisodeRef.current = currentEpisode;
+  const [nextUp, setNextUp] = useState<{ ep: Episode; secs: number } | null>(null);
   // Reproductor de películas: MP4 directo o HLS (.m3u8), autoplay con respaldo en silencio
   useEffect(() => {
     if (!isPlaying || !selectedMovie) return;
     const video = playerRef.current;
     if (!video) return;
     setPlayerError("");
-    const src = usingBackup && selectedMovie.backupVideoUrl ? selectedMovie.backupVideoUrl : selectedMovie.videoUrl || heroMovie.videoUrl;
+    const ep = currentEpisodeRef.current;
+    const src = ep ? ep.videoUrl : usingBackup && selectedMovie.backupVideoUrl ? selectedMovie.backupVideoUrl : selectedMovie.videoUrl || heroMovie.videoUrl;
     let hls: Hls | null = null;
     const tryPlay = () => {
       const p = video.play();
@@ -2092,7 +2131,8 @@ export default function Home() {
         });
       }
     };
-    const saved = progressRef.current.find((p) => String(p.id) === String(selectedMovie.id));
+    const savedAny = progressRef.current.find((p) => String(p.id) === String(selectedMovie.id));
+    const saved = savedAny && (!ep || savedAny.episodeId === ep.id) ? savedAny : undefined;
     const onMeta = () => {
       if (saved && saved.time > 5 && (!video.duration || saved.time < video.duration - 60)) {
         try { video.currentTime = saved.time; } catch (e) {}
@@ -2124,7 +2164,7 @@ export default function Home() {
         video.load();
       } catch (e) {}
     };
-  }, [isPlaying, selectedMovie, usingBackup]);
+  }, [isPlaying, selectedMovie, usingBackup, currentEpisode]);
 
   // Barras del reproductor: se ocultan solas a los 4 s y vuelven con cualquier tecla/movimiento
   const [playerUi, setPlayerUi] = useState(true);
@@ -2252,12 +2292,49 @@ export default function Home() {
       });
   };
 
+  // Series: episodio que se está viendo + aviso de "Siguiente episodio"
+  const sortedEpisodes = (m: Movie | null) =>
+    (m && m.episodes ? m.episodes.slice() : []).sort((a, b) => a.season - b.season || a.number - b.number);
+  const nextEpisodeOf = (m: Movie | null, ep: Episode | null) => {
+    if (!m || !ep) return null;
+    const list = sortedEpisodes(m);
+    const i = list.findIndex((x) => x.id === ep.id);
+    return i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+  };
+  const playEpisode = (movie: Movie, ep: Episode) => {
+    setNextUp(null);
+    setUsingBackup(false);
+    setPlayerError("");
+    setSelectedMovie(movie);
+    setCurrentEpisode(ep);
+    setIsPlaying(true);
+  };
   const startPlayback = (movie: Movie) => {
+    const eps = sortedEpisodes(movie);
+    if (movie.type === "serie" && eps.length) {
+      const saved = progressRef.current.find((p) => String(p.id) === String(movie.id));
+      const ep = (saved && saved.episodeId && eps.find((x) => x.id === saved.episodeId)) || eps[0];
+      playEpisode(movie, ep);
+      return;
+    }
+    setNextUp(null);
+    setCurrentEpisode(null);
     setUsingBackup(false);
     setPlayerError("");
     setSelectedMovie(movie);
     setIsPlaying(true);
   };
+  // cuenta regresiva del siguiente episodio
+  useEffect(() => {
+    if (!nextUp) return;
+    if (nextUp.secs <= 0) {
+      if (selectedMovie) playEpisode(selectedMovie, nextUp.ep);
+      return;
+    }
+    const t = setTimeout(() => setNextUp((n) => (n ? { ep: n.ep, secs: n.secs - 1 } : n)), 1000);
+    return () => clearTimeout(t);
+  }, [nextUp]);
+  useEffect(() => { if (!isPlaying) { setNextUp(null); } }, [isPlaying]);
 
   const requestFullscreenSafe = () => {
     const el: any = playerRef.current || document.documentElement;
@@ -2361,11 +2438,16 @@ export default function Home() {
       alert("Acceso denegado. Solo el administrador puede gestionar películas.");
       return;
     }
-    if (!newMovieTitle || !newMovieVideoUrl) {
-      alert("Por favor ingresa al menos el título y el enlace del vídeo.");
+    if (newMovieType === "serie" && !newMovieVideoUrl && newEpisodes.length) {
+      // la serie usa el enlace de su primer episodio como enlace principal
+      setNewMovieVideoUrl(newEpisodes[0].videoUrl);
+    }
+    const mainUrl = newMovieVideoUrl || (newMovieType === "serie" && newEpisodes.length ? newEpisodes[0].videoUrl : "");
+    if (!newMovieTitle || !mainUrl) {
+      alert(newMovieType === "serie" ? "Ingresa el título y agrega al menos un episodio." : "Por favor ingresa al menos el título y el enlace del vídeo.");
       return;
     }
-    if (/gtv-videos-bucket|BigBuckBunny|ElephantsDream|ForBiggerBlazes/i.test(newMovieVideoUrl)) {
+    if (/gtv-videos-bucket|BigBuckBunny|ElephantsDream|ForBiggerBlazes/i.test(mainUrl)) {
       if (!confirm("Ese enlace es un VIDEO DE EJEMPLO de Google, no tu película. ¿Quieres guardarlo igual?")) return;
     }
 
@@ -2381,13 +2463,15 @@ export default function Home() {
           desc: newMovieDesc || m.desc,
           bgImage: newMovieImage || m.bgImage,
           img: newMovieImage || m.img,
-          videoUrl: newMovieVideoUrl.trim(),
+          videoUrl: mainUrl.trim(),
           year: newMovieYear.trim() || m.year,
           duration: newMovieDuration.trim() || undefined,
           ageRating: newMovieAge || undefined,
           director: newMovieDirector.trim() || undefined,
           cast: newMovieCast.trim() || undefined,
           trailerUrl: newMovieTrailer.trim() || undefined,
+          episodes: newMovieType === "serie" ? newEpisodes : undefined,
+          addedAt: m.addedAt || movieTime(m) || undefined,
           genres: m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
         };
         saveChange({ type: "upsert", movie: updated }, "¡Contenido actualizado!");
@@ -2404,13 +2488,15 @@ export default function Home() {
         desc: newMovieDesc || "Contenido añadido desde el panel de administración.",
         bgImage: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         img: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
-        videoUrl: newMovieVideoUrl.trim(),
+        videoUrl: mainUrl.trim(),
         duration: newMovieDuration.trim() || undefined,
         genres: [newMovieCategory],
         cast: newMovieCast.trim() || undefined,
         director: newMovieDirector.trim() || undefined,
         ageRating: newMovieAge || undefined,
         trailerUrl: newMovieTrailer.trim() || undefined,
+        episodes: newMovieType === "serie" ? newEpisodes : undefined,
+        addedAt: Date.now(),
         originalLanguage: "ES"
       };
 
@@ -2431,6 +2517,23 @@ export default function Home() {
     setNewMovieDirector("");
     setNewMovieCast("");
     setNewMovieTrailer("");
+    setNewEpisodes([]);
+    setEpSeason("1");
+    setEpNumber("1");
+    setEpTitle("");
+    setEpUrl("");
+  };
+
+  const addEpisode = () => {
+    const season = parseInt(epSeason, 10) || 1, number = parseInt(epNumber, 10) || 1;
+    if (!epUrl.trim()) { showToast("Pega el enlace del episodio."); return; }
+    const ep: Episode = { id: "s" + season + "e" + number + "-" + Date.now(), season, number, title: epTitle.trim() || "Episodio " + number, videoUrl: epUrl.trim(), addedAt: Date.now() };
+    setNewEpisodes((prev) =>
+      prev.filter((x) => !(x.season === season && x.number === number)).concat([ep]).sort((a, b) => a.season - b.season || a.number - b.number)
+    );
+    setEpNumber(String(number + 1));
+    setEpTitle("");
+    setEpUrl("");
   };
 
   // Lee la duración real del archivo de video (sin descargarlo entero)
@@ -2475,6 +2578,11 @@ export default function Home() {
     setNewMovieDirector(movie.director || "");
     setNewMovieCast(movie.cast || "");
     setNewMovieTrailer(movie.trailerUrl || "");
+    const eps = movie.episodes || [];
+    setNewEpisodes(eps);
+    const last = eps[eps.length - 1];
+    setEpSeason(String(last ? last.season : 1));
+    setEpNumber(String(last ? last.number + 1 : 1));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -2498,6 +2606,8 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [notifSeen, setNotifSeen] = useState(0);
   const isAdminRef = useRef(false);
   isAdminRef.current = isAdmin;
   const progressRef = useRef<ProgressItem[]>([]);
@@ -2533,6 +2643,8 @@ export default function Home() {
       setActiveProfile(active);
     }
     setMyList(data && Array.isArray(data.myList) ? data.myList : []);
+    setRatings(data && data.ratings && typeof data.ratings === "object" ? data.ratings : {});
+    setNotifSeen(data && typeof data.notifSeen === "number" ? data.notifSeen : 0);
     setContinueWatchingList(
       data && Array.isArray(data.progress)
         ? data.progress.filter((x: any) => x && x.id !== undefined && typeof x.time === "number" && typeof x.duration === "number")
@@ -2565,6 +2677,8 @@ export default function Home() {
         activeProfileId: activeProfile.id === "admin-rey" ? "" : activeProfile.id,
         myList,
         progress: continueWatchingList.slice(0, 50),
+        ratings,
+        notifSeen,
       };
       fetch("/api/account", {
         method: "PUT",
@@ -2583,7 +2697,7 @@ export default function Home() {
         .catch(() => {});
     }, 1200);
     return () => clearTimeout(t);
-  }, [profiles, activeProfile, myList, continueWatchingList, accountUser, accountLoaded]);
+  }, [profiles, activeProfile, myList, continueWatchingList, ratings, notifSeen, accountUser, accountLoaded]);
 
   const onLoggedIn = (d: any) => {
     setAccountUser(d.user);
@@ -2668,9 +2782,124 @@ export default function Home() {
       setActiveProfile(isAdminRef.current ? reyProfile : guestProfile);
       setMyList([]);
       setContinueWatchingList([]);
+      setRatings({});
+      setNotifSeen(0);
       showToast("Sesión cerrada.");
     };
     postAccount({ action: "logout" }).then(reset, reset);
+  };
+
+  // ---------- 👍 / 👎 ----------
+  const rateMovie = (m: Movie | null, v: 1 | -1) => {
+    if (!m) return;
+    if (!accountUser) { setShowLoginPrompt(true); return; }
+    const k = String(m.id);
+    setRatings((prev) => {
+      const next = { ...prev };
+      if (next[k] === v) delete next[k];
+      else next[k] = v;
+      return next;
+    });
+    showToast(ratings[k] === v ? "Calificación quitada." : v === 1 ? "👍 ¡Te gustó! Te recomendaremos más como esta." : "👎 Entendido, te mostraremos menos como esta.");
+  };
+
+  // ---------- Notificaciones ----------
+  const [showNotif, setShowNotif] = useState(false);
+  // Hora actual leída en el navegador (Next.js no permite leerla al compilar)
+  const [nowTs, setNowTs] = useState(0);
+  useEffect(() => {
+    setNowTs(Date.now());
+    const t = setInterval(() => setNowTs(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const movieTime = (m: Movie) => m.addedAt || (typeof m.id === "number" && m.id > 1e12 ? m.id : 0);
+  const notifications = (() => {
+    const out: { key: string; title: string; text: string; time: number; movie: Movie }[] = [];
+    if (!nowTs) return out;
+    const limit = nowTs - 45 * 24 * 3600 * 1000;
+    catalog.forEach((m) => {
+      const t = movieTime(m);
+      if (t > limit) out.push({ key: "m-" + m.id, title: m.title, text: m.type === "serie" ? "Nueva serie disponible" : "Nueva película disponible", time: t, movie: m });
+      (m.episodes || []).forEach((ep) => {
+        if (ep.addedAt && ep.addedAt > limit && ep.addedAt - t > 60000) {
+          out.push({ key: "e-" + m.id + "-" + ep.id, title: m.title, text: "Nuevo episodio: T" + ep.season + ":E" + ep.number + " · " + ep.title, time: ep.addedAt, movie: m });
+        }
+      });
+    });
+    return out.sort((a, b) => b.time - a.time).slice(0, 20);
+  })();
+  const unreadCount = notifications.filter((n) => n.time > notifSeen).length;
+  const openNotifications = () => {
+    setShowNotif((v) => !v);
+    if (notifications.length) setNotifSeen(Date.now());
+  };
+  const timeAgo = (t: number) => {
+    const d = Math.max(0, nowTs - t), min = Math.round(d / 60000);
+    if (min < 60) return "hace " + Math.max(1, min) + " min";
+    const h = Math.round(min / 60);
+    if (h < 24) return "hace " + h + " h";
+    const days = Math.round(h / 24);
+    return "hace " + days + (days === 1 ? " día" : " días");
+  };
+
+  // ---------- ¿Quién está viendo? + PIN del perfil Niños ----------
+  const [showWho, setShowWho] = useState(false);
+  const [pinTarget, setPinTarget] = useState<Profile | null>(null);
+  const [pinAction, setPinAction] = useState<"switch" | "account">("switch");
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+  const pinHashOf = (pin: string) => sha256("cv-pin:" + pin);
+  useEffect(() => {
+    if (!accountUser || !accountLoaded) return;
+    let seen = false;
+    try { seen = sessionStorage.getItem("cv_who") === "1"; } catch (e) {}
+    if (!seen && profiles.filter((p) => p.id !== "admin-rey").length >= 1 && !isAdminRef.current) setShowWho(true);
+  }, [accountUser, accountLoaded]);
+  useEffect(() => {
+    if (!showWho && !pinTarget) return;
+    const t = setTimeout(() => {
+      const modals = document.querySelectorAll("[data-tv-modal]");
+      const scope = modals.length ? modals[modals.length - 1] : document;
+      const el = (scope.querySelector("[data-autofocus]") || scope.querySelector("[tabindex='0'], input, button")) as HTMLElement | null;
+      if (el) { try { el.focus(); } catch (e) {} }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [showWho, pinTarget]);
+
+  const doSwitch = (p: Profile) => {
+    setActiveProfile(p);
+    setShowWho(false);
+    setActiveTab("inicio");
+    try { sessionStorage.setItem("cv_who", "1"); } catch (e) {}
+    try { window.scrollTo(0, 0); } catch (e) {}
+  };
+  // Salir del perfil Niños pide el PIN
+  const requestProfileSwitch = (p: Profile) => {
+    if (activeProfile.isKid && activeProfile.pinHash && p.id !== activeProfile.id) {
+      setPinAction("switch"); setPinTarget(p); setPinInput(""); setPinError("");
+      return;
+    }
+    doSwitch(p);
+  };
+  const openAccountSafe = () => {
+    if (activeProfile.isKid && activeProfile.pinHash) {
+      setPinAction("account"); setPinTarget(activeProfile); setPinInput(""); setPinError("");
+      return;
+    }
+    setShowWho(false);
+    setActiveTab("cuenta");
+  };
+  const submitPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProfile.pinHash || pinHashOf(pinInput) !== activeProfile.pinHash) {
+      setPinError("PIN incorrecto.");
+      setPinInput("");
+      return;
+    }
+    const target = pinTarget;
+    setPinTarget(null);
+    if (pinAction === "account") { setShowWho(false); setActiveTab("cuenta"); }
+    else if (target) doSwitch(target);
   };
 
   // MI LISTA: solo para quienes iniciaron sesión con su correo
@@ -2719,14 +2948,15 @@ export default function Home() {
   // Recomendado para ti: géneros de tu lista y de lo que estás viendo
   const recommended = (() => {
     const likedTags: Record<string, number> = {};
-    customMovies.forEach((m) => {
-      const w = (myList.indexOf(m.title) !== -1 ? 2 : 0) + (continueWatchingList.some((p) => String(p.id) === String(m.id)) ? 1 : 0);
+    catalog.forEach((m) => {
+      const r = ratings[String(m.id)] || 0;
+      const w = (myList.indexOf(m.title) !== -1 ? 2 : 0) + (continueWatchingList.some((p) => String(p.id) === String(m.id)) ? 1 : 0) + (r === 1 ? 3 : r === -1 ? -2 : 0);
       if (w && m.tag) likedTags[m.tag] = (likedTags[m.tag] || 0) + w;
     });
     const day = recoSeed;
     const hash = (x: string) => { let h = day; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) % 100000; return h; };
-    return customMovies
-      .filter((m) => myList.indexOf(m.title) === -1)
+    return catalog
+      .filter((m) => myList.indexOf(m.title) === -1 && ratings[String(m.id)] !== -1)
       .map((m) => ({ m, score: (likedTags[m.tag] || 0) * 1000 + (hash(String(m.id)) % 1000) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 12)
@@ -2764,8 +2994,8 @@ export default function Home() {
   };
 
   const surpriseMe = () => {
-    if (!customMovies.length) return;
-    const m = customMovies[Math.floor(Math.random() * customMovies.length)];
+    if (!catalog.length) return;
+    const m = catalog[Math.floor(Math.random() * catalog.length)];
     setSelectedMovie(m);
   };
 
@@ -2781,7 +3011,8 @@ export default function Home() {
     setContinueWatchingList((prev) => {
       const rest = prev.filter((p) => String(p.id) !== String(movie.id));
       if (duration - time < 60) return rest; // terminada
-      return [{ id: movie.id, title: movie.title, img: movie.img || movie.bgImage, time, duration, updatedAt: now }].concat(rest).slice(0, 50);
+      const ep = currentEpisodeRef.current;
+      return [{ id: movie.id, title: movie.title, img: movie.img || movie.bgImage, time, duration, updatedAt: now, episodeId: ep ? ep.id : undefined, episodeLabel: ep ? "T" + ep.season + ":E" + ep.number + " · " + ep.title : undefined } as ProgressItem].concat(rest).slice(0, 50);
     });
   };
 
@@ -2807,12 +3038,16 @@ export default function Home() {
       return;
     }
 
+    if (newProfileIsKid && !/^\d{4}$/.test(newProfilePin)) {
+      setUsernameError("El perfil Niños necesita un PIN de 4 números (se pide para salir de él).");
+      return;
+    }
     const newP: Profile = {
       id: Date.now().toString(),
       name: newProfileName,
       avatar: newProfileAvatar,
       isKid: newProfileIsKid,
-      pin: newProfilePin || undefined
+      pinHash: newProfileIsKid ? pinHashOf(newProfilePin) : undefined
     };
 
     const updatedProfiles = [...profiles, newP];
@@ -2825,11 +3060,10 @@ export default function Home() {
   };
 
   const handleSelectProfile = (p: Profile) => {
-    setActiveProfile(p);
-    setActiveTab("inicio");
+    requestProfileSwitch(p);
   };
 
-  const filteredExploreMovies = customMovies.filter((movie) => {
+  const filteredExploreMovies = catalog.filter((movie) => {
     const matchesSearch = exploreSearch === "" || movie.title.toLowerCase().includes(exploreSearch.toLowerCase());
     const matchesType = exploreTypeFilter === "todos" || movie.type === exploreTypeFilter;
     const matchesGenre = exploreGenreFilter === "Todos" || (movie.tag && movie.tag.toLowerCase() === exploreGenreFilter.toLowerCase());
@@ -2869,6 +3103,9 @@ export default function Home() {
               <button onClick={() => toggleMyList(preview.m)} aria-label="Mi Lista" className="w-9 h-9 rounded-full border border-gray-500 text-white flex items-center justify-center cursor-pointer hover:border-white">
                 {inMyList(preview.m) ? <Check className="w-4 h-4 text-green-400" /> : <Plus className="w-4 h-4" />}
               </button>
+              <button onClick={() => rateMovie(preview.m, 1)} aria-label="Me gusta" className={`w-9 h-9 rounded-full border flex items-center justify-center cursor-pointer ${ratings[String(preview.m.id)] === 1 ? "bg-green-500 border-green-500 text-black" : "border-gray-500 text-white hover:border-white"}`}>
+                <ThumbsUp className="w-4 h-4" />
+              </button>
               <button onClick={() => { setSelectedMovie(preview.m); setPreview(null); }} aria-label="Más información" className="ml-auto w-9 h-9 rounded-full border border-gray-500 text-white flex items-center justify-center cursor-pointer hover:border-white">
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -2906,12 +3143,14 @@ export default function Home() {
             >
               Explorador
             </button>
+            {!kidsMode && (
             <button 
               onClick={() => setActiveTab("tv")} 
               className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "tv" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
             >
               TV en vivo
             </button>
+            )}
             <button 
               onClick={() => setActiveTab("milista")} 
               className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "milista" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
@@ -2951,8 +3190,49 @@ export default function Home() {
             <Search className="w-5 h-5 cursor-pointer hover:text-white" />
           </button>
           
+          {kidsMode && <span className="hidden sm:inline text-[11px] font-black text-black bg-yellow-400 px-2 py-0.5 rounded-full">NIÑOS</span>}
+          <div className="relative">
+            <button
+              onClick={openNotifications}
+              aria-label="Notificaciones"
+              className="relative p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-green-500 text-black text-[10px] font-black flex items-center justify-center">{unreadCount > 9 ? "9+" : unreadCount}</span>
+              )}
+            </button>
+            {showNotif && (
+              <div className="absolute right-0 mt-2 bg-[#141414] border border-gray-800 rounded-xl shadow-2xl overflow-hidden" style={{ width: 340, maxWidth: "88vw", zIndex: 50 }}>
+                <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                  <span className="text-sm font-bold text-white">Novedades</span>
+                  <button data-close-on-back onClick={() => setShowNotif(false)} className="text-gray-400 hover:text-white p-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Cerrar"><X className="w-4 h-4" /></button>
+                </div>
+                {notifications.length === 0 ? (
+                  <p className="px-4 py-6 text-xs text-gray-500 text-center">No hay novedades por ahora.</p>
+                ) : (
+                  <div className="max-h-[60vh] overflow-y-auto">
+                    {notifications.map((n) => (
+                      <button
+                        key={n.key}
+                        onClick={() => { setShowNotif(false); setSelectedMovie(n.movie); }}
+                        className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[#1c1c1c] border-b border-gray-900 focus:outline-none focus:bg-[#1c1c1c]"
+                      >
+                        <img src={n.movie.bgImage} alt="" className="shrink-0 rounded-md object-cover bg-gray-900" style={{ width: 64, height: 40 }} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-bold text-white truncate">{n.title}</span>
+                          <span className="block text-[11px] text-gray-400 truncate">{n.text}</span>
+                          <span className="block text-[10px] text-gray-500">{timeAgo(n.time)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <div 
-            onClick={() => setActiveTab("cuenta")} 
+            onClick={() => (accountUser ? setShowWho(true) : setActiveTab("cuenta"))} 
             tabIndex={0}
             className="shrink-0 flex items-center gap-2 cursor-pointer bg-[#121212] p-0.5 sm:p-1 sm:pr-3 rounded-xl border border-gray-800 hover:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 transition touch-manipulation"
           >
@@ -2993,13 +3273,13 @@ export default function Home() {
           ) : null;
         const groups: Record<string, Movie[]> = {};
         const groupOrder: string[] = [];
-        customMovies.forEach((m) => {
+        catalog.forEach((m) => {
           const g = m.tag || "Otros";
           if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
           groups[g].push(m);
         });
         const continueItems = continueWatchingList
-          .map((p) => ({ p, m: customMovies.find((x) => String(x.id) === String(p.id)) }))
+          .map((p) => ({ p, m: catalog.find((x) => String(x.id) === String(p.id)) }))
           .filter((x) => !!x.m) as { p: ProgressItem; m: Movie }[];
         return (
           <div className="pt-14 md:pt-16">
@@ -3125,7 +3405,7 @@ export default function Home() {
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                           <div className="absolute left-3 right-3 bottom-4">
                             <p className="text-sm font-bold text-white truncate">{m.title}</p>
-                            <p className="text-[11px] text-gray-300">Quedan {formatRemaining(p.duration - p.time)}</p>
+                            <p className="text-[11px] text-gray-300 truncate">{p.episodeLabel ? p.episodeLabel + " · " : ""}Quedan {formatRemaining(p.duration - p.time)}</p>
                           </div>
                           <div className="absolute left-0 right-0 bottom-0 h-1 bg-gray-700">
                             <div className="h-full bg-green-500" style={{ width: pct + "%" }} />
@@ -3138,11 +3418,11 @@ export default function Home() {
               )}
 
               {/* Top 10 de hoy */}
-              {customMovies.length >= 3 && (
+              {catalog.length >= 3 && (
                 <section>
                   <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Top 10 de hoy</h2>
                   <div className="flex overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
-                    {customMovies.slice(0, 10).map((m, i) => (
+                    {catalog.slice(0, 10).map((m, i) => (
                       <div key={"top-" + m.id} className="shrink-0 flex items-end" style={{ marginRight: 18 }}>
                         <span
                           aria-hidden="true"
@@ -3167,7 +3447,7 @@ export default function Home() {
               )}
 
               {row("Recomendado para ti", recommended, "rec", <Sparkle className="w-5 h-5 text-green-400" />)}
-              {row(isAdmin ? "Tus Películas Subidas" : "Recién agregadas", customMovies, "new")}
+              {row(isAdmin ? "Tus Películas Subidas" : "Recién agregadas", catalog, "new")}
               {groupOrder.filter((g) => groups[g].length >= 2).map((g) => row(g, groups[g], "g-" + g))}
             </div>
           </div>
@@ -3420,7 +3700,7 @@ export default function Home() {
           ) : (
             <div className="flex flex-wrap gap-4">
               {myList.map((title) => {
-                const m = customMovies.find((x) => x.title === title);
+                const m = catalog.find((x) => x.title === title);
                 if (!m) return null;
                 return (
                   <div key={"ml-" + title} className="relative" style={{ width: 160 }}>
@@ -3517,8 +3797,8 @@ export default function Home() {
                 <label className="text-xs text-gray-400 block mb-1">Enlace del Vídeo (MP4 directo de Archive.org)</label>
                 <input 
                   type="url" 
-                  required
-                  placeholder="https://archive.org/download/..." 
+                  required={newMovieType !== "serie"}
+                  placeholder={newMovieType === "serie" ? "Opcional en series: se usa el primer episodio" : "https://archive.org/download/..."} 
                   value={newMovieVideoUrl}
                   onChange={(e) => setNewMovieVideoUrl(e.target.value)}
                   className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -3598,6 +3878,35 @@ export default function Home() {
                   <input type="text" placeholder="Actor 1, Actor 2, Actor 3" value={newMovieCast} onChange={(e) => setNewMovieCast(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
               </div>
+
+              {newMovieType === "serie" && (
+                <div className="bg-[#080808] border border-green-500/20 rounded-2xl p-4 space-y-3">
+                  <p className="text-sm font-bold text-white">Episodios ({newEpisodes.length})</p>
+                  {newEpisodes.length > 0 && (
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                      {newEpisodes.map((ep) => (
+                        <div key={ep.id} className="flex items-center gap-2 bg-[#111] border border-gray-900 rounded-lg px-3 py-2">
+                          <span className="text-[11px] font-black text-green-400 shrink-0">T{ep.season}:E{ep.number}</span>
+                          <span className="text-xs text-gray-200 truncate flex-1">{ep.title}</span>
+                          <button type="button" onClick={() => setNewEpisodes((prev) => prev.filter((x) => x.id !== ep.id))} className="text-red-400 hover:text-red-300 p-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Quitar episodio">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-4 sm:grid-cols-12 gap-2">
+                    <input className={"col-span-1 sm:col-span-1 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} inputMode="numeric" placeholder="T" value={epSeason} onChange={(e) => setEpSeason(e.target.value.replace(/[^0-9]/g, ""))} aria-label="Temporada" />
+                    <input className={"col-span-1 sm:col-span-1 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} inputMode="numeric" placeholder="E" value={epNumber} onChange={(e) => setEpNumber(e.target.value.replace(/[^0-9]/g, ""))} aria-label="Episodio" />
+                    <input className={"col-span-2 sm:col-span-3 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} placeholder="Título del episodio" value={epTitle} onChange={(e) => setEpTitle(e.target.value)} />
+                    <input className={"col-span-4 sm:col-span-5 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} placeholder="https://.../episodio.mp4" value={epUrl} onChange={(e) => setEpUrl(e.target.value)} />
+                    <button type="button" onClick={addEpisode} className="col-span-4 sm:col-span-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl text-xs py-2.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                      + Agregar
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500">T = temporada, E = número de episodio. Si repites T y E, se reemplaza ese episodio.</p>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Tráiler (opcional: enlace MP4 o de YouTube) — se reproduce sin sonido en la portada</label>
@@ -3986,6 +4295,20 @@ export default function Home() {
                   >
                     {inMyList(selectedMovie) ? <><Check className="w-5 h-5 text-green-400" /> En Mi Lista</> : <><Plus className="w-5 h-5" /> Mi Lista</>}
                   </button>
+                  <button
+                    onClick={() => rateMovie(selectedMovie, 1)}
+                    aria-label="Me gusta"
+                    className={`p-3 rounded-full border transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 ${ratings[String(selectedMovie.id)] === 1 ? "bg-green-500 border-green-500 text-black" : "bg-[#262626]/90 border-gray-700 text-white hover:bg-[#333]"}`}
+                  >
+                    <ThumbsUp className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => rateMovie(selectedMovie, -1)}
+                    aria-label="No me gusta"
+                    className={`p-3 rounded-full border transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 ${ratings[String(selectedMovie.id)] === -1 ? "bg-red-600 border-red-600 text-white" : "bg-[#262626]/90 border-gray-700 text-white hover:bg-[#333]"}`}
+                  >
+                    <ThumbsDown className="w-5 h-5" />
+                  </button>
                   <button 
                     onClick={copyLinkSafe}
                     className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
@@ -4001,6 +4324,52 @@ export default function Home() {
             </div>
 
             <div className="p-4 sm:p-14 space-y-6 bg-[#141414] flex-1">
+              {selectedMovie.type === "serie" && sortedEpisodes(selectedMovie).length > 0 && (() => {
+                const eps = sortedEpisodes(selectedMovie);
+                const seasons = eps.map((e) => e.season).filter((v, i, a) => a.indexOf(v) === i);
+                const season = seasons.indexOf(modalSeason) !== -1 ? modalSeason : seasons[0];
+                const saved = continueWatchingList.find((p) => String(p.id) === String(selectedMovie.id));
+                return (
+                  <div className="max-w-6xl space-y-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-xl font-bold text-white">Episodios</h3>
+                      <select
+                        value={season}
+                        onChange={(e) => setModalSeason(parseInt(e.target.value, 10))}
+                        className="bg-[#262626] border border-gray-700 text-white text-sm font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        {seasons.map((n) => <option key={n} value={n}>Temporada {n}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      {eps.filter((e) => e.season === season).map((ep) => {
+                        const isSaved = saved && saved.episodeId === ep.id;
+                        return (
+                          <div
+                            key={ep.id}
+                            onClick={() => playEpisode(selectedMovie, ep)}
+                            tabIndex={0}
+                            className="flex items-center gap-4 p-3 rounded-xl bg-[#1a1a1a] hover:bg-[#222] border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                          >
+                            <span className="text-2xl font-black text-gray-500 w-8 text-center shrink-0">{ep.number}</span>
+                            <div className="relative shrink-0 rounded-lg overflow-hidden bg-gray-900" style={{ width: 120, height: 68 }}>
+                              <img src={selectedMovie.bgImage} alt="" className="w-full h-full object-cover opacity-80" />
+                              <span className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-white fill-white" /></span>
+                              {isSaved && saved && (
+                                <span className="absolute left-0 right-0 bottom-0 h-1 bg-gray-700"><span className="block h-full bg-green-500" style={{ width: Math.min(100, Math.round((saved.time / saved.duration) * 100)) + "%" }} /></span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-white truncate">{ep.title}</p>
+                              <p className="text-[11px] text-gray-400">{"Temporada " + ep.season + " · Episodio " + ep.number}{ep.duration ? " · " + ep.duration : ""}{isSaved ? " · Continuar" : ""}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="flex items-center gap-6 sm:gap-8 border-b border-gray-800 text-sm font-bold overflow-x-auto scrollbar-none">
                 <button 
                   onClick={() => setMovieModalTab("detalles")}
@@ -4088,7 +4457,7 @@ export default function Home() {
                   {(() => {
                     const g = (x: Movie) => (x.genres && x.genres.length ? x.genres : [x.tag]);
                     const mine = g(selectedMovie);
-                    const others = customMovies.filter((m) => m.id !== selectedMovie.id);
+                    const others = catalog.filter((m) => m.id !== selectedMovie.id);
                     const score = (m: Movie) => g(m).filter((t) => mine.indexOf(t) !== -1).length + (m.tag === selectedMovie.tag ? 2 : 0);
                     return others.map((m) => ({ m, sc: score(m) })).sort((a, b) => b.sc - a.sc).slice(0, 8).map((x) => x.m);
                   })().map(sim => (
@@ -4122,7 +4491,7 @@ export default function Home() {
               onClick={() => setIsPlaying(false)}
               className="flex items-center gap-2 text-white font-bold hover:text-green-400 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1"
             >
-              <ArrowLeft className="w-5 h-5" /> <span className="truncate max-w-[250px] sm:max-w-none">{selectedMovie.title}</span>
+              <ArrowLeft className="w-5 h-5" /> <span className="truncate max-w-[250px] sm:max-w-none">{selectedMovie.title}{currentEpisode ? " · T" + currentEpisode.season + ":E" + currentEpisode.number + " " + currentEpisode.title : ""}</span>
             </button>
           </div>
 
@@ -4145,7 +4514,11 @@ export default function Home() {
               onPlaying={() => setVideoLoading(false)}
               onTimeUpdate={(e) => recordProgress(e.currentTarget, selectedMovie, false)}
               onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
-              onEnded={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
+              onEnded={(e) => {
+                recordProgress(e.currentTarget, selectedMovie, true);
+                const nx = nextEpisodeOf(selectedMovie, currentEpisode);
+                if (nx) setNextUp({ ep: nx, secs: 8 });
+              }}
               onError={(e) => {
                 const err = e.currentTarget.error;
                 const code = err ? err.code : 0;
@@ -4165,6 +4538,16 @@ export default function Home() {
             >
               Tu navegador no soporta el reproductor.
             </video>
+            {nextUp && (
+              <div style={{ position: "absolute", right: 24, bottom: 96, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-4 shadow-2xl" data-tv-modal>
+                <p className="text-[11px] text-gray-400 uppercase font-bold">Siguiente episodio en {nextUp.secs} s</p>
+                <p className="text-sm font-bold text-white mt-1 max-w-[260px] truncate">T{nextUp.ep.season}:E{nextUp.ep.number} · {nextUp.ep.title}</p>
+                <div className="flex gap-2 mt-3">
+                  <button data-autofocus onClick={() => selectedMovie && playEpisode(selectedMovie, nextUp.ep)} className="bg-white text-black font-bold text-xs px-4 py-2 rounded-lg cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">▶ Ver ahora</button>
+                  <button data-close-on-back onClick={() => setNextUp(null)} className="bg-[#262626] text-white font-bold text-xs px-4 py-2 rounded-lg border border-gray-700 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Cancelar</button>
+                </div>
+              </div>
+            )}
             {videoLoading && !playerError && (
               <div style={{ position: "absolute", top: "50%", left: 0, right: 0, marginTop: -40, textAlign: "center", pointerEvents: "none" }}>
                 <div className="inline-block w-12 h-12 rounded-full border-4 border-gray-700 border-t-green-500 animate-spin" />
@@ -4223,6 +4606,14 @@ export default function Home() {
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
+              {nextEpisodeOf(selectedMovie, currentEpisode) && (
+                <button
+                  onClick={() => { const nx = nextEpisodeOf(selectedMovie, currentEpisode); if (nx) playEpisode(selectedMovie, nx); }}
+                  className="flex items-center gap-1.5 bg-white text-black px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <SkipForward className="w-4 h-4" /> Siguiente episodio
+                </button>
+              )}
               <button 
                 onClick={toggleVideoFit}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -4265,7 +4656,7 @@ export default function Home() {
             { id: "explorar", label: "Explorar", Icon: Search },
             { id: "tv", label: "TV", Icon: Tv },
             { id: "milista", label: "Mi Lista", Icon: Bookmark },
-          ].map(({ id, label, Icon }) => {
+          ].filter((x) => !(kidsMode && x.id === "tv")).map(({ id, label, Icon }) => {
             const active = activeTab === id;
             return (
               <button
@@ -4377,6 +4768,80 @@ export default function Home() {
         </div>
       )}
 
+      {/* ¿QUIÉN ESTÁ VIENDO? */}
+      {showWho && accountUser && (
+        <div data-tv-modal className="fixed inset-0 z-[65] bg-[#050505] flex flex-col items-center justify-center p-6 overflow-y-auto">
+          <h2 className="text-3xl sm:text-5xl font-black text-white mb-10 text-center">¿Quién está viendo?</h2>
+          <div className="flex flex-wrap justify-center gap-6 sm:gap-10 max-w-4xl">
+            {profiles.filter((p) => p.id !== "invitado").map((p) => (
+              <div
+                key={"who-" + p.id}
+                onClick={() => requestProfileSwitch(p)}
+                tabIndex={0}
+                data-autofocus={p.id === activeProfile.id ? true : undefined}
+                className="group flex flex-col items-center cursor-pointer rounded-2xl p-2 focus:outline-none focus:ring-4 focus:ring-green-500"
+                style={{ width: 140 }}
+              >
+                <div className="relative rounded-2xl overflow-hidden border-4 border-transparent group-hover:border-white bg-gray-900" style={{ width: 120, height: 120 }}>
+                  <img src={p.avatar} alt={p.name} className="w-full h-full object-cover object-top" />
+                  {p.isKid && <span className="absolute bottom-1 left-1 right-1 text-center text-[10px] font-black text-black bg-yellow-400 rounded">NIÑOS</span>}
+                </div>
+                <span className="mt-3 text-sm sm:text-base text-gray-300 group-hover:text-white font-semibold truncate max-w-full">{p.name}</span>
+                {p.isKid && p.pinHash && <Lock className="w-3.5 h-3.5 text-gray-500 mt-1" />}
+              </div>
+            ))}
+            {!kidsMode && profiles.filter((p) => p.id !== "admin-rey" && p.id !== "invitado").length < 5 && (
+              <div
+                onClick={() => { setShowWho(false); setShowAddProfileModal(true); }}
+                tabIndex={0}
+                className="group flex flex-col items-center cursor-pointer rounded-2xl p-2 focus:outline-none focus:ring-4 focus:ring-green-500"
+                style={{ width: 140 }}
+              >
+                <div className="rounded-2xl border-2 border-dashed border-gray-600 group-hover:border-white flex items-center justify-center" style={{ width: 120, height: 120 }}>
+                  <PlusCircle className="w-10 h-10 text-gray-500 group-hover:text-white" />
+                </div>
+                <span className="mt-3 text-sm sm:text-base text-gray-400 group-hover:text-white font-semibold">Agregar perfil</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={openAccountSafe}
+            className="mt-12 px-6 py-2.5 border border-gray-600 text-gray-300 hover:text-white hover:border-white text-sm font-bold tracking-wider uppercase rounded-lg cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+          >
+            Administrar perfiles
+          </button>
+        </div>
+      )}
+
+      {/* PIN DEL PERFIL NIÑOS */}
+      {pinTarget && (
+        <div data-tv-modal className="fixed inset-0 bg-black/90 z-[75] flex items-center justify-center p-4">
+          <form onSubmit={submitPin} className="bg-[#0c0c0c] border border-yellow-500/40 w-full max-w-xs rounded-2xl p-6 space-y-4 text-center shadow-2xl">
+            <Lock className="w-8 h-8 text-yellow-400 mx-auto" />
+            <h3 className="text-lg font-bold text-white">{pinAction === "account" ? "PIN para administrar" : "PIN para salir del perfil Niños"}</h3>
+            <input
+              type="password"
+              inputMode="numeric"
+              autoFocus
+              maxLength={4}
+              placeholder="••••"
+              value={pinInput}
+              onChange={(e) => { setPinInput(e.target.value.replace(/[^0-9]/g, "").slice(0, 4)); if (pinError) setPinError(""); }}
+              className="w-40 mx-auto block bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-2xl tracking-[0.5em] text-center text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+            {pinError && <p className="text-xs text-red-400 font-bold">{pinError}</p>}
+            <div className="flex gap-3">
+              <button type="button" data-close-on-back onClick={() => setPinTarget(null)} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                Cancelar
+              </button>
+              <button type="submit" className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                Confirmar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* AVISO: MI LISTA REQUIERE CUENTA */}
       {showLoginPrompt && (
         <div data-tv-modal className="fixed inset-0 bg-black/85 z-[60] flex items-center justify-center p-4">
@@ -4424,6 +4889,30 @@ export default function Home() {
                 />
                 {usernameError && (
                   <p className="text-xs text-red-500 font-bold mt-1.5">{usernameError}</p>
+                )}
+              </div>
+
+              <div className="bg-[#121212] border border-gray-800 rounded-xl p-3 space-y-3">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span>
+                    <span className="block text-sm font-bold text-white">Perfil Niños</span>
+                    <span className="block text-[11px] text-gray-400">Solo muestra contenido infantil (ATP, +7, animación y familia).</span>
+                  </span>
+                  <input type="checkbox" checked={newProfileIsKid} onChange={(e) => { setNewProfileIsKid(e.target.checked); if (usernameError) setUsernameError(""); }} className="w-5 h-5 accent-green-500 cursor-pointer" />
+                </label>
+                {newProfileIsKid && (
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">PIN de 4 números (se pedirá para salir del perfil Niños)</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="••••"
+                      value={newProfilePin}
+                      onChange={(e) => setNewProfilePin(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+                      className="w-40 bg-[#050505] border border-gray-800 rounded-xl px-4 py-2.5 text-lg tracking-[0.5em] text-center text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
                 )}
               </div>
 

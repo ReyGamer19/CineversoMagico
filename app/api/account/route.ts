@@ -260,6 +260,19 @@ export async function PUT(req: Request) {
     activeProfileId: typeof d.activeProfileId === "string" ? d.activeProfileId.slice(0, 64) : "",
     myList: Array.isArray(d.myList) ? d.myList.filter((x: unknown) => typeof x === "string").slice(0, 500) : [],
     progress: Array.isArray(d.progress) ? d.progress.slice(0, 50) : [],
+    // 👍/👎 por película: { "idPelicula": 1 | -1 }
+    ratings: (() => {
+      const out: Record<string, number> = {};
+      if (d.ratings && typeof d.ratings === "object" && !Array.isArray(d.ratings)) {
+        for (const k of Object.keys(d.ratings).slice(0, 1000)) {
+          const v = d.ratings[k];
+          if ((v === 1 || v === -1) && k.length <= 80) out[k] = v;
+        }
+      }
+      return out;
+    })(),
+    // Última vez que vio las notificaciones (milisegundos)
+    notifSeen: typeof d.notifSeen === "number" && isFinite(d.notifSeen) ? d.notifSeen : 0,
   };
   if (JSON.stringify(clean).length > 300_000) return fail("Datos demasiado grandes", 413);
 
