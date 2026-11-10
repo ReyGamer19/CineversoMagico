@@ -1345,12 +1345,25 @@ export default function Home() {
   const [customMovies, setCustomMovies] = useState<Movie[]>(defaultMovies);
   const [isMounted, setIsMounted] = useState(false);
 
+  // ¿Este dispositivo es del administrador? (solo afecta a la interfaz; el servidor
+  // vuelve a comprobar la clave ADMIN_PASSWORD antes de guardar cualquier cosa)
+  const readAdminDevice = (): boolean => {
+    try {
+      const key = localStorage.getItem("cineverso_admin_key");
+      if (ADMIN_HASH.length === 64 && key === ADMIN_HASH) return true;
+      if (key === "server" && localStorage.getItem("cineverso_admin_pass")) return true;
+    } catch (e) {}
+    return false;
+  };
+
+  // true = el catálogo viene de Supabase (/api/catalog) y los cambios se publican al instante
+  const [serverCatalog, setServerCatalog] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     let adminLocal: Movie[] | null = null;
     try {
-      const isAdminDevice = localStorage.getItem("cineverso_admin_key") === ADMIN_HASH && ADMIN_HASH.length === 64;
-      if (isAdminDevice) {
+      if (readAdminDevice()) {
         const saved = localStorage.getItem("cineverso_custom_movies");
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -1364,26 +1377,34 @@ export default function Home() {
       console.error("Error cargando localStorage:", e);
     }
 
-    if (adminLocal) {
-      setCustomMovies(adminLocal);
+    const finish = (list: Movie[] | null, fromServer: boolean) => {
+      if (cancelled) return;
+      if (list && list.length > 0) setCustomMovies(list);
+      setServerCatalog(fromServer);
       setIsMounted(true);
-      return;
-    }
+    };
 
-    // Catálogo público compartido por todos los dispositivos: /public/catalogo.json
-    fetch("/catalogo.json?v=" + Date.now(), { cache: "no-store" })
+    const loadStaticFile = (serverWorks: boolean) =>
+      fetch("/catalogo.json?v=" + Date.now(), { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then((data) => {
+          const fileList = Array.isArray(data) && data.length > 0 ? (data as Movie[]) : null;
+          // Admin con servidor vacío: usa sus películas locales para poder publicarlas
+          finish(adminLocal || fileList, serverWorks);
+        });
+
+    // 1º Supabase (/api/catalog)  →  2º /catalogo.json  →  3º catálogo de ejemplo
+    fetch("/api/catalog?v=" + Date.now(), { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled && Array.isArray(data) && data.length > 0) setCustomMovies(data);
-      })
-      .catch(() => {})
-      .then(() => {
-        if (!cancelled) setIsMounted(true);
+      .catch(() => null)
+      .then((d) => {
+        const serverWorks = !!(d && Array.isArray(d.movies));
+        if (serverWorks && d.movies.length > 0) finish(d.movies as Movie[], true);
+        else return loadStaticFile(serverWorks);
       });
     return () => { cancelled = true; };
   }, []);
-
-
 
   useEffect(() => {
     try {
@@ -1411,36 +1432,58 @@ export default function Home() {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPassInput, setAdminPassInput] = useState("");
   const [adminPassError, setAdminPassError] = useState("");
+  const [adminChecking, setAdminChecking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const showToast = (msg: string, ms = 4000) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), ms);
+  };
 
   useEffect(() => {
+    const adminDevice = readAdminDevice();
+    if (adminDevice) setIsAdmin(true);
     try {
-      const saved = localStorage.getItem("cineverso_admin_key");
-      if (saved && ADMIN_HASH.length === 64 && saved === ADMIN_HASH) {
-        setIsAdmin(true);
-      }
-      if (window.location.search.indexOf("admin") !== -1 && !(saved && saved === ADMIN_HASH)) {
-        setShowAdminLogin(true);
-      }
+      if (window.location.search.indexOf("admin") !== -1 && !adminDevice) setShowAdminLogin(true);
     } catch (e) {}
   }, []);
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (ADMIN_HASH.length !== 64) {
-      setAdminPassError("La clave de administrador aún no está configurada.");
-      return;
-    }
-    const h = sha256(adminPassInput);
-    if (h === ADMIN_HASH) {
-      try { localStorage.setItem("cineverso_admin_key", h); } catch (err) {}
-      setIsAdmin(true);
-      setShowAdminLogin(false);
-      setAdminPassInput("");
-      setAdminPassError("");
-      setActiveTab("admin");
-    } else {
-      setAdminPassError("Clave incorrecta.");
-    }
+    if (adminChecking) return;
+    const pass = adminPassInput;
+    const h = sha256(pass);
+    const localOk = ADMIN_HASH.length === 64 && h === ADMIN_HASH;
+    setAdminChecking(true);
+    setAdminPassError("");
+    // Verificación en el servidor sin modificar nada: se envía movies:null a propósito.
+    // Clave correcta -> 400 "Catálogo inválido". Clave incorrecta -> 401.
+    fetch("/api/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pass, movies: null }),
+    })
+      .then((r) => r.status)
+      .catch(() => 0)
+      .then((status) => {
+        setAdminChecking(false);
+        const serverOk = status === 400;
+        if (!serverOk && !localOk) {
+          setAdminPassError(status === 401 || status === 400 ? "Clave incorrecta." : "Clave incorrecta (o el servidor no responde).");
+          return;
+        }
+        try {
+          localStorage.setItem("cineverso_admin_key", localOk ? h : "server");
+          if (serverOk) localStorage.setItem("cineverso_admin_pass", pass);
+          else localStorage.removeItem("cineverso_admin_pass");
+        } catch (err) {}
+        setIsAdmin(true);
+        setShowAdminLogin(false);
+        setAdminPassInput("");
+        setActiveTab("admin");
+        if (serverOk) showToast("Sesión de administrador iniciada. Los cambios se publicarán para todos.");
+        else showToast("Entraste con la clave local. Para publicar en todos los dispositivos entra con la clave ADMIN_PASSWORD del servidor.", 7000);
+      });
   };
 
   useEffect(() => {
@@ -1454,8 +1497,45 @@ export default function Home() {
     }
   }, [customMovies, isMounted, isAdmin]);
 
+  // Guarda el catálogo: en pantalla + en Supabase (para todos los dispositivos)
+  const saveCatalog = (list: Movie[], okMsg: string) => {
+    setCustomMovies(list);
+    let pass = "";
+    try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!pass) {
+      showToast(okMsg + " (solo en este navegador: entra con la clave del servidor para publicarlo a todos)", 6000);
+      return;
+    }
+    setSyncing(true);
+    fetch("/api/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pass, movies: list }),
+    })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, status: r.status, d })))
+      .then(({ ok, status, d }) => {
+        setSyncing(false);
+        if (ok) {
+          setServerCatalog(true);
+          showToast(okMsg + " ✔ Publicado en todos los dispositivos.");
+        } else if (status === 401) {
+          try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {}
+          showToast("La clave guardada ya no coincide con ADMIN_PASSWORD. Se guardó solo aquí; vuelve a entrar con ?admin.", 7000);
+        } else {
+          showToast("No se pudo publicar (" + ((d && d.error) || status) + "). Se guardó solo en este navegador.", 7000);
+        }
+      })
+      .catch(() => {
+        setSyncing(false);
+        showToast("Sin conexión con el servidor. Se guardó solo en este navegador.", 6000);
+      });
+  };
+
   const handleAdminLogout = () => {
-    try { localStorage.removeItem("cineverso_admin_key"); } catch (err) {}
+    try {
+      localStorage.removeItem("cineverso_admin_key");
+      localStorage.removeItem("cineverso_admin_pass");
+    } catch (err) {}
     setIsAdmin(false);
     setActiveTab("inicio");
   };
@@ -1822,8 +1902,7 @@ export default function Home() {
         videoUrl: newMovieVideoUrl
       } : m);
 
-      setCustomMovies(updatedList);
-      setToastMessage("¡Contenido actualizado y guardado correctamente!");
+      saveCatalog(updatedList, "¡Contenido actualizado!");
       setEditingMovieId(null);
     } else {
       const createdMovie: Movie = {
@@ -1847,15 +1926,13 @@ export default function Home() {
       };
 
       const newList = [createdMovie, ...customMovies];
-      setCustomMovies(newList);
-      setToastMessage("¡Película publicada y respaldada con éxito!");
+      saveCatalog(newList, "¡Película agregada!");
     }
 
     setNewMovieTitle("");
     setNewMovieDesc("");
     setNewMovieImage("");
     setNewMovieVideoUrl("");
-    setTimeout(() => setToastMessage(""), 4000);
   };
 
   const handleEditClick = (movie: Movie) => {
@@ -1872,7 +1949,7 @@ export default function Home() {
   const handleDeleteMovie = (id: number | string) => {
     if (confirm("¿Estás seguro de eliminar este contenido del catálogo?")) {
       const filtered = customMovies.filter(m => m.id !== id);
-      setCustomMovies(filtered);
+      saveCatalog(filtered, "Contenido eliminado.");
       if (editingMovieId === id) {
         setEditingMovieId(null);
         setNewMovieTitle("");
@@ -1880,8 +1957,6 @@ export default function Home() {
         setNewMovieImage("");
         setNewMovieVideoUrl("");
       }
-      setToastMessage("Contenido eliminado correctamente.");
-      setTimeout(() => setToastMessage(""), 4000);
     }
   };
 
@@ -2380,9 +2455,15 @@ export default function Home() {
                   <p className="text-xs text-gray-400">
                     {editingMovieId ? "Modifica los campos necesarios para actualizar el título." : "Añade tus enlaces de video y películas directamente al catálogo."}
                   </p>
-                  <p className="text-[11px] text-yellow-400 mt-1">
-                    Los cambios se guardan en este navegador. Para que TODOS los vean: pulsa "Exportar catálogo" y ejecuta el comando de publicar en la terminal.
-                  </p>
+                  {serverCatalog ? (
+                    <p className="text-[11px] text-green-400 mt-1">
+                      {syncing ? "Publicando cambios..." : "Conectado al servidor: cada cambio se publica al instante en todos los dispositivos."}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-yellow-400 mt-1">
+                      Servidor sin conectar: los cambios se guardan solo en este navegador. Respaldo: "Exportar catálogo" + comando de publicar en la terminal.
+                    </p>
+                  )}
                 </div>
               </div>
               {editingMovieId && (
@@ -2484,6 +2565,12 @@ export default function Home() {
               <h3 className="text-lg font-bold text-white">
                 <span>Gestión del Catálogo ({customMovies.length} títulos)</span>
               </h3>
+              <button
+                onClick={() => saveCatalog(customMovies, "Catálogo completo enviado.")}
+                className="flex items-center justify-center gap-1.5 bg-white text-black hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <Globe className="w-3.5 h-3.5" /> {syncing ? "Publicando..." : "Publicar todo ahora"}
+              </button>
               <button
                 onClick={handleExportCatalog}
                 className="flex items-center justify-center gap-1.5 bg-green-500 text-black hover:bg-green-400 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -3072,7 +3159,7 @@ export default function Home() {
                 Cancelar
               </button>
               <button type="submit" className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
-                Entrar
+                {adminChecking ? "Verificando..." : "Entrar"}
               </button>
             </div>
           </form>
