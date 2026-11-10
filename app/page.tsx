@@ -1471,15 +1471,15 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
       {/* Navegación Superior Optimizada para Smart TV */}
-      <nav className="fixed top-0 left-0 right-0 z-40 flex flex-wrap items-center justify-between px-4 sm:px-6 md:px-12 py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
-        <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
+      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 md:h-auto md:py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
+        <div className="flex items-center gap-4 sm:gap-6 min-w-0">
           <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1">
             <span className="bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
             <span className="text-lg sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
               Cineverso Magico <Sparkle className="w-4 h-4 text-emerald-400 animate-pulse" />
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm font-medium text-gray-300">
+          <div className="hidden md:flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm font-medium text-gray-300">
             <button 
               onClick={() => setActiveTab("inicio")} 
               className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "inicio" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
@@ -1517,6 +1517,11 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-3 text-gray-300 ml-auto">
+          {isAdmin && (
+            <button onClick={() => setActiveTab("admin")} className="md:hidden p-2 rounded-full text-green-400 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Panel de administración">
+              <Settings className="w-5 h-5" />
+            </button>
+          )}
           <button 
             onClick={() => setActiveTab("explorar")}
             className="p-2 rounded-full hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -1531,7 +1536,7 @@ export default function Home() {
             className="flex items-center gap-2 cursor-pointer bg-[#121212] p-1 pr-3 rounded-full border border-gray-800 hover:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 transition"
           >
             <img src={activeProfile.avatar} alt={activeProfile.name} className="w-7 h-7 rounded-full object-cover bg-gray-900" />
-            <span className="text-xs font-bold text-white max-w-[100px] truncate">{activeProfile.name}</span>
+            <span className="hidden sm:inline text-xs font-bold text-white max-w-[100px] truncate">{activeProfile.name}</span>
           </div>
         </div>
       </nav>
@@ -1727,121 +1732,119 @@ export default function Home() {
         </div>
       )}
 
-      {/* VISTA TV EN VIVO - OPTIMIZADA PARA SMART TV Y PANTALLAS COMPLETAS */}
+      {/* VISTA TV EN VIVO - reproductor fijo, solo la guia hace scroll */}
       {activeTab === "tv" && (
-        <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-hidden">
-          <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] bg-[#050505]">
-            <div className="w-full lg:flex-1 relative bg-black flex flex-col justify-between overflow-y-auto">
-              <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/80 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate shadow-lg">
-                <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
-                <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
-              </div>
+        <div className="fixed left-0 right-0 top-14 md:top-20 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-0 bg-[#050505] flex flex-col lg:flex-row overflow-hidden">
 
-              <div className="w-full aspect-video lg:h-full flex items-center justify-center relative bg-black shrink-0 overflow-hidden">
-                {activeChannel.embedUrl ? (
-                  <iframe
-                    key={activeChannel.id}
-                    src={`${activeChannel.embedUrl}${activeChannel.embedUrl.includes('?') ? '&' : '?'}autoplay=1&mute=0&rel=0&iv_load_policy=3`}
-                    title={activeChannel.name}
-                    className="w-full h-full border-0 object-cover"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                ) : (
-                  <video 
-                    ref={videoRef}
-                    controls 
-                    autoPlay
-                    playsInline
-                    controlsList="nodownload"
-                    className="w-full h-full object-contain"
-                    key={activeChannel.id}
-                  >
-                    Tu navegador no soporta video en vivo.
-                  </video>
-                )}
-              </div>
+          {/* REPRODUCTOR: fijo, no se mueve */}
+          <div className="w-full lg:flex-1 lg:h-full relative bg-black flex flex-col shrink-0">
+            <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/80 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate shadow-lg">
+              <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
+              <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
+            </div>
 
-              <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex items-center justify-between z-20 shrink-0">
-                <div className="flex items-center gap-3 truncate">
-                  <img src={activeChannel.logo} alt={activeChannel.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg object-cover border border-gray-800 shrink-0" />
-                  <div className="truncate">
-                    <div className="flex items-center gap-2 truncate">
-                      <h3 className="text-xs sm:text-sm font-bold text-white truncate">{activeChannel.name}</h3>
-                      <span className="hidden sm:inline-block text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">{activeChannel.country}</span>
-                    </div>
-                    <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5 truncate">Emitiendo: <span className="text-gray-200 font-medium">{activeChannel.currentShow}</span></p>
-                  </div>
+            <div className="w-full aspect-video lg:aspect-auto lg:flex-1 lg:min-h-0 relative bg-black overflow-hidden">
+              {activeChannel.embedUrl ? (
+                <iframe
+                  key={activeChannel.id}
+                  src={`${activeChannel.embedUrl}${activeChannel.embedUrl.includes('?') ? '&' : '?'}autoplay=1&mute=0&rel=0&iv_load_policy=3`}
+                  title={activeChannel.name}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  ref={videoRef}
+                  controls
+                  autoPlay
+                  playsInline
+                  controlsList="nodownload"
+                  className="w-full h-full object-contain"
+                  key={activeChannel.id}
+                >
+                  Tu navegador no soporta video en vivo.
+                </video>
+              )}
+            </div>
+
+            <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex items-center justify-between z-20 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gray-900 border border-gray-800 shrink-0 flex items-center justify-center text-[10px] font-black text-gray-200 overflow-hidden">
+                  {activeChannel.shortCode || activeChannel.name.slice(0, 2).toUpperCase()}
                 </div>
-                <span className="text-[10px] sm:text-xs bg-[#181818] px-3 py-1 rounded-lg text-gray-300 border border-gray-800 font-bold shrink-0">{activeChannel.category}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="text-xs sm:text-sm font-bold text-white truncate">{activeChannel.name}</h3>
+                    <span className="hidden sm:inline-block text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold">{activeChannel.country}</span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5 truncate">Emitiendo: <span className="text-gray-200 font-medium">{activeChannel.currentShow}</span></p>
+                </div>
+              </div>
+              <span className="text-[10px] sm:text-xs bg-[#181818] px-3 py-1 rounded-lg text-gray-300 border border-gray-800 font-bold shrink-0 ml-2">{activeChannel.category}</span>
+            </div>
+          </div>
+
+          {/* GUIA DE CANALES: solo esto hace scroll */}
+          <div className="w-full lg:w-80 flex-1 min-h-0 lg:flex-none lg:h-full bg-[#0d0d0d] border-t lg:border-t-0 lg:border-l border-gray-900 flex flex-col">
+            <div className="p-3 sm:p-4 border-b border-gray-900 space-y-2 sm:space-y-3 bg-[#0a0a0a] shrink-0">
+              <h3 className="text-sm font-bold text-white flex items-center justify-between">
+                <span>Guía de Canales</span>
+                <Radio className="w-4 h-4 text-green-400 animate-pulse" />
+              </h3>
+
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Buscar canal o sigla..."
+                  value={searchGuide}
+                  onChange={(e) => setSearchGuide(e.target.value)}
+                  className="w-full bg-[#161616] border border-gray-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                />
+              </div>
+
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+                {["Todos", "Perú", "Chile", "Argentina", "Bolivia", "Italia", "España", "Ecuador", "Deportes"].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setSelectedCountryFilter(filter)}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${selectedCountryFilter === filter ? "bg-green-500 text-black font-bold" : "bg-[#161616] text-gray-400 hover:text-white border border-gray-800"}`}
+                  >
+                    {filter}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="w-full lg:w-80 bg-[#0d0d0d] border-t lg:border-t-0 lg:border-l border-gray-900 flex flex-col h-72 lg:h-full shrink-0">
-              <div className="p-3 sm:p-4 border-b border-gray-900 space-y-2 sm:space-y-3 bg-[#0a0a0a]">
-                <h3 className="text-sm font-bold text-white flex items-center justify-between">
-                  <span>Guía de Canales</span>
-                  <Radio className="w-4 h-4 text-green-400 animate-pulse" />
-                </h3>
-                
-                <div className="relative">
-                  <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar canal o sigla..." 
-                    value={searchGuide}
-                    onChange={(e) => setSearchGuide(e.target.value)}
-                    className="w-full bg-[#161616] border border-gray-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                  />
-                </div>
-
-                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
-                  {["Todos", "Perú", "Chile", "Argentina", "Bolivia", "Italia", "España", "Ecuador", "Deportes"].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setSelectedCountryFilter(filter)}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${selectedCountryFilter === filter ? "bg-green-500 text-black font-bold" : "bg-[#161616] text-gray-400 hover:text-white border border-gray-800"}`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-thin">
-                {Object.entries(channelsGroupedByCountry).map(([countryName, channels]) => (
-                  <div key={countryName} className="space-y-2">
-                    <div className="sticky top-0 bg-[#0d0d0d]/95 backdrop-blur py-1.5 px-1 z-10 border-b border-gray-800/60 flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-green-400 flex items-center gap-1.5">
-                        {countryName}
-                      </h4>
-                      <span className="text-[10px] bg-gray-900 text-gray-400 px-2 py-0.5 rounded-full font-bold">
-                        {channels.length}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5 pl-0.5">
-                      {channels.map((ch) => (
-                        <div 
-                          key={ch.id}
-                          onClick={() => setActiveChannel(ch)}
-                          tabIndex={0}
-                          className={`p-2.5 rounded-xl flex items-center gap-3 cursor-pointer transition border focus:outline-none focus:ring-2 focus:ring-green-500 ${activeChannel.id === ch.id ? "bg-[#1c1c1c] border-green-500/80 shadow-md shadow-green-950/30" : "hover:bg-[#151515] border-transparent"}`}
-                        >
-                          <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center font-black text-xs text-gray-200 border border-gray-800 shrink-0 overflow-hidden">
-                            <span>{ch.shortCode || ch.name.slice(0, 2).toUpperCase()}</span>
-                          </div>
-                          
-                          <div className="flex-1 overflow-hidden">
-                            <h5 className="text-xs font-bold text-gray-200 truncate">{ch.name}</h5>
-                            <span className="text-[10px] text-gray-500 block truncate">{ch.currentShow}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-4 scrollbar-thin">
+              {Object.entries(channelsGroupedByCountry).map(([countryName, channels]) => (
+                <div key={countryName} className="space-y-2">
+                  <div className="sticky top-0 bg-[#0d0d0d] py-1.5 px-1 z-10 border-b border-gray-800/60 flex items-center justify-between">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-green-400">{countryName}</h4>
+                    <span className="text-[10px] bg-gray-900 text-gray-400 px-2 py-0.5 rounded-full font-bold">{channels.length}</span>
                   </div>
-                ))}
-              </div>
+
+                  <div className="space-y-1.5">
+                    {channels.map((ch) => (
+                      <div
+                        key={ch.id}
+                        onClick={() => setActiveChannel(ch)}
+                        tabIndex={0}
+                        className={`p-2.5 rounded-xl flex items-center gap-3 cursor-pointer transition border focus:outline-none focus:ring-2 focus:ring-green-500 ${activeChannel.id === ch.id ? "bg-[#1c1c1c] border-green-500/80 shadow-md shadow-green-950/30" : "hover:bg-[#151515] border-transparent"}`}
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center font-black text-xs text-gray-200 border border-gray-800 shrink-0 overflow-hidden">
+                          <span>{ch.shortCode || ch.name.slice(0, 2).toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h5 className="text-xs font-bold text-gray-200 truncate">{ch.name}</h5>
+                          <span className="text-[10px] text-gray-500 block truncate">{ch.currentShow}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
