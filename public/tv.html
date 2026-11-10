@@ -71,6 +71,12 @@ a { color: inherit; text-decoration: none; }
 #playerMsg { position: absolute; left: 0; right: 0; bottom: 3rem; text-align: center; }
 #playerMsg span { display: inline-block; background: rgba(127,29,29,.95); color: #fecaca; padding: 0.9rem 1.4rem; border-radius: 0.6rem; font-size: 1.1rem; }
 #hint { position: absolute; right: 2rem; top: 1.3rem; font-size: 0.9rem; color: #9ca3af; font-weight: normal; }
+#playerTop { -webkit-transition: opacity .4s; transition: opacity .4s; }
+#playerTop.off { opacity: 0; }
+#loader { position: absolute; top: 50%; left: 0; right: 0; margin-top: -3rem; text-align: center; font-size: 1.2rem; color: #d1d5db; }
+#loader i { display: inline-block; width: 3.5rem; height: 3.5rem; border-radius: 50%; border: 0.35rem solid #374151; border-top-color: #22c55e; -webkit-animation: spin 1s linear infinite; animation: spin 1s linear infinite; margin-bottom: 0.8rem; }
+@-webkit-keyframes spin { to { -webkit-transform: rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 #toast { position: fixed; left: 2rem; bottom: 2rem; z-index: 30; background: #0f0f0f; border: 1px solid rgba(34,197,94,.5); padding: 1rem 1.3rem; border-radius: 0.8rem; font-size: 1rem; max-width: 30rem; }
 #loading { padding: 8rem 2.5rem; font-size: 1.4rem; color: #9ca3af; }
@@ -118,7 +124,8 @@ a { color: inherit; text-decoration: none; }
 <div id="player" class="hidden">
   <video id="video" controls autoplay playsinline x-webkit-airplay="allow" class="f" tabindex="0"></video>
   <iframe id="frame" class="hidden" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-  <div id="playerTop"><span id="playerTitle"></span><span id="hint">OK: pausa · &#9664; &#9654;: 10 s · Atrás: salir</span></div>
+  <div id="loader" class="hidden"><i></i><div>Cargando...</div></div>
+  <div id="playerTop"><span id="playerTitle"></span><span id="hint">OK: pausa · &#9664; &#9654;: 10 s · &#9650;: llenar pantalla · Atrás: salir</span></div>
   <div id="playerMsg" class="hidden"><span id="playerMsgText"></span></div>
 </div>
 
@@ -274,6 +281,27 @@ a { color: inherit; text-decoration: none; }
   }
 
   var video = $("video"), frame = $("frame");
+  var fit = "contain";
+  try { fit = localStorage.getItem("cineverso_video_fit") === "cover" ? "cover" : "contain"; } catch (e) {}
+  video.style.objectFit = fit;
+  function toggleFit() {
+    fit = fit === "cover" ? "contain" : "cover";
+    video.style.objectFit = fit;
+    try { localStorage.setItem("cineverso_video_fit", fit); } catch (e) {}
+    toast(fit === "cover" ? "Llenando la pantalla" : "Imagen completa", 2000);
+  }
+  var uiTimer = null;
+  function wakeUi() {
+    $("playerTop").className = "";
+    clearTimeout(uiTimer);
+    uiTimer = setTimeout(function () { if (!video.paused) $("playerTop").className = "off"; }, 4000);
+  }
+  function loading(on) { if (on) show($("loader")); else hide($("loader")); }
+  video.addEventListener("loadstart", function () { loading(true); });
+  video.addEventListener("waiting", function () { loading(true); });
+  video.addEventListener("canplay", function () { loading(false); });
+  video.addEventListener("playing", function () { loading(false); wakeUi(); });
+  video.addEventListener("pause", function () { wakeUi(); });
   var playing = null, usedBackup = false, playerReturn = null;
   function play(m, isLive) {
     playing = m; usedBackup = false;
@@ -281,6 +309,7 @@ a { color: inherit; text-decoration: none; }
     $("playerTitle").innerHTML = esc(m.title || m.n);
     hide($("playerMsg"));
     show($("player"));
+    wakeUi();
     if (m.e) {
       hide(video); show(frame);
       frame.src = m.e + (m.e.indexOf("?") === -1 ? "?" : "&") + "autoplay=1";
@@ -313,12 +342,13 @@ a { color: inherit; text-decoration: none; }
     }
     msg("Este video no se puede reproducir en esta TV. Formato recomendado: MP4 (H.264 + AAC) con enlace https.");
   });
-  function msg(t) { $("playerMsgText").innerHTML = esc(t); show($("playerMsg")); }
+  function msg(t) { loading(false); $("playerMsgText").innerHTML = esc(t); show($("playerMsg")); }
   function closePlayer() {
     try { video.pause(); } catch (e) {}
     video.removeAttribute("src");
     try { video.load(); } catch (e) {}
     frame.src = "about:blank";
+    loading(false);
     hide($("player"));
     playing = null;
     renderRows();
@@ -405,6 +435,7 @@ a { color: inherit; text-decoration: none; }
     var k = e.keyCode || e.which;
     var key = e.key || "";
     var playerOpen = !isHidden($("player"));
+    if (playerOpen) wakeUi();
     // Atrás: Samsung 10009, LG 461, Escape 27, Retroceso 8, Android/Fire 4 o "GoBack"
     if (k === 10009 || k === 461 || k === 27 || k === 8 || k === 166 || key === "GoBack" || key === "BrowserBack") {
       if (playerOpen) { closePlayer(); e.preventDefault(); return; }
@@ -425,6 +456,7 @@ a { color: inherit; text-decoration: none; }
         if (k === 13) { if (video.paused) video.play(); else video.pause(); e.preventDefault(); return; }
         if (k === 37) { video.currentTime = Math.max(0, video.currentTime - 10); e.preventDefault(); return; }
         if (k === 39) { video.currentTime += 10; e.preventDefault(); return; }
+        if (k === 38 || k === 40) { toggleFit(); e.preventDefault(); return; }
       }
     }
     if (k === 13) {

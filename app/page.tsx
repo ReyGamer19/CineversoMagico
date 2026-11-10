@@ -1895,6 +1895,85 @@ export default function Home() {
     };
   }, [isPlaying, selectedMovie, usingBackup]);
 
+  // Barras del reproductor: se ocultan solas a los 4 s y vuelven con cualquier tecla/movimiento
+  const [playerUi, setPlayerUi] = useState(true);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoFit, setVideoFit] = useState<"contain" | "cover">("contain");
+  const uiTimer = useRef<any>(null);
+  const wakePlayerUi = () => {
+    setPlayerUi(true);
+    if (uiTimer.current) clearTimeout(uiTimer.current);
+    uiTimer.current = setTimeout(() => {
+      const v = playerRef.current;
+      // Solo se ocultan si el video está sonando y el foco está en el video (no en un botón)
+      if (v && !v.paused && (document.activeElement === v || document.activeElement === document.body)) setPlayerUi(false);
+    }, 4000);
+  };
+  useEffect(() => {
+    if (!isPlaying) return;
+    wakePlayerUi();
+    const onKey = () => wakePlayerUi();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (uiTimer.current) clearTimeout(uiTimer.current);
+    };
+  }, [isPlaying]);
+  useEffect(() => {
+    try {
+      const f = localStorage.getItem("cineverso_video_fit");
+      if (f === "cover" || f === "contain") setVideoFit(f);
+    } catch (e) {}
+  }, []);
+  const toggleVideoFit = () => {
+    const next = videoFit === "cover" ? "contain" : "cover";
+    setVideoFit(next);
+    try { localStorage.setItem("cineverso_video_fit", next); } catch (e) {}
+    showToast(next === "cover" ? "Llenando la pantalla (se recortan un poco los bordes)." : "Mostrando la imagen completa.");
+  };
+
+  // Portadas en TV: altura exacta 2:3 calculada con el ancho real (algunas TVs calculan mal el CSS)
+  useEffect(() => {
+    const html = document.documentElement;
+    if (!tvMode && !html.classList.contains("tv-legacy")) return;
+    let pending = false;
+    const fix = () => {
+      pending = false;
+      const boxes = document.querySelectorAll(".aspect-\\[2\\/3\\]");
+      for (let i = 0; i < boxes.length; i++) {
+        const el = boxes[i] as HTMLElement;
+        const w = el.offsetWidth;
+        if (!w) continue;
+        const ratio = 1.5;
+        el.style.paddingTop = "0px";
+        el.style.height = Math.round(w * ratio) + "px";
+        el.style.position = "relative";
+        const im = el.querySelector("img") as HTMLElement | null;
+        if (im) {
+          im.style.position = "absolute";
+          im.style.top = "0";
+          im.style.left = "0";
+          im.style.width = "100%";
+          im.style.height = "100%";
+          im.style.objectFit = "cover";
+        }
+      }
+    };
+    const schedule = () => {
+      if (pending) return;
+      pending = true;
+      setTimeout(fix, 60);
+    };
+    fix();
+    const mo = typeof MutationObserver !== "undefined" ? new MutationObserver(schedule) : null;
+    if (mo) mo.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (mo) mo.disconnect();
+      window.removeEventListener("resize", schedule);
+    };
+  }, [tvMode]);
+
   const startPlayback = (movie: Movie) => {
     setUsingBackup(false);
     setPlayerError("");
@@ -3308,8 +3387,18 @@ export default function Home() {
 
       {/* REPRODUCTOR FLOTANTE */}
       {selectedMovie && isPlaying && (
-        <div data-tv-modal className="fixed inset-0 bg-black z-50 flex flex-col justify-between overflow-x-hidden">
-          <div className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent z-20">
+        <div
+          data-tv-modal
+          className="fixed inset-0 bg-black z-50 overflow-hidden"
+          style={{ cursor: playerUi ? "default" : "none" }}
+          onMouseMove={wakePlayerUi}
+          onTouchStart={wakePlayerUi}
+          onKeyDown={wakePlayerUi}
+        >
+          <div
+            className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent"
+            style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi ? 1 : 0, visibility: playerUi ? "visible" : "hidden" }}
+          >
             <button 
               onClick={() => setIsPlaying(false)}
               className="flex items-center gap-2 text-white font-bold hover:text-green-400 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1"
@@ -3318,7 +3407,7 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="flex-1 flex items-center justify-center relative bg-black overflow-hidden">
+          <div className="bg-black overflow-hidden" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
             <video 
               ref={playerRef}
               x-webkit-airplay="allow"
@@ -3329,8 +3418,12 @@ export default function Home() {
               playsInline
               preload="auto"
               controlsList="nodownload"
-              className="w-full h-full object-contain focus:outline-none"
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+              className="w-full h-full focus:outline-none"
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: videoFit }}
+              onLoadStart={() => setVideoLoading(true)}
+              onWaiting={() => setVideoLoading(true)}
+              onCanPlay={() => setVideoLoading(false)}
+              onPlaying={() => setVideoLoading(false)}
               onTimeUpdate={(e) => recordProgress(e.currentTarget, selectedMovie, false)}
               onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
               onEnded={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
@@ -3344,6 +3437,12 @@ export default function Home() {
             >
               Tu navegador no soporta el reproductor.
             </video>
+            {videoLoading && !playerError && (
+              <div style={{ position: "absolute", top: "50%", left: 0, right: 0, marginTop: -40, textAlign: "center", pointerEvents: "none" }}>
+                <div className="inline-block w-12 h-12 rounded-full border-4 border-gray-700 border-t-green-500 animate-spin" />
+                <p className="text-sm text-gray-300 mt-3">Cargando película...</p>
+              </div>
+            )}
             {playerError && (
               <div style={{ position: "absolute", left: 0, right: 0, bottom: 24, textAlign: "center", padding: "0 16px" }}>
                 <span className="inline-block bg-red-950/90 border border-red-800 text-red-200 text-sm px-4 py-3 rounded-xl">{playerError}</span>
@@ -3351,7 +3450,10 @@ export default function Home() {
             )}
           </div>
 
-          <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 z-20">
+          <div
+            className="p-3 sm:p-4 bg-gradient-to-t from-black/95 to-transparent flex flex-col sm:flex-row items-center justify-between gap-4"
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi ? 1 : 0, visibility: playerUi ? "visible" : "hidden" }}
+          >
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button 
                 onClick={() => setIsPlaying(false)}
@@ -3364,6 +3466,12 @@ export default function Home() {
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
+              </button>
+              <button 
+                onClick={toggleVideoFit}
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <Tv className="w-4 h-4 text-green-400" /> {videoFit === "cover" ? "Ver completa" : "Llenar pantalla"}
               </button>
               <button 
                 onClick={handleCast}
