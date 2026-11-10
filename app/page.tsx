@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Play, Info, Plus, Search, Bell, Sparkles, Check, 
-  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark
+  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark, Shuffle
 } from "lucide-react";
 import Hls from "hls.js";
 
@@ -1737,7 +1737,16 @@ export default function Home() {
     }
   };
 
-  const heroMovie: Movie = customMovies[2] || customMovies[0] || {
+  // Portada que cambia sola (hasta 5 títulos)
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [heroPaused, setHeroPaused] = useState(false);
+  const heroList = customMovies.slice(0, 5);
+  useEffect(() => {
+    if (heroList.length < 2 || heroPaused) return;
+    const t = setInterval(() => setHeroIndex((i) => (i + 1) % heroList.length), 9000);
+    return () => clearInterval(t);
+  }, [heroList.length, heroPaused]);
+  const heroMovie: Movie = heroList[heroIndex % Math.max(1, heroList.length)] || customMovies[0] || {
     id: 101,
     title: "APOCALYPSE Z",
     subtitle: "NEW WORLD",
@@ -1915,6 +1924,13 @@ export default function Home() {
         key === "GoBack" || key === "BrowserBack" || key === "Back" || key === "Escape" ||
         (code === 8 && tvNav && !typing);
       if (isBack) {
+        // Primero cierra los avisos pequeños (iniciar sesión, clave...)
+        const closers = document.querySelectorAll("[data-close-on-back]");
+        if (closers.length) {
+          (closers[closers.length - 1] as HTMLElement).click();
+          e.preventDefault();
+          return;
+        }
         if (st.isPlaying) setIsPlaying(false);
         else if (st.selectedMovie) setSelectedMovie(null);
         else if (st.showAdminLogin) setShowAdminLogin(false);
@@ -2548,6 +2564,72 @@ export default function Home() {
     postAccount({ action: "logout" }).then(reset, reset);
   };
 
+  // MI LISTA: solo para quienes iniciaron sesión con su correo
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const inMyList = (m: Movie | null) => !!m && myList.indexOf(m.title) !== -1;
+  const toggleMyList = (m: Movie | null) => {
+    if (!m) return;
+    if (!accountUser) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    if (myList.indexOf(m.title) !== -1) {
+      setMyList((prev) => prev.filter((t) => t !== m.title));
+      showToast("Quitado de Mi Lista.");
+    } else {
+      setMyList((prev) => (prev.indexOf(m.title) !== -1 ? prev : [m.title].concat(prev)));
+      showToast("¡Añadido a Mi Lista!");
+    }
+  };
+  useEffect(() => {
+    if (!showLoginPrompt) return;
+    const t = setTimeout(() => {
+      const modals = document.querySelectorAll("[data-tv-modal]");
+      const scope = modals.length ? modals[modals.length - 1] : document;
+      const el = scope.querySelector("[data-autofocus]") as HTMLElement | null;
+      if (el) { try { el.focus(); } catch (e) {} }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [showLoginPrompt]);
+
+  const goToLogin = () => {
+    setShowLoginPrompt(false);
+    setIsPlaying(false);
+    setSelectedMovie(null);
+    setAuthMode("login");
+    setActiveTab("cuenta");
+    try { window.scrollTo(0, 0); } catch (e) {}
+  };
+
+  // Semilla diaria para variar las recomendaciones (se lee en el navegador, no al compilar)
+  const [recoSeed, setRecoSeed] = useState(1);
+  useEffect(() => {
+    try { setRecoSeed(new Date().getDate()); } catch (e) {}
+  }, []);
+
+  // Recomendado para ti: géneros de tu lista y de lo que estás viendo
+  const recommended = (() => {
+    const likedTags: Record<string, number> = {};
+    customMovies.forEach((m) => {
+      const w = (myList.indexOf(m.title) !== -1 ? 2 : 0) + (continueWatchingList.some((p) => String(p.id) === String(m.id)) ? 1 : 0);
+      if (w && m.tag) likedTags[m.tag] = (likedTags[m.tag] || 0) + w;
+    });
+    const day = recoSeed;
+    const hash = (x: string) => { let h = day; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) % 100000; return h; };
+    return customMovies
+      .filter((m) => myList.indexOf(m.title) === -1)
+      .map((m) => ({ m, score: (likedTags[m.tag] || 0) * 1000 + (hash(String(m.id)) % 1000) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((x) => x.m);
+  })();
+
+  const surpriseMe = () => {
+    if (!customMovies.length) return;
+    const m = customMovies[Math.floor(Math.random() * customMovies.length)];
+    setSelectedMovie(m);
+  };
+
   // Progreso de "Continuar viendo" (cada 15 s, al pausar y al cerrar)
   const lastProgressSave = useRef(0);
   const recordProgress = (video: HTMLVideoElement, movie: Movie, force: boolean) => {
@@ -2625,7 +2707,7 @@ export default function Home() {
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 md:h-auto md:py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
         <div className="flex items-center gap-4 sm:gap-6 min-w-0">
           <div onClick={() => setActiveTab("inicio")} tabIndex={0} role="button" aria-label="Inicio" className="flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1">
-            <span className="shrink-0 bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
+            <img src="/icons/icon-192.png" alt="CV" className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-lg" />
             <span className="whitespace-nowrap text-base sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
               Cineverso Magico <Sparkle className="hidden sm:block w-4 h-4 text-emerald-400 animate-pulse" />
             </span>
@@ -2673,6 +2755,13 @@ export default function Home() {
               <Settings className="w-5 h-5" />
             </button>
           )}
+          <button
+            onClick={surpriseMe}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+            aria-label="Sorpréndeme"
+          >
+            <Shuffle className="w-4 h-4" /> Sorpréndeme
+          </button>
           <button 
             onClick={() => setActiveTab("explorar")}
             className="p-2 rounded-full hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -2693,115 +2782,175 @@ export default function Home() {
       </nav>
 
       {/* VISTA INICIO */}
-      {activeTab === "inicio" && (
-        <div className="pt-16 sm:pt-20">
-          <div className="relative min-h-[60vh] sm:min-h-[70vh] w-full bg-cover bg-center flex items-end pb-12 sm:pb-16 overflow-hidden" style={{ backgroundImage: `url(${heroMovie.bgImage})` }}>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/50 to-black/70" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/60 to-transparent" />
-            
-            <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-3xl w-full pt-10">
-              <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight uppercase leading-tight text-white drop-shadow-lg">
-                {heroMovie.title}
-                {heroMovie.subtitle && <span className="block text-xl sm:text-3xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
-              </h1>
-              
-              <div className="flex items-center gap-3 my-3 sm:my-4 text-xs sm:text-sm font-semibold flex-wrap">
-                <span className="text-green-400 font-bold">★ {heroMovie.rating}</span>
-                <span className="text-gray-300">{heroMovie.year}</span>
-                <span className="text-gray-300">{heroMovie.duration}</span>
-                <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2.5 py-0.5 rounded font-medium">{heroMovie.tag}</span>
-              </div>
-
-              <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed mb-6 line-clamp-3 max-w-2xl">
-                {heroMovie.desc}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button 
-                  data-autofocus-home
-                  onClick={() => startPlayback(heroMovie)}
-                  className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base shadow-lg"
-                >
-                  <Play className="w-5 h-5 fill-black" /> Reproducir
-                </button>
-                <button 
-                  onClick={() => setSelectedMovie(heroMovie)}
-                  className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-3 rounded-xl border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base"
-                >
-                  <Info className="w-5 h-5" /> Más información
-                </button>
-                <button 
-                  onClick={() => setMyList(prev => [...prev, heroMovie.title])}
-                  className="p-3 rounded-xl bg-[#121212]/90 border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer"
-                  aria-label="Agregar a Mi Lista"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
+      {activeTab === "inicio" && (() => {
+        const posterCard = (m: Movie, key: string) => (
+          <div
+            key={key}
+            onClick={() => setSelectedMovie(m)}
+            tabIndex={0}
+            className="group shrink-0 cursor-pointer rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500"
+            style={{ width: 160 }}
+          >
+            <div className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 group-hover:border-green-500" style={{ width: 160, height: 240 }}>
+              <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+              {m.tag && <span className="absolute top-2 left-2 text-[10px] text-green-400 font-bold uppercase bg-black/70 px-2 py-0.5 rounded">{m.tag}</span>}
+              {inMyList(m) && <span className="absolute top-2 right-2 bg-green-500 text-black rounded-full p-0.5"><Check className="w-3 h-3" /></span>}
             </div>
+            <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{m.title}</h4>
           </div>
+        );
+        const row = (title: string, items: Movie[], keyPrefix: string, icon?: any) =>
+          items.length ? (
+            <section key={keyPrefix}>
+              <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white flex items-center gap-2">{icon}{title}</h2>
+              <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                {items.map((m) => posterCard(m, keyPrefix + "-" + m.id))}
+              </div>
+            </section>
+          ) : null;
+        const groups: Record<string, Movie[]> = {};
+        const groupOrder: string[] = [];
+        customMovies.forEach((m) => {
+          const g = m.tag || "Otros";
+          if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+          groups[g].push(m);
+        });
+        const continueItems = continueWatchingList
+          .map((p) => ({ p, m: customMovies.find((x) => String(x.id) === String(p.id)) }))
+          .filter((x) => !!x.m) as { p: ProgressItem; m: Movie }[];
+        return (
+          <div className="pt-14 md:pt-16">
+            {/* Portada */}
+            <div
+              className="relative w-full bg-cover bg-center flex items-end overflow-hidden"
+              style={{ backgroundImage: `url(${heroMovie.bgImage})`, minHeight: "68vh" }}
+              onMouseEnter={() => setHeroPaused(true)}
+              onMouseLeave={() => setHeroPaused(false)}
+            >
+              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/60" />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/60 to-transparent" />
+              <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-3xl w-full pb-14 pt-10">
+                <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight uppercase leading-tight text-white drop-shadow-lg">
+                  {heroMovie.title}
+                  {heroMovie.subtitle && <span className="block text-xl sm:text-3xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
+                </h1>
+                <div className="flex items-center gap-3 my-3 sm:my-4 text-xs sm:text-sm font-semibold flex-wrap">
+                  <span className="text-green-400 font-bold">★ {heroMovie.rating}</span>
+                  <span className="text-gray-300">{heroMovie.year}</span>
+                  <span className="text-gray-300">{heroMovie.duration}</span>
+                  <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2.5 py-0.5 rounded font-medium">{heroMovie.tag}</span>
+                </div>
+                <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed mb-6 line-clamp-3 max-w-2xl">{heroMovie.desc}</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    data-autofocus-home
+                    onClick={() => startPlayback(heroMovie)}
+                    onFocus={() => setHeroPaused(true)}
+                    onBlur={() => setHeroPaused(false)}
+                    className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base shadow-lg"
+                  >
+                    <Play className="w-5 h-5 fill-black" /> Reproducir
+                  </button>
+                  <button
+                    onClick={() => setSelectedMovie(heroMovie)}
+                    onFocus={() => setHeroPaused(true)}
+                    onBlur={() => setHeroPaused(false)}
+                    className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-3 rounded-xl border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base"
+                  >
+                    <Info className="w-5 h-5" /> Más información
+                  </button>
+                  <button
+                    onClick={() => toggleMyList(heroMovie)}
+                    onFocus={() => setHeroPaused(true)}
+                    onBlur={() => setHeroPaused(false)}
+                    className="p-3 rounded-full bg-[#121212]/90 border border-gray-600 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer"
+                    aria-label={inMyList(heroMovie) ? "Quitar de Mi Lista" : "Agregar a Mi Lista"}
+                  >
+                    {inMyList(heroMovie) ? <Check className="w-5 h-5 text-green-400" /> : <Plus className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+              {heroList.length > 1 && (
+                <div className="absolute z-10 bottom-5 left-0 right-0 flex justify-center gap-2">
+                  {heroList.map((m, i) => (
+                    <button
+                      key={"dot-" + m.id}
+                      onClick={() => setHeroIndex(i)}
+                      aria-label={"Ver " + m.title}
+                      className="rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                      style={{ height: 6, width: i === heroIndex % heroList.length ? 28 : 8, background: i === heroIndex % heroList.length ? "#fff" : "rgba(255,255,255,.4)" }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
-          <div className="px-4 sm:px-6 md:px-12 space-y-10 relative z-20 pb-20 w-full overflow-x-hidden mt-4">
-            {continueWatchingList.length > 0 && (
-              <div>
-                <h2 className="text-lg sm:text-2xl font-bold mb-4 text-white">Continuar viendo</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {continueWatchingList.map((p) => {
-                    const movie = customMovies.find((m) => String(m.id) === String(p.id));
-                    if (!movie) return null;
-                    const pct = Math.min(100, Math.round((p.time / p.duration) * 100));
-                    return (
-                      <div
-                        key={"cw-" + p.id}
-                        onClick={() => startPlayback(movie)}
-                        tabIndex={0}
-                        className="group cursor-pointer rounded-xl overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500 transition duration-200"
-                      >
-                        <div className="aspect-[2/3] w-full bg-gray-900 overflow-hidden relative rounded-xl border border-gray-800 group-hover:border-green-500">
-                          <img src={movie.bgImage} alt={movie.title} className="w-full h-full object-cover" />
-                          <div className="absolute left-0 right-0 bottom-0 h-1.5 bg-gray-700">
+            <div className="px-4 sm:px-6 md:px-12 space-y-8 relative z-20 pb-20 w-full overflow-x-hidden mt-2">
+              {/* Continuar viendo (tarjetas horizontales con progreso) */}
+              {continueItems.length > 0 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Continuar viendo</h2>
+                  <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {continueItems.map(({ p, m }) => {
+                      const pct = Math.min(100, Math.round((p.time / p.duration) * 100));
+                      return (
+                        <div
+                          key={"cw-" + p.id}
+                          onClick={() => startPlayback(m)}
+                          tabIndex={0}
+                          className="group shrink-0 relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                          style={{ width: 300, height: 168 }}
+                        >
+                          <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                          <div className="absolute left-3 right-3 bottom-4">
+                            <p className="text-sm font-bold text-white truncate">{m.title}</p>
+                            <p className="text-[11px] text-gray-300">Quedan {formatRemaining(p.duration - p.time)}</p>
+                          </div>
+                          <div className="absolute left-0 right-0 bottom-0 h-1 bg-gray-700">
                             <div className="h-full bg-green-500" style={{ width: pct + "%" }} />
                           </div>
                         </div>
-                        <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{movie.title}</h4>
-                        <p className="text-[10px] text-gray-500">Quedan {formatRemaining(p.duration - p.time)}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
-            {customMovies.length > 0 && (
-              <div>
-                <h2 className="text-lg sm:text-2xl font-bold mb-4 text-white flex items-center gap-2">
-                  <span>{isAdmin ? "Tus Películas Subidas" : "Recién agregadas"}</span>
-                  <span className="text-xs font-normal text-gray-400">({customMovies.length})</span>
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {customMovies.map((item) => (
-                    <div 
-                      key={item.id} 
-                      onClick={() => setSelectedMovie(item)} 
-                      tabIndex={0}
-                      className="group cursor-pointer rounded-xl overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500 transition duration-200"
-                    >
-                      <div className="aspect-[2/3] w-full bg-gray-900 overflow-hidden relative rounded-xl border border-gray-800 group-hover:border-green-500">
-                        <img src={item.bgImage} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <span className="text-[10px] text-green-400 font-bold uppercase bg-black/60 px-2 py-0.5 rounded">{item.tag}</span>
+              {/* Top 10 de hoy */}
+              {customMovies.length >= 3 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Top 10 de hoy</h2>
+                  <div className="flex overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {customMovies.slice(0, 10).map((m, i) => (
+                      <div key={"top-" + m.id} className="shrink-0 flex items-end" style={{ marginRight: 18 }}>
+                        <span
+                          aria-hidden="true"
+                          style={{ fontSize: 150, lineHeight: 0.8, fontWeight: 900, color: "#050505", WebkitTextStroke: "3px #4b5563", marginRight: -18, letterSpacing: -8, userSelect: "none" }}
+                        >
+                          {i + 1}
+                        </span>
+                        <div
+                          onClick={() => setSelectedMovie(m)}
+                          tabIndex={0}
+                          className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                          style={{ width: 130, height: 195 }}
+                        >
+                          <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
                         </div>
                       </div>
-                      <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{item.title}</h4>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {row("Recomendado para ti", recommended, "rec", <Sparkle className="w-5 h-5 text-green-400" />)}
+              {row(isAdmin ? "Tus Películas Subidas" : "Recién agregadas", customMovies, "new")}
+              {groupOrder.filter((g) => groups[g].length >= 2).map((g) => row(g, groups[g], "g-" + g))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* VISTA EXPLORAR */}
       {activeTab === "explorar" && (
@@ -3035,16 +3184,44 @@ export default function Home() {
       {/* VISTA MI LISTA */}
       {activeTab === "milista" && (
         <div className="max-w-6xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-6 overflow-x-hidden">
-          <h2 className="text-3xl font-black text-white">Mi Lista ({myList.length})</h2>
-          {myList.length === 0 ? (
-            <p className="text-sm text-gray-500">No tienes películas añadidas a tu lista todavía.</p>
+          <h2 className="text-3xl font-black text-white">Mi Lista {accountUser ? "(" + myList.length + ")" : ""}</h2>
+          {!accountUser ? (
+            <div className="bg-[#0f0f0f] border border-gray-800 rounded-2xl p-6 max-w-xl">
+              <p className="text-base font-bold text-white mb-1">Inicia sesión para usar Mi Lista</p>
+              <p className="text-sm text-gray-400 mb-4">Con tu cuenta, tus películas guardadas aparecen en todos tus dispositivos: TV, celular y PC.</p>
+              <button onClick={goToLogin} className="bg-white text-black font-bold px-5 py-2.5 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                Iniciar sesión o crear cuenta
+              </button>
+            </div>
+          ) : myList.length === 0 ? (
+            <p className="text-sm text-gray-500">Todavía no agregaste nada. Pulsa <b className="text-gray-300">+</b> en cualquier película para guardarla aquí.</p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {myList.map((title, i) => (
-                <div key={i} tabIndex={0} className="bg-[#0f0f0f] p-4 rounded-xl border border-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500">
-                  <h4 className="text-sm font-bold text-white">{title}</h4>
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-4">
+              {myList.map((title) => {
+                const m = customMovies.find((x) => x.title === title);
+                if (!m) return null;
+                return (
+                  <div key={"ml-" + title} className="relative" style={{ width: 160 }}>
+                    <div
+                      onClick={() => setSelectedMovie(m)}
+                      tabIndex={0}
+                      className="group cursor-pointer rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500"
+                    >
+                      <div className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 group-hover:border-green-500" style={{ width: 160, height: 240 }}>
+                        <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate">{m.title}</h4>
+                    </div>
+                    <button
+                      onClick={() => toggleMyList(m)}
+                      aria-label={"Quitar " + m.title}
+                      className="absolute top-2 right-2 bg-black/80 hover:bg-red-600 text-white rounded-full p-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -3541,19 +3718,10 @@ export default function Home() {
                     <Play className="w-5 h-5 fill-black" /> Reproducir
                   </button>
                   <button 
-                    onClick={() => {
-                      if (!myList.includes(selectedMovie.title)) {
-                        setMyList([...myList, selectedMovie.title]);
-                        setToastMessage("¡Añadido a Mi Lista!");
-                        setTimeout(() => setToastMessage(""), 3000);
-                      } else {
-                        setToastMessage("Ya está en tu lista.");
-                        setTimeout(() => setToastMessage(""), 3000);
-                      }
-                    }}
+                    onClick={() => toggleMyList(selectedMovie)}
                     className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 sm:px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
-                    <Plus className="w-5 h-5" /> Mi Lista
+                    {inMyList(selectedMovie) ? <><Check className="w-5 h-5 text-green-400" /> En Mi Lista</> : <><Plus className="w-5 h-5" /> Mi Lista</>}
                   </button>
                   <button 
                     onClick={copyLinkSafe}
@@ -3778,16 +3946,10 @@ export default function Home() {
                 <Cast className="w-4 h-4 text-green-400" /> Transmitir
               </button>
               <button 
-                onClick={() => {
-                  if (!myList.includes(selectedMovie.title)) {
-                    setMyList([...myList, selectedMovie.title]);
-                    setToastMessage("¡Añadido a Mi Lista!");
-                    setTimeout(() => setToastMessage(""), 3000);
-                  }
-                }}
+                onClick={() => toggleMyList(selectedMovie)}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                <Plus className="w-4 h-4 text-green-400" /> Mi Lista
+                {inMyList(selectedMovie) ? <><Check className="w-4 h-4 text-green-400" /> En Mi Lista</> : <><Plus className="w-4 h-4 text-green-400" /> Mi Lista</>}
               </button>
             </div>
 
@@ -3914,7 +4076,7 @@ export default function Home() {
             />
             {serverPassError && <p className="text-xs text-red-400 font-bold leading-relaxed">{serverPassError}</p>}
             <div className="flex gap-3">
-              <button type="button" onClick={() => { setShowServerPass(false); pendingSaveRef.current = null; }} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+              <button type="button" data-close-on-back onClick={() => { setShowServerPass(false); pendingSaveRef.current = null; }} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
                 Cancelar
               </button>
               <button type="submit" className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
@@ -3922,6 +4084,25 @@ export default function Home() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* AVISO: MI LISTA REQUIERE CUENTA */}
+      {showLoginPrompt && (
+        <div data-tv-modal className="fixed inset-0 bg-black/85 z-[60] flex items-center justify-center p-4">
+          <div className="bg-[#0c0c0c] border border-green-500/30 w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl text-center">
+            <Bookmark className="w-8 h-8 text-green-400 mx-auto" />
+            <h3 className="text-lg font-bold text-white">Guarda tus favoritas</h3>
+            <p className="text-sm text-gray-400">Para usar Mi Lista inicia sesión con tu correo. Así tu lista aparece en todos tus dispositivos.</p>
+            <div className="flex gap-3">
+              <button data-close-on-back onClick={() => setShowLoginPrompt(false)} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                Ahora no
+              </button>
+              <button data-autofocus onClick={goToLogin} className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                Iniciar sesión
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
