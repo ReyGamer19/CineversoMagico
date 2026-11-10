@@ -69,7 +69,7 @@ interface Channel {
 // actualizar-cineverso.js la rellena con la clave que tú elijas.
 // Para entrar al panel: abre tu página con  ?admin  al final de la URL.
 // ================================================================
-const ADMIN_HASH = "29c7b21d3cde1ccfca37823fe7bb9eed806a4e2d145df2a531f1be576ee26031";
+const ADMIN_HASH = ""; // la clave ahora se comprueba solo en el servidor (app/api/catalog/route.ts)
 
 // SHA-256 en JavaScript puro (funciona incluso en navegadores de TV antiguos)
 function sha256(ascii: string): string {
@@ -1481,12 +1481,10 @@ export default function Home() {
     e.preventDefault();
     if (adminChecking) return;
     const pass = adminPassInput;
-    const h = sha256(pass);
-    const localOk = ADMIN_HASH.length === 64 && h === ADMIN_HASH;
     setAdminChecking(true);
     setAdminPassError("");
-    // Verificación en el servidor sin modificar nada: se envía movies:null a propósito.
-    // Clave correcta -> 400 "Catálogo inválido". Clave incorrecta -> 401.
+    // El servidor comprueba la clave sin modificar nada (movies:null a propósito):
+    // clave correcta -> 400 "Catálogo inválido"; incorrecta -> 401.
     fetch("/api/catalog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1496,22 +1494,19 @@ export default function Home() {
       .catch(() => 0)
       .then((status) => {
         setAdminChecking(false);
-        const serverOk = status === 400;
-        if (!serverOk && !localOk) {
-          setAdminPassError(status === 401 || status === 400 ? "Clave incorrecta." : "Clave incorrecta (o el servidor no responde).");
-          return;
-        }
-        try {
-          localStorage.setItem("cineverso_admin_key", localOk ? h : "server");
-          if (serverOk) localStorage.setItem("cineverso_admin_pass", pass);
-          else localStorage.removeItem("cineverso_admin_pass");
-        } catch (err) {}
-        setIsAdmin(true);
-        setShowAdminLogin(false);
-        setAdminPassInput("");
-        setActiveTab("admin");
-        if (serverOk) showToast("Sesión de administrador iniciada. Los cambios se publicarán para todos.");
-        else showToast("Entraste con la clave local. Para publicar en todos los dispositivos entra con la clave ADMIN_PASSWORD del servidor.", 7000);
+        if (status === 400) {
+          try {
+            localStorage.setItem("cineverso_admin_key", "server");
+            localStorage.setItem("cineverso_admin_pass", pass);
+          } catch (err) {}
+          setIsAdmin(true);
+          setShowAdminLogin(false);
+          setAdminPassInput("");
+          setActiveTab("admin");
+          showToast("Sesión de administrador iniciada. Los cambios se publicarán para todos.");
+        } else if (status === 401) setAdminPassError("Clave incorrecta.");
+        else if (status === 503) setAdminPassError("El servidor no tiene la clave configurada todavía. Vuelve a ejecutar el actualizador con tu clave.");
+        else setAdminPassError("No se pudo conectar con el servidor. Inténtalo de nuevo.");
       });
   };
 
@@ -1532,7 +1527,9 @@ export default function Home() {
     let pass = "";
     try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
     if (!pass) {
-      showToast(okMsg + " (solo en este navegador: entra con la clave del servidor para publicarlo a todos)", 6000);
+      pendingSaveRef.current = () => saveCatalog(list, okMsg);
+      setServerPassError("");
+      setShowServerPass(true);
       return;
     }
     setSyncing(true);
@@ -1549,7 +1546,7 @@ export default function Home() {
           showToast(okMsg + " ✔ Publicado en todos los dispositivos.");
         } else if (status === 401) {
           try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {}
-          showToast("La clave guardada ya no coincide con ADMIN_PASSWORD. Se guardó solo aquí; vuelve a entrar con ?admin.", 7000);
+          showToast("Tu clave guardada ya no es válida. Vuelve a entrar con ?admin.", 7000);
         } else {
           showToast("No se pudo publicar (" + ((d && d.error) || status) + "). Se guardó solo en este navegador.", 7000);
         }
@@ -1575,6 +1572,50 @@ export default function Home() {
     }
   }, [isAdmin]);
 
+  // Clave del servidor (ADMIN_PASSWORD de Vercel): sin ella no se puede publicar nada
+  const [showServerPass, setShowServerPass] = useState(false);
+  const [serverPassInput, setServerPassInput] = useState("");
+  const [serverPassError, setServerPassError] = useState("");
+  const [serverPassBusy, setServerPassBusy] = useState(false);
+  const [hasServerPass, setHasServerPass] = useState(false);
+  const pendingSaveRef = useRef<null | (() => void)>(null);
+  useEffect(() => {
+    try { setHasServerPass(!!localStorage.getItem("cineverso_admin_pass")); } catch (e) {}
+  }, [isAdmin, showServerPass]);
+
+  const submitServerPass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (serverPassBusy) return;
+    setServerPassBusy(true);
+    setServerPassError("");
+    fetch("/api/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: serverPassInput, movies: null }),
+    })
+      .then((r) => r.status)
+      .catch(() => 0)
+      .then((status) => {
+        setServerPassBusy(false);
+        if (status === 400) {
+          try { localStorage.setItem("cineverso_admin_pass", serverPassInput); } catch (err) {}
+          setHasServerPass(true);
+          setShowServerPass(false);
+          setServerPassInput("");
+          const next = pendingSaveRef.current;
+          pendingSaveRef.current = null;
+          if (next) next();
+          else showToast("Listo: ahora tus cambios se publican para todos.");
+        } else if (status === 401) {
+          setServerPassError("Clave incorrecta.");
+        } else if (status === 503) {
+          setServerPassError("El servidor no tiene la clave configurada todavía. Vuelve a ejecutar el actualizador con tu clave.");
+        } else {
+          setServerPassError("No se pudo conectar con el servidor (código " + status + "). Inténtalo de nuevo.");
+        }
+      });
+  };
+
   type CatalogOp = { type: "upsert"; movie: Movie } | { type: "delete"; id: number | string };
   const applyOp = (list: Movie[], op: CatalogOp): Movie[] => {
     if (op.type === "delete") return list.filter((m) => String(m.id) !== String(op.id));
@@ -1586,13 +1627,16 @@ export default function Home() {
   // le aplica solo este cambio y lo vuelve a guardar. Así una copia vieja en otro
   // dispositivo ya no puede borrar ni reemplazar tus enlaces.
   const saveChange = (op: CatalogOp, okMsg: string) => {
-    setCustomMovies((prev) => applyOp(prev, op));
     let pass = "";
     try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
     if (!pass) {
-      showToast(okMsg + " (solo en este navegador: entra con la clave del servidor para publicarlo a todos)", 6000);
+      // No guardamos nada a medias: pedimos la clave del servidor y luego seguimos
+      pendingSaveRef.current = () => saveChange(op, okMsg);
+      setServerPassError("");
+      setShowServerPass(true);
       return;
     }
+    setCustomMovies((prev) => applyOp(prev, op));
     setSyncing(true);
     fetch("/api/catalog?v=" + Date.now(), { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -1618,7 +1662,7 @@ export default function Home() {
               showToast(okMsg + " ✔ Publicado en todos los dispositivos.");
             } else if (status === 401) {
               try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {}
-              showToast("La clave guardada ya no coincide con ADMIN_PASSWORD. Vuelve a entrar con ?admin.", 7000);
+              showToast("Tu clave guardada ya no es válida. Vuelve a entrar con ?admin.", 7000);
             } else {
               showToast("No se pudo publicar (" + ((x && x.error) || status) + ").", 7000);
             }
@@ -3022,9 +3066,20 @@ export default function Home() {
                   <p className="text-xs text-gray-400">
                     {editingMovieId ? "Modifica los campos necesarios para actualizar el título." : "Añade tus enlaces de video y películas directamente al catálogo."}
                   </p>
+                  {!hasServerPass && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-600/50 text-[11px] text-yellow-300">
+                      Modo solo lectura: tus cambios NO se guardan en el servidor hasta que vuelvas a escribir tu clave de administrador.{" "}
+                      <button
+                        onClick={() => { pendingSaveRef.current = null; setServerPassError(""); setShowServerPass(true); }}
+                        className="underline font-bold text-yellow-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+                      >
+                        Activar publicación
+                      </button>
+                    </div>
+                  )}
                   {serverCatalog ? (
                     <p className="text-[11px] text-green-400 mt-1">
-                      {syncing ? "Publicando cambios..." : "Conectado al servidor: cada cambio se publica al instante en todos los dispositivos."}
+                      {syncing ? "Publicando cambios..." : hasServerPass ? "Conectado al servidor: cada cambio se publica al instante en todos los dispositivos." : "Conectado al servidor (solo lectura)."}
                     </p>
                   ) : (
                     <p className="text-[11px] text-yellow-400 mt-1">
@@ -3135,7 +3190,13 @@ export default function Home() {
               <button
                 onClick={() => {
                   if (confirm("Esto REEMPLAZA todo el catálogo del servidor por el que ves en este dispositivo. Úsalo solo si estás seguro de que esta lista es la correcta. ¿Continuar?")) {
-                    saveCatalog(customMovies, "Catálogo completo enviado.");
+                    let pass = "";
+                    try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+                    if (!pass) {
+                      pendingSaveRef.current = () => saveCatalog(customMovies, "Catálogo completo enviado.");
+                      setServerPassError("");
+                      setShowServerPass(true);
+                    } else saveCatalog(customMovies, "Catálogo completo enviado.");
                   }
                 }}
                 className="whitespace-nowrap flex items-center justify-center gap-1.5 bg-white text-black hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -3826,6 +3887,38 @@ export default function Home() {
               </button>
               <button type="submit" className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
                 {adminChecking ? "Verificando..." : "Entrar"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL CLAVE DEL SERVIDOR (ADMIN_PASSWORD) */}
+      {showServerPass && (
+        <div data-tv-modal className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <form onSubmit={submitServerPass} className="bg-[#0c0c0c] border border-green-500/30 w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-white">
+              <Lock className="w-5 h-5 text-green-400" />
+              <h3 className="text-lg font-bold">Confirma tu clave</h3>
+            </div>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Escribe tu <b className="text-gray-200">clave de administrador</b> (la misma que usas con ?admin) para guardar los cambios para todos los dispositivos.
+            </p>
+            <input
+              type="password"
+              autoFocus
+              placeholder="Clave de administrador"
+              value={serverPassInput}
+              onChange={(e) => { setServerPassInput(e.target.value); if (serverPassError) setServerPassError(""); }}
+              className="w-full bg-[#121212] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            {serverPassError && <p className="text-xs text-red-400 font-bold leading-relaxed">{serverPassError}</p>}
+            <div className="flex gap-3">
+              <button type="button" onClick={() => { setShowServerPass(false); pendingSaveRef.current = null; }} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                Cancelar
+              </button>
+              <button type="submit" className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                {serverPassBusy ? "Verificando..." : "Guardar y publicar"}
               </button>
             </div>
           </form>
