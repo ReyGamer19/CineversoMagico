@@ -48,6 +48,108 @@ interface Channel {
   embedUrl?: string;
 }
 
+// ================================================================
+// ACCESO DE ADMINISTRADOR
+// La clave NO se guarda aquí: solo su "huella" SHA-256. El script
+// actualizar-cineverso.js la rellena con la clave que tú elijas.
+// Para entrar al panel: abre tu página con  ?admin  al final de la URL.
+// ================================================================
+const ADMIN_HASH = "29c7b21d3cde1ccfca37823fe7bb9eed806a4e2d145df2a531f1be576ee26031";
+
+// SHA-256 en JavaScript puro (funciona incluso en navegadores de TV antiguos)
+function sha256(ascii: string): string {
+  const utf8 = unescape(encodeURIComponent(ascii));
+  const rightRotate = (v: number, a: number) => (v >>> a) | (v << (32 - a));
+  const K: number[] = [];
+  const H: number[] = [];
+  let primeCounter = 0;
+  const isComposite: Record<number, boolean> = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) isComposite[i] = true;
+      if (primeCounter < 8) H[primeCounter] = (Math.pow(candidate, 0.5) * 4294967296) | 0;
+      K[primeCounter++] = (Math.pow(candidate, 1 / 3) * 4294967296) | 0;
+    }
+  }
+  let msg = utf8 + "\x80";
+  while ((msg.length % 64) - 56) msg += "\x00";
+  const words: number[] = [];
+  for (let i = 0; i < msg.length; i++) {
+    words[i >> 2] |= msg.charCodeAt(i) << (((3 - i) % 4) * 8);
+  }
+  const bitLen = utf8.length * 8;
+  words[words.length] = (bitLen / 4294967296) | 0;
+  words[words.length] = bitLen | 0;
+  let hash = H.slice(0, 8);
+  for (let j = 0; j < words.length; ) {
+    const w = words.slice(j, (j += 16));
+    const old = hash;
+    hash = hash.slice(0, 8);
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const a = hash[0], e = hash[4];
+      const temp1 = hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + K[i] +
+        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0);
+      const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+      hash.length = 8;
+    }
+    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;
+  }
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    for (let k = 3; k + 1; k--) {
+      const b = (hash[i] >> (k * 8)) & 255;
+      out += (b < 16 ? "0" : "") + b.toString(16);
+    }
+  }
+  return out;
+}
+
+// Detecta navegadores de Smart TV (Samsung Tizen, LG webOS, Android TV, Fire TV, Roku, Hisense VIDAA, Philips, Sony, etc.)
+function isSmartTvBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /SMART-TV|SmartTV|Tizen|Web0S|webOS|NetCast|HbbTV|Android TV|GoogleTV|AFT[A-Z]|BRAVIA|CrKey|Roku|VIDAA|Hisense|Philips|NETTV|Viera|AQUOS|TV Safari|Opera TV|TVHTML5|DTV|Toshiba|Vizio|SonyCEBrowser/i.test(navigator.userAgent);
+}
+
+// CSS de compatibilidad para navegadores antiguos (TVs). Solo se activa con la clase
+// "tv-legacy" en <html>, así que NO cambia nada en celulares ni PCs modernos.
+const LEGACY_CSS = `
+.inset-0{top:0;right:0;bottom:0;left:0}
+html.tv-legacy button,html.tv-legacy input,html.tv-legacy select,html.tv-legacy textarea{font-family:inherit;line-height:inherit}
+html.tv-legacy button:not([class*="bg-"]){background-color:transparent;background-image:none}
+html.tv-legacy button:not([class*="border"]){border:0}
+html.tv-legacy button:not([class*=" text-white"]):not([class*=" text-black"]):not([class*=" text-gray-"]):not([class*=" text-green-"]):not([class*=" text-red-"]):not([class*=" text-emerald-"]){color:inherit}
+html.tv-legacy .bg-white{background-color:#fff}
+html.tv-legacy .bg-green-500{background-color:#22c55e}
+html.tv-legacy .bg-\\[\\#121212\\]{background-color:#121212}
+html.tv-legacy .bg-\\[\\#181818\\]{background-color:#181818}
+html.tv-legacy .bg-\\[\\#161616\\]{background-color:#161616}
+html.tv-legacy .bg-\\[\\#050505\\]{background-color:#050505}
+html.tv-legacy .bg-\\[\\#1a1a1a\\]{background-color:#1a1a1a}
+html.tv-legacy .bg-\\[\\#1c1c1c\\]{background-color:#1c1c1c}
+html.tv-legacy .bg-\\[\\#262626\\]\\/90,html.tv-legacy .bg-\\[\\#121212\\]\\/90{background-color:rgba(30,30,30,.9)}
+html.tv-legacy .bg-white\\/10{background-color:rgba(255,255,255,.1)}
+html.tv-legacy .bg-black\\/80,html.tv-legacy .bg-black\\/90{background-color:rgba(0,0,0,.88)}
+html.tv-legacy .bg-black\\/85{background-color:rgba(0,0,0,.85)}
+html.tv-legacy .flex[class*="gap-"]>*{margin-right:.6rem}
+html.tv-legacy .flex[class*="gap-"]>*:last-child{margin-right:0}
+html.tv-legacy .flex-col[class*="gap-"]>*{margin-right:0;margin-bottom:.6rem}
+html.tv-legacy .flex-wrap[class*="gap-"]>*{margin-bottom:.5rem}
+html.tv-legacy .aspect-\\[2\\/3\\]{position:relative;height:0;padding-top:150%}
+html.tv-legacy .aspect-\\[2\\/3\\]>img{position:absolute;top:0;left:0;width:100%;height:100%}
+html.tv-legacy .aspect-video{position:relative;height:0;padding-top:56.25%}
+html.tv-legacy .aspect-video>video,html.tv-legacy .aspect-video>iframe{position:absolute;top:0;left:0;width:100%;height:100%}
+html.tv-legacy .bg-clip-text{-webkit-background-clip:text;background-clip:text}
+html.tv-legacy .fixed.inset-0{width:100%;height:100%}
+html.tv-mode{font-size:112.5%}
+html.tv-mode :focus{outline:4px solid #22c55e !important;outline-offset:3px;box-shadow:0 0 0 6px rgba(34,197,94,.35) !important}
+html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
+`;
+
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), a[href], input:not([disabled]), select, textarea, video, [tabindex]:not([tabindex="-1"])';
+
 export default function Home() {
   const myAvatars = [
     { name: "Bebé Jefazo 1", file: "/avatares/bebe jefazo1.png" },
@@ -1140,9 +1242,8 @@ export default function Home() {
   const [isGuest, setIsGuest] = useState(true);
 
   // Perfiles
-  const [profiles, setProfiles] = useState<Profile[]>([
-    { id: "1", name: "Rey", avatar: "/avatares/bojack1.png", isKid: false }
-  ]);
+  const guestProfile: Profile = { id: "invitado", name: "Invitado", avatar: "/avatares/bojack1.png", isKid: false };
+  const [profiles, setProfiles] = useState<Profile[]>([guestProfile]);
   const [activeProfile, setActiveProfile] = useState<Profile>(profiles[0]);
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
 
@@ -1245,41 +1346,59 @@ export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
+    let cancelled = false;
+    let adminLocal: Movie[] | null = null;
     try {
-      const saved = localStorage.getItem("cineverso_custom_movies");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const merged = new Map();
-          [...defaultMovies, ...parsed].forEach(m => merged.set(m.id, m));
-          setCustomMovies(Array.from(merged.values()));
+      const isAdminDevice = localStorage.getItem("cineverso_admin_key") === ADMIN_HASH && ADMIN_HASH.length === 64;
+      if (isAdminDevice) {
+        const saved = localStorage.getItem("cineverso_custom_movies");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) adminLocal = parsed;
         }
+      } else {
+        // Visitantes: limpiar copias viejas que se guardaron antes por error
+        localStorage.removeItem("cineverso_custom_movies");
       }
     } catch (e) {
       console.error("Error cargando localStorage:", e);
     }
+
+    if (adminLocal) {
+      setCustomMovies(adminLocal);
+      setIsMounted(true);
+      return;
+    }
+
+    // Catálogo público compartido por todos los dispositivos: /public/catalogo.json
+    fetch("/catalogo.json?v=" + Date.now(), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data) && data.length > 0) setCustomMovies(data);
+      })
+      .catch(() => {})
+      .then(() => {
+        if (!cancelled) setIsMounted(true);
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (!isMounted) return;
-    try {
-      if (customMovies.length > 0) {
-        localStorage.setItem("cineverso_custom_movies", JSON.stringify(customMovies));
-      }
-    } catch (e) {
-      console.error("Error guardando en localStorage:", e);
-    }
-  }, [customMovies, isMounted]);
+
 
   useEffect(() => {
     try {
       const savedProfiles = localStorage.getItem("cineverso_profiles");
       if (savedProfiles) {
         const parsedProfiles = JSON.parse(savedProfiles);
-        if (Array.isArray(parsedProfiles) && parsedProfiles.length > 0) {
-          setProfiles(parsedProfiles);
-          setActiveProfile(parsedProfiles[0]);
+        const cleanProfiles = Array.isArray(parsedProfiles)
+          ? parsedProfiles.filter((p: Profile) => p && p.name && p.name.trim().toLowerCase() !== "rey")
+          : [];
+        if (cleanProfiles.length > 0) {
+          setProfiles(cleanProfiles);
+          setActiveProfile(cleanProfiles[0]);
+          localStorage.setItem("cineverso_profiles", JSON.stringify(cleanProfiles));
+        } else {
+          localStorage.removeItem("cineverso_profiles");
         }
       }
     } catch (e) {
@@ -1287,7 +1406,77 @@ export default function Home() {
     }
   }, []);
 
-  const isAdmin = activeProfile.name.toLowerCase() === "rey";
+  // ===== ADMIN: solo con clave =====
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminPassInput, setAdminPassInput] = useState("");
+  const [adminPassError, setAdminPassError] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cineverso_admin_key");
+      if (saved && ADMIN_HASH.length === 64 && saved === ADMIN_HASH) {
+        setIsAdmin(true);
+      }
+      if (window.location.search.indexOf("admin") !== -1 && !(saved && saved === ADMIN_HASH)) {
+        setShowAdminLogin(true);
+      }
+    } catch (e) {}
+  }, []);
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (ADMIN_HASH.length !== 64) {
+      setAdminPassError("La clave de administrador aún no está configurada.");
+      return;
+    }
+    const h = sha256(adminPassInput);
+    if (h === ADMIN_HASH) {
+      try { localStorage.setItem("cineverso_admin_key", h); } catch (err) {}
+      setIsAdmin(true);
+      setShowAdminLogin(false);
+      setAdminPassInput("");
+      setAdminPassError("");
+      setActiveTab("admin");
+    } else {
+      setAdminPassError("Clave incorrecta.");
+    }
+  };
+
+  useEffect(() => {
+    if (!isMounted || !isAdmin) return;
+    try {
+      if (customMovies.length > 0) {
+        localStorage.setItem("cineverso_custom_movies", JSON.stringify(customMovies));
+      }
+    } catch (e) {
+      console.error("Error guardando en localStorage:", e);
+    }
+  }, [customMovies, isMounted, isAdmin]);
+
+  const handleAdminLogout = () => {
+    try { localStorage.removeItem("cineverso_admin_key"); } catch (err) {}
+    setIsAdmin(false);
+    setActiveTab("inicio");
+  };
+
+  const handleExportCatalog = () => {
+    try {
+      const blob = new Blob([JSON.stringify(customMovies, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "catalogo.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setToastMessage("catalogo.json descargado. Publícalo con el comando de la terminal.");
+      setTimeout(() => setToastMessage(""), 5000);
+    } catch (err) {
+      alert("No se pudo exportar el catálogo.");
+    }
+  };
 
   const heroMovie: Movie = customMovies[2] || customMovies[0] || {
     id: 101,
@@ -1305,6 +1494,309 @@ export default function Home() {
     director: "Carles Torrens",
     production: "Nostromo Pictures",
     originalLanguage: "ES"
+  };
+
+
+  // ================================================================
+  // COMPATIBILIDAD SMART TV (control remoto, tecla Atrás, CSS antiguo)
+  // ================================================================
+  const playerRef = useRef<HTMLVideoElement | null>(null);
+  const [playerError, setPlayerError] = useState("");
+  const [usingBackup, setUsingBackup] = useState(false);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
+
+  // Detecta navegador antiguo y Smart TV
+  useEffect(() => {
+    const html = document.documentElement;
+    let legacy = false;
+    try {
+      const w = window as any;
+      legacy = !(w.CSS && w.CSS.supports) || !w.CSS.supports("aspect-ratio", "1 / 1") || !w.CSS.supports("inset", "0");
+    } catch (e) {
+      legacy = true;
+    }
+    if (legacy) html.classList.add("tv-legacy");
+    let savedTv: string | null = null;
+    try { savedTv = localStorage.getItem("cineverso_tv_mode"); } catch (e) {}
+    if (savedTv === "1" || (savedTv === null && isSmartTvBrowser())) setTvMode(true);
+  }, []);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    if (tvMode) html.classList.add("tv-mode");
+    else html.classList.remove("tv-mode");
+    try { localStorage.setItem("cineverso_tv_mode", tvMode ? "1" : "0"); } catch (e) {}
+  }, [tvMode]);
+
+  // Estado actual para el manejador de teclas (sin volver a registrarlo)
+  const keyStateRef = useRef({ selectedMovie, isPlaying, showAddProfileModal, showAdminLogin, activeTab, tvMode });
+  keyStateRef.current = { selectedMovie, isPlaying, showAddProfileModal, showAdminLogin, activeTab, tvMode };
+
+  useEffect(() => {
+    const getScope = (): ParentNode => {
+      const modals = document.querySelectorAll("[data-tv-modal]");
+      return modals.length ? modals[modals.length - 1] : document;
+    };
+    const isVisible = (el: HTMLElement) => {
+      if (!el.getClientRects || !el.getClientRects().length) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    const getFocusable = (): HTMLElement[] => {
+      const list = getScope().querySelectorAll(FOCUSABLE_SELECTOR);
+      const out: HTMLElement[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const el = list[i] as HTMLElement;
+        if (isVisible(el)) out.push(el);
+      }
+      return out;
+    };
+    const focusEl = (el: HTMLElement) => {
+      el.focus();
+      try {
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+      } catch (e) {
+        el.scrollIntoView(false);
+      }
+    };
+    const moveFocus = (dir: "up" | "down" | "left" | "right"): boolean => {
+      const items = getFocusable();
+      if (!items.length) return false;
+      const current = document.activeElement as HTMLElement | null;
+      if (!current || current === document.body || items.indexOf(current) === -1) {
+        focusEl(items[0]);
+        return true;
+      }
+      const c = current.getBoundingClientRect();
+      const cx = c.left + c.width / 2;
+      const cy = c.top + c.height / 2;
+      let best: HTMLElement | null = null;
+      let bestScore = Infinity;
+      for (let i = 0; i < items.length; i++) {
+        const el = items[i];
+        if (el === current || el.contains(current) || current.contains(el)) continue;
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        let primary = 0;
+        let secondary = 0;
+        if (dir === "right" || dir === "left") {
+          primary = dir === "right" ? x - cx : cx - x;
+          if (primary <= 1) continue;
+          const overlapV = r.top < c.bottom && r.bottom > c.top;
+          secondary = overlapV ? 0 : Math.abs(y - cy) * 3;
+        } else {
+          primary = dir === "down" ? y - cy : cy - y;
+          if (primary <= 1) continue;
+          const overlapH = r.left < c.right && r.right > c.left;
+          secondary = Math.abs(x - cx) * (overlapH ? 0.3 : 1.5);
+        }
+        const score = primary + secondary;
+        if (score < bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      }
+      if (best) {
+        focusEl(best);
+        return true;
+      }
+      if (dir === "up") window.scrollTo(0, 0);
+      return false;
+    };
+
+    const BACK_CODES = [27, 461, 10009, 166];
+    const onKey = (e: KeyboardEvent) => {
+      const code = e.keyCode || (e as any).which || 0;
+      const key = e.key || "";
+      const target = e.target as HTMLElement;
+      const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
+      const typing = tag === "input" || tag === "textarea" || tag === "select";
+      const st = keyStateRef.current;
+      const tvNav = st.tvMode || document.documentElement.classList.contains("tv-legacy");
+
+      // Tecla ATRÁS del control (Samsung, LG, Android TV, Escape, Retroceso)
+      const isBack =
+        BACK_CODES.indexOf(code) !== -1 ||
+        key === "GoBack" || key === "BrowserBack" || key === "Back" || key === "Escape" ||
+        (code === 8 && tvNav && !typing);
+      if (isBack) {
+        if (st.isPlaying) setIsPlaying(false);
+        else if (st.selectedMovie) setSelectedMovie(null);
+        else if (st.showAdminLogin) setShowAdminLogin(false);
+        else if (st.showAddProfileModal) setShowAddProfileModal(false);
+        else if (st.activeTab !== "inicio") setActiveTab("inicio");
+        else return; // en Inicio deja que la TV salga del navegador
+        e.preventDefault();
+        return;
+      }
+
+      // Teclas multimedia del control
+      const video = playerRef.current || videoRef.current;
+      if (video) {
+        if (code === 415 || code === 19 || code === 10252 || code === 179 || key === "MediaPlayPause" || key === "MediaPlay" || key === "MediaPause") {
+          if (video.paused) { const p = video.play(); if (p && p.catch) p.catch(() => {}); } else video.pause();
+          e.preventDefault();
+          return;
+        }
+        if (code === 417 || code === 228 || key === "MediaFastForward") {
+          try { video.currentTime = video.currentTime + 10; } catch (err) {}
+          e.preventDefault();
+          return;
+        }
+        if (code === 412 || code === 227 || key === "MediaRewind") {
+          try { video.currentTime = Math.max(0, video.currentTime - 10); } catch (err) {}
+          e.preventDefault();
+          return;
+        }
+      }
+
+      // OK / Enter
+      if (code === 13 || key === "Enter") {
+        if (tag === "video") {
+          const v = target as HTMLVideoElement;
+          if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } else v.pause();
+          e.preventDefault();
+          return;
+        }
+        if (!typing && tag !== "button" && tag !== "a" && target && target.getAttribute && target.getAttribute("tabindex") !== null) {
+          e.preventDefault();
+          target.click();
+        }
+        return;
+      }
+
+      // Flechas
+      let dir: "up" | "down" | "left" | "right" | null = null;
+      if (code === 37 || key === "ArrowLeft" || key === "Left") dir = "left";
+      else if (code === 38 || key === "ArrowUp" || key === "Up") dir = "up";
+      else if (code === 39 || key === "ArrowRight" || key === "Right") dir = "right";
+      else if (code === 40 || key === "ArrowDown" || key === "Down") dir = "down";
+      if (!dir || !tvNav) return;
+      if (tag === "select") return;
+      if (typing && (dir === "left" || dir === "right")) return;
+      if (tag === "video" && (dir === "left" || dir === "right")) {
+        const v = target as HTMLVideoElement;
+        try { v.currentTime = Math.max(0, v.currentTime + (dir === "right" ? 10 : -10)); } catch (err) {}
+        e.preventDefault();
+        return;
+      }
+      if (moveFocus(dir)) e.preventDefault();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Al abrir la ficha o el reproductor, el foco va al botón principal; al cerrar, vuelve donde estaba
+  useEffect(() => {
+    if (selectedMovie) {
+      if (!lastFocusRef.current) lastFocusRef.current = document.activeElement as HTMLElement;
+      const t = setTimeout(() => {
+        const modals = document.querySelectorAll("[data-tv-modal]");
+        const scope = modals.length ? modals[modals.length - 1] : document;
+        const el = scope.querySelector("[data-autofocus]") as HTMLElement | null;
+        if (el) el.focus();
+      }, 80);
+      return () => clearTimeout(t);
+    } else if (lastFocusRef.current) {
+      const el = lastFocusRef.current;
+      lastFocusRef.current = null;
+      setTimeout(() => { try { el.focus(); } catch (e) {} }, 50);
+    }
+  }, [selectedMovie, isPlaying]);
+
+  // En TV, al entrar a Inicio el foco empieza en "Reproducir"
+  useEffect(() => {
+    if (!tvMode || activeTab !== "inicio" || selectedMovie) return;
+    const t = setTimeout(() => {
+      const a = document.activeElement;
+      if (!a || a === document.body) {
+        const el = document.querySelector("[data-autofocus-home]") as HTMLElement | null;
+        if (el) el.focus();
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [tvMode, activeTab, selectedMovie]);
+
+  // Reproductor de películas: MP4 directo o HLS (.m3u8), autoplay con respaldo en silencio
+  useEffect(() => {
+    if (!isPlaying || !selectedMovie) return;
+    const video = playerRef.current;
+    if (!video) return;
+    setPlayerError("");
+    const src = usingBackup && selectedMovie.backupVideoUrl ? selectedMovie.backupVideoUrl : selectedMovie.videoUrl || heroMovie.videoUrl;
+    let hls: Hls | null = null;
+    const tryPlay = () => {
+      const p = video.play();
+      if (p && p.catch) {
+        p.catch(() => {
+          video.muted = true;
+          const p2 = video.play();
+          if (p2 && p2.catch) p2.catch(() => {});
+        });
+      }
+    };
+    const isHlsSrc = /\.m3u8(\?|$)/i.test(src);
+    if (isHlsSrc && !video.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(src);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+      hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
+        if (data && data.fatal) setPlayerError("No se pudo cargar este video en este dispositivo.");
+      });
+    } else {
+      video.src = src;
+      video.load();
+      tryPlay();
+    }
+    return () => {
+      if (hls) hls.destroy();
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch (e) {}
+    };
+  }, [isPlaying, selectedMovie, usingBackup]);
+
+  const startPlayback = (movie: Movie) => {
+    setUsingBackup(false);
+    setPlayerError("");
+    setSelectedMovie(movie);
+    setIsPlaying(true);
+  };
+
+  const requestFullscreenSafe = () => {
+    const el: any = playerRef.current || document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (fn) {
+      try {
+        const r = fn.call(el);
+        if (r && r.catch) r.catch(() => {});
+      } catch (e) {}
+    }
+  };
+
+  const copyLinkSafe = () => {
+    const url = window.location.href;
+    const done = () => {
+      setToastMessage("¡Enlace copiado al portapapeles!");
+      setTimeout(() => setToastMessage(""), 3000);
+    };
+    try {
+      const nav: any = navigator;
+      if (nav.clipboard && nav.clipboard.writeText) {
+        nav.clipboard.writeText(url).then(done).catch(() => {
+          setToastMessage(url);
+          setTimeout(() => setToastMessage(""), 6000);
+        });
+        return;
+      }
+    } catch (e) {}
+    setToastMessage(url);
+    setTimeout(() => setToastMessage(""), 6000);
   };
 
   const handleSaveMovie = (e: React.FormEvent) => {
@@ -1472,10 +1964,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
+      <style dangerouslySetInnerHTML={{ __html: LEGACY_CSS }} />
       {/* Navegación Superior Optimizada para Smart TV */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 md:h-auto md:py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
         <div className="flex items-center gap-4 sm:gap-6 min-w-0">
-          <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1">
+          <div onClick={() => setActiveTab("inicio")} tabIndex={0} role="button" aria-label="Inicio" className="flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1">
             <span className="shrink-0 bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
             <span className="whitespace-nowrap text-base sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
               Cineverso Magico <Sparkle className="hidden sm:block w-4 h-4 text-emerald-400 animate-pulse" />
@@ -1569,7 +2062,8 @@ export default function Home() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <button 
-                  onClick={() => setSelectedMovie(heroMovie)}
+                  data-autofocus-home
+                  onClick={() => startPlayback(heroMovie)}
                   className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base shadow-lg"
                 >
                   <Play className="w-5 h-5 fill-black" /> Reproducir
@@ -1595,7 +2089,7 @@ export default function Home() {
             {customMovies.length > 0 && (
               <div>
                 <h2 className="text-lg sm:text-2xl font-bold mb-4 text-white flex items-center gap-2">
-                  <span>Tus Películas Subidas</span>
+                  <span>{isAdmin ? "Tus Películas Subidas" : "Recién agregadas"}</span>
                   <span className="text-xs font-normal text-gray-400">({customMovies.length})</span>
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -1886,6 +2380,9 @@ export default function Home() {
                   <p className="text-xs text-gray-400">
                     {editingMovieId ? "Modifica los campos necesarios para actualizar el título." : "Añade tus enlaces de video y películas directamente al catálogo."}
                   </p>
+                  <p className="text-[11px] text-yellow-400 mt-1">
+                    Los cambios se guardan en este navegador. Para que TODOS los vean: pulsa "Exportar catálogo" y ejecuta el comando de publicar en la terminal.
+                  </p>
                 </div>
               </div>
               {editingMovieId && (
@@ -1987,12 +2484,23 @@ export default function Home() {
               <h3 className="text-lg font-bold text-white">
                 <span>Gestión del Catálogo ({customMovies.length} títulos)</span>
               </h3>
+              <button
+                onClick={handleExportCatalog}
+                className="flex items-center justify-center gap-1.5 bg-green-500 text-black hover:bg-green-400 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <Download className="w-3.5 h-3.5" /> Exportar catálogo
+              </button>
+              <button
+                onClick={handleAdminLogout}
+                className="flex items-center justify-center gap-1.5 bg-[#181818] text-gray-300 hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-800 transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Salir de admin
+              </button>
               <button 
                 onClick={() => {
                   if (confirm("¿Restaurar catálogo por defecto y limpiar caché corrupta?")) {
                     localStorage.removeItem("cineverso_custom_movies");
-                    setCustomMovies(defaultMovies);
-                    alert("Catálogo restaurado correctamente.");
+                    alert("Catálogo restaurado. Se recargará el catálogo publicado.");
                     window.location.reload();
                   }
                 }}
@@ -2175,6 +2683,9 @@ export default function Home() {
             <div className="bg-[#0f0f0f] p-4 rounded-2xl border border-gray-900 space-y-4">
               <div 
                 onClick={() => setTvMode(!tvMode)}
+                tabIndex={0}
+                role="switch"
+                aria-checked={tvMode}
                 className="flex items-center justify-between cursor-pointer select-none hover:bg-[#151515] p-2 rounded-xl transition"
               >
                 <div className="flex items-center gap-3">
@@ -2186,8 +2697,10 @@ export default function Home() {
                 </div>
                 <input 
                   type="checkbox" 
+                  tabIndex={-1}
                   checked={tvMode} 
                   onChange={(e) => setTvMode(e.target.checked)} 
+                  onClick={(e) => e.stopPropagation()}
                   className="w-5 h-5 accent-green-500 cursor-pointer"
                 />
               </div>
@@ -2240,7 +2753,7 @@ export default function Home() {
 
       {/* MODAL DE INFORMACIÓN DE PELÍCULA */}
       {selectedMovie && !isPlaying && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto">
+        <div data-tv-modal className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto">
           <div className="bg-[#141414] w-full min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
             <button 
               onClick={() => setSelectedMovie(null)} 
@@ -2277,7 +2790,8 @@ export default function Home() {
 
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button 
-                    onClick={() => setIsPlaying(true)}
+                    data-autofocus
+                    onClick={() => startPlayback(selectedMovie)}
                     className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
                     <Play className="w-5 h-5 fill-black" /> Reproducir
@@ -2298,11 +2812,7 @@ export default function Home() {
                     <Plus className="w-5 h-5" /> Mi Lista
                   </button>
                   <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(window.location.href);
-                      setToastMessage("¡Enlace copiado al portapapeles!");
-                      setTimeout(() => setToastMessage(""), 3000);
-                    }}
+                    onClick={copyLinkSafe}
                     className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
                     <Share2 className="w-4 h-4" /> Compartir
@@ -2394,7 +2904,7 @@ export default function Home() {
 
       {/* REPRODUCTOR FLOTANTE */}
       {selectedMovie && isPlaying && (
-        <div className="fixed inset-0 bg-black z-50 flex flex-col justify-between overflow-x-hidden">
+        <div data-tv-modal className="fixed inset-0 bg-black z-50 flex flex-col justify-between overflow-x-hidden">
           <div className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent z-20">
             <button 
               onClick={() => setIsPlaying(false)}
@@ -2406,15 +2916,31 @@ export default function Home() {
 
           <div className="flex-1 flex items-center justify-center relative bg-black overflow-hidden">
             <video 
+              ref={playerRef}
+              data-autofocus
+              tabIndex={0}
               controls 
               autoPlay
               playsInline
+              preload="auto"
               controlsList="nodownload"
-              className="w-full h-full object-contain"
-              src={selectedMovie.videoUrl || heroMovie.videoUrl}
+              className="w-full h-full object-contain focus:outline-none"
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+              onError={() => {
+                if (!usingBackup && selectedMovie.backupVideoUrl) {
+                  setUsingBackup(true);
+                } else {
+                  setPlayerError("Este video no se puede reproducir en este dispositivo. Usa MP4 (video H.264 + audio AAC) con enlace https directo.");
+                }
+              }}
             >
               Tu navegador no soporta el reproductor.
             </video>
+            {playerError && (
+              <div style={{ position: "absolute", left: 0, right: 0, bottom: 24, textAlign: "center", padding: "0 16px" }}>
+                <span className="inline-block bg-red-950/90 border border-red-800 text-red-200 text-sm px-4 py-3 rounded-xl">{playerError}</span>
+              </div>
+            )}
           </div>
 
           <div className="p-3 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 z-20">
@@ -2426,12 +2952,7 @@ export default function Home() {
                 <ArrowLeft className="w-4 h-4 text-green-400" /> Anterior
               </button>
               <button 
-                onClick={() => {
-                  const elem = document.documentElement;
-                  if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(() => {});
-                  }
-                }}
+                onClick={requestFullscreenSafe}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
@@ -2529,9 +3050,38 @@ export default function Home() {
         </div>
       )}
 
+      {/* MODAL LOGIN ADMINISTRADOR (se abre con ?admin en la URL) */}
+      {showAdminLogin && !isAdmin && (
+        <div data-tv-modal className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleAdminLogin} className="bg-[#0c0c0c] border border-green-500/30 w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-white">
+              <Lock className="w-5 h-5 text-green-400" />
+              <h3 className="text-lg font-bold">Acceso de administrador</h3>
+            </div>
+            <input
+              type="password"
+              autoFocus
+              placeholder="Clave"
+              value={adminPassInput}
+              onChange={(e) => { setAdminPassInput(e.target.value); if (adminPassError) setAdminPassError(""); }}
+              className="w-full bg-[#121212] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            {adminPassError && <p className="text-xs text-red-500 font-bold">{adminPassError}</p>}
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                Cancelar
+              </button>
+              <button type="submit" className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                Entrar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* MODAL CREAR PERFIL */}
       {showAddProfileModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div data-tv-modal className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0c0c0c] border border-emerald-500/30 w-full max-w-lg rounded-2xl p-6 relative space-y-6 shadow-2xl">
             <button onClick={() => { setShowAddProfileModal(false); setUsernameError(""); }} className="absolute top-4 right-4 text-gray-400 hover:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded p-1">
               <X className="w-5 h-5" />
