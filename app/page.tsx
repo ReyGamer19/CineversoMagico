@@ -34,6 +34,8 @@ interface Movie {
   director?: string;
   production?: string;
   originalLanguage?: string;
+  ageRating?: string;
+  trailerUrl?: string;
 }
 
 interface ProgressItem {
@@ -132,6 +134,17 @@ function isSmartTvBrowser(): boolean {
 // "tv-legacy" en <html>, así que NO cambia nada en celulares ni PCs modernos.
 const LEGACY_RULES = `
 html{color-scheme:dark}
+.cv-splash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:#050505;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .45s;animation:cvHide .3s 5s forwards}
+.cv-splash-logo{width:132px;height:132px;border-radius:30px;animation:cvPop .9s cubic-bezier(.2,.9,.3,1.3) both,cvGlow 2s ease-in-out .9s infinite}
+.cv-splash-name{margin-top:22px;font-family:inherit;font-weight:900;font-size:22px;letter-spacing:.5px;background:linear-gradient(90deg,#4ade80,#34d399,#2dd4bf);-webkit-background-clip:text;background-clip:text;color:transparent;animation:cvFade .6s .35s both}
+.cv-splash-bar{margin-top:22px;width:160px;height:3px;border-radius:3px;background:#1f2937;overflow:hidden}
+.cv-splash-bar i{display:block;height:100%;background:#22c55e;animation:cvBar 1.1s ease-out both}
+@keyframes cvPop{0%{transform:scale(.55);opacity:0}70%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}
+@keyframes cvGlow{0%,100%{box-shadow:0 0 0 rgba(34,197,94,0)}50%{box-shadow:0 0 48px rgba(34,197,94,.45)}}
+@keyframes cvFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes cvBar{from{width:0}to{width:100%}}
+@keyframes cvHide{to{opacity:0;visibility:hidden}}
+@keyframes cvPreview{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
 html,body{background:#050505;margin:0}
 html.tv-mode,html.tv-mode body{scrollbar-width:none;-ms-overflow-style:none;overflow-x:hidden}
 html.tv-mode ::-webkit-scrollbar,html.tv-legacy ::-webkit-scrollbar{width:0 !important;height:0 !important;display:none;background:transparent}
@@ -1308,6 +1321,13 @@ export default function Home() {
   const [newMovieType, setNewMovieType] = useState<"pelicula" | "serie">("pelicula");
   const [newMovieImage, setNewMovieImage] = useState("");
   const [newMovieVideoUrl, setNewMovieVideoUrl] = useState("");
+  const [newMovieYear, setNewMovieYear] = useState("");
+  const [newMovieDuration, setNewMovieDuration] = useState("");
+  const [newMovieAge, setNewMovieAge] = useState("");
+  const [newMovieDirector, setNewMovieDirector] = useState("");
+  const [newMovieCast, setNewMovieCast] = useState("");
+  const [newMovieTrailer, setNewMovieTrailer] = useState("");
+  const [detectingDuration, setDetectingDuration] = useState(false);
   const [editingMovieId, setEditingMovieId] = useState<number | string | null>(null);
 
   // Catálogo Base por defecto
@@ -1746,6 +1766,9 @@ export default function Home() {
     const t = setInterval(() => setHeroIndex((i) => (i + 1) % heroList.length), 9000);
     return () => clearInterval(t);
   }, [heroList.length, heroPaused]);
+  const [heroTrailerOn, setHeroTrailerOn] = useState(false);
+  const [heroTrailerReady, setHeroTrailerReady] = useState(false);
+  const [heroMuted, setHeroMuted] = useState(true);
   const heroMovie: Movie = heroList[heroIndex % Math.max(1, heroList.length)] || customMovies[0] || {
     id: 101,
     title: "APOCALYPSE Z",
@@ -1772,6 +1795,18 @@ export default function Home() {
   const [playerError, setPlayerError] = useState("");
   const [usingBackup, setUsingBackup] = useState(false);
   const lastFocusRef = useRef<HTMLElement | null>(null);
+
+  // Pantalla de carga con el logo CV (una vez por sesión)
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashFade, setSplashFade] = useState(false);
+  useEffect(() => {
+    let seen = false;
+    try { seen = sessionStorage.getItem("cv_splash") === "1"; sessionStorage.setItem("cv_splash", "1"); } catch (e) {}
+    const wait = seen ? 0 : 1300;
+    const t1 = setTimeout(() => setSplashFade(true), wait);
+    const t2 = setTimeout(() => setShowSplash(false), wait + 450);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
 
   // Avisa al guardián de TV que la app arrancó bien
   useEffect(() => {
@@ -2295,6 +2330,31 @@ export default function Home() {
     setTimeout(() => setToastMessage(""), 6000);
   };
 
+  // YouTube: saca el ID de cualquier formato de enlace
+  const youtubeId = (url?: string): string => {
+    if (!url) return "";
+    const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/))([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : "";
+  };
+
+  // El tráiler arranca 2 s después de mostrar la portada (no en TVs con navegador antiguo)
+  useEffect(() => {
+    setHeroTrailerOn(false);
+    setHeroTrailerReady(false);
+    if (!heroMovie.trailerUrl || activeTab !== "inicio" || selectedMovie) return;
+    if (document.documentElement.classList.contains("tv-legacy")) return;
+    const t = setTimeout(() => setHeroTrailerOn(true), 2000);
+    // YouTube no avisa cuando termina: pasamos a la siguiente a los 45 s
+    const t2 = youtubeId(heroMovie.trailerUrl) ? setTimeout(() => { setHeroTrailerOn(false); setHeroIndex((i) => i + 1); }, 47000) : null;
+    return () => { clearTimeout(t); if (t2) clearTimeout(t2); };
+  }, [heroMovie.id, heroMovie.trailerUrl, activeTab, selectedMovie]);
+
+  // Mientras suena el tráiler, la portada no cambia sola
+  useEffect(() => {
+    if (heroTrailerOn) setHeroPaused(true);
+    else setHeroPaused(false);
+  }, [heroTrailerOn]);
+
   const handleSaveMovie = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
@@ -2321,7 +2381,14 @@ export default function Home() {
           desc: newMovieDesc || m.desc,
           bgImage: newMovieImage || m.bgImage,
           img: newMovieImage || m.img,
-          videoUrl: newMovieVideoUrl.trim()
+          videoUrl: newMovieVideoUrl.trim(),
+          year: newMovieYear.trim() || m.year,
+          duration: newMovieDuration.trim() || undefined,
+          ageRating: newMovieAge || undefined,
+          director: newMovieDirector.trim() || undefined,
+          cast: newMovieCast.trim() || undefined,
+          trailerUrl: newMovieTrailer.trim() || undefined,
+          genres: m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
         };
         saveChange({ type: "upsert", movie: updated }, "¡Contenido actualizado!");
       }
@@ -2331,28 +2398,67 @@ export default function Home() {
         id: Date.now(),
         title: newMovieTitle,
         rating: "8.5",
-        year: "2026",
+        year: newMovieYear.trim() || String(new Date().getFullYear()),
         tag: newMovieCategory,
         type: newMovieType,
         desc: newMovieDesc || "Contenido añadido desde el panel de administración.",
         bgImage: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         img: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         videoUrl: newMovieVideoUrl.trim(),
-        duration: "1 h 50 min",
+        duration: newMovieDuration.trim() || undefined,
         genres: [newMovieCategory],
-        cast: "Elenco Estelar",
-        director: "Director Principal",
-        production: "Cineverso Studio",
+        cast: newMovieCast.trim() || undefined,
+        director: newMovieDirector.trim() || undefined,
+        ageRating: newMovieAge || undefined,
+        trailerUrl: newMovieTrailer.trim() || undefined,
         originalLanguage: "ES"
       };
 
       saveChange({ type: "upsert", movie: createdMovie }, "¡Película agregada!");
     }
 
+    resetMovieForm();
+  };
+
+  const resetMovieForm = () => {
     setNewMovieTitle("");
     setNewMovieDesc("");
     setNewMovieImage("");
     setNewMovieVideoUrl("");
+    setNewMovieYear("");
+    setNewMovieDuration("");
+    setNewMovieAge("");
+    setNewMovieDirector("");
+    setNewMovieCast("");
+    setNewMovieTrailer("");
+  };
+
+  // Lee la duración real del archivo de video (sin descargarlo entero)
+  const detectDuration = () => {
+    const url = newMovieVideoUrl.trim();
+    if (!url) { showToast("Primero pega el enlace del video."); return; }
+    setDetectingDuration(true);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.muted = true;
+    let done = false;
+    const finish = (msg?: string) => {
+      if (done) return;
+      done = true;
+      setDetectingDuration(false);
+      try { v.removeAttribute("src"); v.load(); } catch (e) {}
+      if (msg) showToast(msg, 5000);
+    };
+    v.onloadedmetadata = () => {
+      const secs = Math.round(v.duration || 0);
+      if (!secs || !isFinite(secs)) { finish("No se pudo leer la duración de ese video."); return; }
+      const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
+      setNewMovieDuration(h ? h + " h " + m + " min" : m + " min");
+      finish("Duración detectada.");
+    };
+    v.onerror = () => finish("No se pudo abrir el video para leer su duración.");
+    setTimeout(() => finish("El video tardó demasiado en responder."), 20000);
+    v.src = url;
   };
 
   const handleEditClick = (movie: Movie) => {
@@ -2363,6 +2469,12 @@ export default function Home() {
     setNewMovieType(movie.type || "pelicula");
     setNewMovieImage(movie.bgImage || "");
     setNewMovieVideoUrl(movie.videoUrl || "");
+    setNewMovieYear(movie.year || "");
+    setNewMovieDuration(movie.duration || "");
+    setNewMovieAge(movie.ageRating || "");
+    setNewMovieDirector(movie.director || "");
+    setNewMovieCast(movie.cast || "");
+    setNewMovieTrailer(movie.trailerUrl || "");
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -2371,10 +2483,7 @@ export default function Home() {
       saveChange({ type: "delete", id }, "Contenido eliminado.");
       if (editingMovieId === id) {
         setEditingMovieId(null);
-        setNewMovieTitle("");
-        setNewMovieDesc("");
-        setNewMovieImage("");
-        setNewMovieVideoUrl("");
+        resetMovieForm();
       }
     }
   };
@@ -2624,6 +2733,36 @@ export default function Home() {
       .map((x) => x.m);
   })();
 
+  // Vista previa flotante (solo con mouse; en TV y celular se abre la ficha normal)
+  const [hoverCapable, setHoverCapable] = useState(false);
+  const [preview, setPreview] = useState<{ m: Movie; left: number; top: number } | null>(null);
+  const previewTimer = useRef<any>(null);
+  const previewHover = useRef(false);
+  useEffect(() => {
+    try { setHoverCapable(!!window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches); } catch (e) {}
+    const close = () => setPreview(null);
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
+  }, []);
+  useEffect(() => { if (selectedMovie) setPreview(null); }, [selectedMovie]);
+  const openPreview = (m: Movie, el: HTMLElement) => {
+    if (!hoverCapable || tvMode) return;
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      const W = 320;
+      let left = r.left + r.width / 2 - W / 2;
+      left = Math.max(12, Math.min(left, window.innerWidth - W - 12));
+      let top = r.top - 24;
+      top = Math.max(70, Math.min(top, window.innerHeight - 380));
+      setPreview({ m, left, top });
+    }, 450);
+  };
+  const leaveCard = () => {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    setTimeout(() => { if (!previewHover.current) setPreview(null); }, 150);
+  };
+
   const surpriseMe = () => {
     if (!customMovies.length) return;
     const m = customMovies[Math.floor(Math.random() * customMovies.length)];
@@ -2703,6 +2842,48 @@ export default function Home() {
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
       <script dangerouslySetInnerHTML={{ __html: TV_GUARD_JS }} />
       <style dangerouslySetInnerHTML={{ __html: LEGACY_CSS }} />
+      {showSplash && (
+        <div className="cv-splash" style={{ opacity: splashFade ? 0 : 1 }} aria-hidden="true">
+          <img src="/icons/icon-512.png" alt="" className="cv-splash-logo" />
+          <div className="cv-splash-name">Cineverso Mágico</div>
+          <div className="cv-splash-bar"><i /></div>
+        </div>
+      )}
+      {preview && (
+        <div
+          onMouseEnter={() => { previewHover.current = true; }}
+          onMouseLeave={() => { previewHover.current = false; setPreview(null); }}
+          className="fixed z-[45] bg-[#181818] rounded-xl overflow-hidden shadow-2xl border border-gray-800"
+          style={{ left: preview.left, top: preview.top, width: 320, animation: "cvPreview .18s ease-out" }}
+        >
+          <div className="relative cursor-pointer" style={{ height: 180 }} onClick={() => { setSelectedMovie(preview.m); setPreview(null); }}>
+            <img src={preview.m.bgImage} alt={preview.m.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#181818] via-transparent to-transparent" />
+            <p className="absolute left-3 bottom-2 right-3 text-base font-black text-white truncate">{preview.m.title}</p>
+          </div>
+          <div className="p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <button onClick={() => { const m = preview.m; setPreview(null); startPlayback(m); }} aria-label="Reproducir" className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center cursor-pointer hover:bg-gray-200">
+                <Play className="w-4 h-4 fill-black ml-0.5" />
+              </button>
+              <button onClick={() => toggleMyList(preview.m)} aria-label="Mi Lista" className="w-9 h-9 rounded-full border border-gray-500 text-white flex items-center justify-center cursor-pointer hover:border-white">
+                {inMyList(preview.m) ? <Check className="w-4 h-4 text-green-400" /> : <Plus className="w-4 h-4" />}
+              </button>
+              <button onClick={() => { setSelectedMovie(preview.m); setPreview(null); }} aria-label="Más información" className="ml-auto w-9 h-9 rounded-full border border-gray-500 text-white flex items-center justify-center cursor-pointer hover:border-white">
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold flex-wrap">
+              <span className="text-green-400">★ {preview.m.rating}</span>
+              <span className="text-gray-300">{preview.m.year}</span>
+              {preview.m.ageRating && <span className="border border-gray-500 text-gray-200 px-1 rounded">{preview.m.ageRating}</span>}
+              {preview.m.duration && <span className="text-gray-300">{preview.m.duration}</span>}
+            </div>
+            <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">{preview.m.desc}</p>
+            <p className="text-[11px] text-gray-300">{(preview.m.genres && preview.m.genres.length ? preview.m.genres : [preview.m.tag]).join(" · ")}</p>
+          </div>
+        </div>
+      )}
       {/* Navegación Superior Optimizada para Smart TV */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 md:h-auto md:py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
         <div className="flex items-center gap-4 sm:gap-6 min-w-0">
@@ -2787,6 +2968,8 @@ export default function Home() {
           <div
             key={key}
             onClick={() => setSelectedMovie(m)}
+            onMouseEnter={(e) => openPreview(m, e.currentTarget)}
+            onMouseLeave={leaveCard}
             tabIndex={0}
             className="group shrink-0 cursor-pointer rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500"
             style={{ width: 160 }}
@@ -2825,8 +3008,35 @@ export default function Home() {
               className="relative w-full bg-cover bg-center flex items-end overflow-hidden"
               style={{ backgroundImage: `url(${heroMovie.bgImage})`, minHeight: "68vh" }}
               onMouseEnter={() => setHeroPaused(true)}
-              onMouseLeave={() => setHeroPaused(false)}
+              onMouseLeave={() => { if (!heroTrailerOn) setHeroPaused(false); }}
             >
+              {heroTrailerOn && heroMovie.trailerUrl && (
+                youtubeId(heroMovie.trailerUrl) ? (
+                  <iframe
+                    key={"yt-" + heroMovie.id}
+                    src={"https://www.youtube.com/embed/" + youtubeId(heroMovie.trailerUrl) + "?autoplay=1&mute=1&controls=0&loop=1&playlist=" + youtubeId(heroMovie.trailerUrl) + "&modestbranding=1&playsinline=1&rel=0&showinfo=0&iv_load_policy=3"}
+                    title={"Tráiler de " + heroMovie.title}
+                    allow="autoplay; encrypted-media"
+                    tabIndex={-1}
+                    onLoad={() => setTimeout(() => setHeroTrailerReady(true), 800)}
+                    style={{ position: "absolute", top: "50%", left: "50%", width: "177.78vh", minWidth: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.15)", border: 0, pointerEvents: "none", opacity: heroTrailerReady ? 1 : 0, transition: "opacity .8s" }}
+                  />
+                ) : (
+                  <video
+                    key={"tr-" + heroMovie.id}
+                    src={heroMovie.trailerUrl}
+                    autoPlay
+                    muted={heroMuted}
+                    playsInline
+                    preload="auto"
+                    tabIndex={-1}
+                    onPlaying={() => setHeroTrailerReady(true)}
+                    onEnded={() => { setHeroTrailerOn(false); setHeroIndex((i) => i + 1); }}
+                    onError={() => setHeroTrailerOn(false)}
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover", opacity: heroTrailerReady ? 1 : 0, transition: "opacity .8s" }}
+                  />
+                )
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/60" />
               <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/60 to-transparent" />
               <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-3xl w-full pb-14 pt-10">
@@ -2837,10 +3047,11 @@ export default function Home() {
                 <div className="flex items-center gap-3 my-3 sm:my-4 text-xs sm:text-sm font-semibold flex-wrap">
                   <span className="text-green-400 font-bold">★ {heroMovie.rating}</span>
                   <span className="text-gray-300">{heroMovie.year}</span>
-                  <span className="text-gray-300">{heroMovie.duration}</span>
+                  {heroMovie.ageRating && <span className="border border-gray-400 text-gray-200 px-1.5 rounded text-[11px] font-bold">{heroMovie.ageRating}</span>}
+                  {heroMovie.duration && <span className="text-gray-300">{heroMovie.duration}</span>}
                   <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2.5 py-0.5 rounded font-medium">{heroMovie.tag}</span>
                 </div>
-                <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed mb-6 line-clamp-3 max-w-2xl">{heroMovie.desc}</p>
+                <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed mb-6 line-clamp-3 max-w-2xl" style={{ transition: "opacity .6s", opacity: heroTrailerReady ? 0.55 : 1 }}>{heroMovie.desc}</p>
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     data-autofocus-home
@@ -2870,6 +3081,15 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+              {heroTrailerOn && heroTrailerReady && heroMovie.trailerUrl && !youtubeId(heroMovie.trailerUrl) && (
+                <button
+                  onClick={() => setHeroMuted((m) => !m)}
+                  aria-label={heroMuted ? "Activar sonido del tráiler" : "Silenciar tráiler"}
+                  className="absolute z-10 right-6 md:right-12 bottom-14 p-2.5 rounded-full border border-gray-400 bg-black/40 text-white cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                >
+                  {heroMuted ? <span className="text-xs font-bold px-1">🔇</span> : <span className="text-xs font-bold px-1">🔊</span>}
+                </button>
+              )}
               {heroList.length > 1 && (
                 <div className="absolute z-10 bottom-5 left-0 right-0 flex justify-center gap-2">
                   {heroList.map((m, i) => (
@@ -2932,6 +3152,8 @@ export default function Home() {
                         </span>
                         <div
                           onClick={() => setSelectedMovie(m)}
+                          onMouseEnter={(e) => openPreview(m, e.currentTarget)}
+                          onMouseLeave={leaveCard}
                           tabIndex={0}
                           className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
                           style={{ width: 130, height: 195 }}
@@ -3269,10 +3491,7 @@ export default function Home() {
                 <button 
                   onClick={() => {
                     setEditingMovieId(null);
-                    setNewMovieTitle("");
-                    setNewMovieDesc("");
-                    setNewMovieImage("");
-                    setNewMovieVideoUrl("");
+                    resetMovieForm();
                   }}
                   className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
@@ -3340,6 +3559,49 @@ export default function Home() {
                     className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Año</label>
+                  <input type="text" inputMode="numeric" maxLength={4} placeholder="2026" value={newMovieYear} onChange={(e) => setNewMovieYear(e.target.value.replace(/[^0-9]/g, ""))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+                <div className="col-span-2 sm:col-span-2">
+                  <label className="text-xs text-gray-400 block mb-1">Duración</label>
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="1 h 45 min" value={newMovieDuration} onChange={(e) => setNewMovieDuration(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    <button type="button" onClick={detectDuration} className="shrink-0 bg-[#181818] hover:bg-gray-800 text-gray-200 px-3 rounded-xl text-xs font-bold border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                      {detectingDuration ? "Leyendo..." : "Detectar"}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Clasificación</label>
+                  <select value={newMovieAge} onChange={(e) => setNewMovieAge(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500">
+                    <option value="">Sin indicar</option>
+                    <option value="ATP">ATP (todo público)</option>
+                    <option value="+7">+7</option>
+                    <option value="+13">+13</option>
+                    <option value="+16">+16</option>
+                    <option value="+18">+18</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Director</label>
+                  <input type="text" placeholder="Nombre del director" value={newMovieDirector} onChange={(e) => setNewMovieDirector(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Reparto</label>
+                  <input type="text" placeholder="Actor 1, Actor 2, Actor 3" value={newMovieCast} onChange={(e) => setNewMovieCast(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Tráiler (opcional: enlace MP4 o de YouTube) — se reproduce sin sonido en la portada</label>
+                <input type="url" placeholder="https://www.youtube.com/watch?v=... o https://.../trailer.mp4" value={newMovieTrailer} onChange={(e) => setNewMovieTrailer(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
 
               <div>
@@ -3705,7 +3967,8 @@ export default function Home() {
                 <div className="flex items-center gap-3 text-xs sm:text-sm font-semibold pt-1">
                   <span className="text-green-400 font-bold">★ {selectedMovie.rating}</span>
                   <span className="text-gray-300">{selectedMovie.year}</span>
-                  <span className="text-gray-300">{selectedMovie.duration || "2 h 37 min"}</span>
+                  {selectedMovie.ageRating && <span className="border border-gray-400 text-gray-200 px-1.5 rounded text-[11px] font-bold">{selectedMovie.ageRating}</span>}
+                  {selectedMovie.duration && <span className="text-gray-300">{selectedMovie.duration}</span>}
                   <span className="text-gray-300 text-xs bg-gray-800/80 px-2.5 py-0.5 rounded">{selectedMovie.genres ? selectedMovie.genres.join(", ") : selectedMovie.tag}</span>
                 </div>
 
@@ -3770,24 +4033,44 @@ export default function Home() {
                   <div className="space-y-4 text-xs sm:text-sm text-gray-400 border-l border-gray-800/80 pl-6">
                     <div>
                       <span className="text-gray-500 block mb-1">Géneros</span>
-                      <span className="text-gray-200 font-medium">{selectedMovie.genres ? selectedMovie.genres.join(", ") : selectedMovie.tag}</span>
+                      <span className="text-gray-200 font-medium">{selectedMovie.genres && selectedMovie.genres.length ? selectedMovie.genres.join(", ") : selectedMovie.tag}</span>
                     </div>
-                    <div>
-                      <span className="text-gray-500 block mb-1">Reparto</span>
-                      <span className="text-gray-200 font-medium">{selectedMovie.cast || "Hwang Jung-min, Jo In-sung, Jung Ho-yeon"}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 block mb-1">Productora</span>
-                      <span className="text-gray-200 font-medium">{selectedMovie.production || "Forged Films"}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 block mb-1">Estado</span>
-                      <span className="text-gray-200 font-medium">Estrenada</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 block mb-1">Idioma original</span>
-                      <span className="text-gray-200 font-medium uppercase">{selectedMovie.originalLanguage || "KO"}</span>
-                    </div>
+                    {selectedMovie.director && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Dirección</span>
+                        <span className="text-gray-200 font-medium">{selectedMovie.director}</span>
+                      </div>
+                    )}
+                    {selectedMovie.cast && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Reparto</span>
+                        <span className="text-gray-200 font-medium">{selectedMovie.cast}</span>
+                      </div>
+                    )}
+                    {selectedMovie.ageRating && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Clasificación</span>
+                        <span className="text-gray-200 font-medium">{selectedMovie.ageRating === "ATP" ? "Apta para todo público" : "Mayores de " + selectedMovie.ageRating.replace("+", "") + " años"}</span>
+                      </div>
+                    )}
+                    {selectedMovie.duration && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Duración</span>
+                        <span className="text-gray-200 font-medium">{selectedMovie.duration}</span>
+                      </div>
+                    )}
+                    {selectedMovie.production && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Productora</span>
+                        <span className="text-gray-200 font-medium">{selectedMovie.production}</span>
+                      </div>
+                    )}
+                    {selectedMovie.originalLanguage && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Idioma original</span>
+                        <span className="text-gray-200 font-medium uppercase">{selectedMovie.originalLanguage}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -3795,13 +4078,20 @@ export default function Home() {
               {movieModalTab === "reparto" && (
                 <div className="text-sm text-gray-300 py-4 space-y-2 max-w-6xl">
                   <p className="font-bold text-white text-base">Elenco principal:</p>
-                  <p className="text-gray-400 text-sm">{selectedMovie.cast || "Hwang Jung-min, Jo In-sung, Jung Ho-yeon, Alicia Vikander"}</p>
+                  <p className="text-gray-400 text-sm">{selectedMovie.cast || "Todavía no hay información del reparto."}</p>
+                  {selectedMovie.director && <p className="text-gray-400 text-sm pt-2"><b className="text-white">Dirección:</b> {selectedMovie.director}</p>}
                 </div>
               )}
 
               {movieModalTab === "similares" && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-2 max-w-6xl">
-                  {customMovies.filter(m => m.id !== selectedMovie.id).slice(0, 4).map(sim => (
+                  {(() => {
+                    const g = (x: Movie) => (x.genres && x.genres.length ? x.genres : [x.tag]);
+                    const mine = g(selectedMovie);
+                    const others = customMovies.filter((m) => m.id !== selectedMovie.id);
+                    const score = (m: Movie) => g(m).filter((t) => mine.indexOf(t) !== -1).length + (m.tag === selectedMovie.tag ? 2 : 0);
+                    return others.map((m) => ({ m, sc: score(m) })).sort((a, b) => b.sc - a.sc).slice(0, 8).map((x) => x.m);
+                  })().map(sim => (
                     <div key={sim.id} onClick={() => setSelectedMovie(sim)} tabIndex={0} className="cursor-pointer group focus:outline-none focus:ring-4 focus:ring-green-500 rounded-xl">
                       <img src={sim.bgImage} alt={sim.title} className="w-full h-44 object-cover rounded-xl group-hover:border border-green-500 transition shadow-lg" />
                       <h5 className="text-xs font-bold mt-2 text-gray-200 truncate">{sim.title}</h5>
