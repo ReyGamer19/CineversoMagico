@@ -116,6 +116,7 @@ function isSmartTvBrowser(): boolean {
 // CSS de compatibilidad para navegadores antiguos (TVs). Solo se activa con la clase
 // "tv-legacy" en <html>, así que NO cambia nada en celulares ni PCs modernos.
 const LEGACY_CSS = `
+html{color-scheme:dark}
 .inset-0{top:0;right:0;bottom:0;left:0}
 html.tv-legacy button,html.tv-legacy input,html.tv-legacy select,html.tv-legacy textarea{font-family:inherit;line-height:inherit}
 html.tv-legacy button:not([class*="bg-"]){background-color:transparent;background-image:none}
@@ -1531,6 +1532,21 @@ export default function Home() {
       });
   };
 
+  // Cuando el admin inicia sesión aparece su perfil "Rey" (no se guarda para visitantes)
+  useEffect(() => {
+    const adminProfile: Profile = { id: "admin-rey", name: "Rey", avatar: "/avatares/bojack1.png", isKid: false };
+    if (isAdmin) {
+      setProfiles((prev) => (prev.some((p) => p.id === "admin-rey") ? prev : [adminProfile].concat(prev.filter((p) => p.id !== "invitado"))));
+      setActiveProfile(adminProfile);
+    } else {
+      setProfiles((prev) => {
+        const rest = prev.filter((p) => p.id !== "admin-rey");
+        return rest.length ? rest : [guestProfile];
+      });
+      setActiveProfile((prev) => (prev.id === "admin-rey" ? guestProfile : prev));
+    }
+  }, [isAdmin]);
+
   const handleAdminLogout = () => {
     try {
       localStorage.removeItem("cineverso_admin_key");
@@ -2015,7 +2031,7 @@ export default function Home() {
 
     const updatedProfiles = [...profiles, newP];
     setProfiles(updatedProfiles);
-    localStorage.setItem("cineverso_profiles", JSON.stringify(updatedProfiles));
+    localStorage.setItem("cineverso_profiles", JSON.stringify(updatedProfiles.filter((p) => p.id !== "admin-rey")));
     setShowAddProfileModal(false);
     setNewProfileName("");
     setNewProfilePin("");
@@ -2561,25 +2577,25 @@ export default function Home() {
           </div>
 
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h3 className="text-lg font-bold text-white">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-bold text-white w-full lg:w-auto lg:mr-auto">
                 <span>Gestión del Catálogo ({customMovies.length} títulos)</span>
               </h3>
               <button
                 onClick={() => saveCatalog(customMovies, "Catálogo completo enviado.")}
-                className="flex items-center justify-center gap-1.5 bg-white text-black hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="whitespace-nowrap flex items-center justify-center gap-1.5 bg-white text-black hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Globe className="w-3.5 h-3.5" /> {syncing ? "Publicando..." : "Publicar todo ahora"}
               </button>
               <button
                 onClick={handleExportCatalog}
-                className="flex items-center justify-center gap-1.5 bg-green-500 text-black hover:bg-green-400 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="whitespace-nowrap flex items-center justify-center gap-1.5 bg-green-500 text-black hover:bg-green-400 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Download className="w-3.5 h-3.5" /> Exportar catálogo
               </button>
               <button
                 onClick={handleAdminLogout}
-                className="flex items-center justify-center gap-1.5 bg-[#181818] text-gray-300 hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-800 transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="whitespace-nowrap flex items-center justify-center gap-1.5 bg-[#181818] text-gray-300 hover:bg-gray-800 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-800 transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <LogOut className="w-3.5 h-3.5" /> Salir de admin
               </button>
@@ -2591,7 +2607,7 @@ export default function Home() {
                     window.location.reload();
                   }
                 }}
-                className="flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="whitespace-nowrap flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Forzar Restauración
               </button>
