@@ -53,6 +53,8 @@ interface Movie {
   introStart?: number;
   introEnd?: number;
   creditsStart?: number;
+  comingSoon?: boolean;
+  releaseDate?: string;
 }
 
 interface ProgressItem {
@@ -1349,6 +1351,9 @@ export default function Home() {
   const [newMovieTrailer, setNewMovieTrailer] = useState("");
   const [detectingDuration, setDetectingDuration] = useState(false);
   const [newEpisodes, setNewEpisodes] = useState<Episode[]>([]);
+  const [newComingSoon, setNewComingSoon] = useState(false);
+  const [newReleaseDate, setNewReleaseDate] = useState("");
+  const [notifyAll, setNotifyAll] = useState(true);
   const [newIntroStart, setNewIntroStart] = useState("");
   const [newIntroEnd, setNewIntroEnd] = useState("");
   const [newCreditsStart, setNewCreditsStart] = useState("");
@@ -1445,7 +1450,18 @@ export default function Home() {
     return g.some((x) => x.indexOf("anim") !== -1);
   };
   const kidsMode = !!activeProfile.isKid;
-  const catalog: Movie[] = kidsMode ? customMovies.filter(isKidFriendly) : customMovies;
+  const catalogAll: Movie[] = kidsMode ? customMovies.filter(isKidFriendly) : customMovies;
+  // Lo que se puede ver ya (sin próximos estrenos)
+  const catalog: Movie[] = catalogAll.filter((m) => !m.comingSoon);
+  // Próximos estrenos, ordenados por fecha
+  const upcoming: Movie[] = catalogAll
+    .filter((m) => m.comingSoon)
+    .sort((a, b) => String(a.releaseDate || "9999").localeCompare(String(b.releaseDate || "9999")));
+  const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const fmtRelease = (d?: string) => {
+    const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? parseInt(m[3], 10) + " " + MESES[parseInt(m[2], 10) - 1] + " " + m[1] : "Muy pronto";
+  };
 
   // ¿Este dispositivo es del administrador? (solo afecta a la interfaz; el servidor
   // vuelve a comprobar la clave ADMIN_PASSWORD antes de guardar cualquier cosa)
@@ -1749,6 +1765,31 @@ export default function Home() {
       });
   }, [activeTab, isAdmin]);
 
+  // Panel de estadísticas
+  const [statsDays, setStatsDays] = useState(7);
+  const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState("");
+  const [dropoffFor, setDropoffFor] = useState<string | null>(null);
+  const loadStats = (days: number) => {
+    let pass = "";
+    try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!pass) { setStatsError("Vuelve a entrar con ?admin para ver las estadísticas."); return; }
+    setStatsLoading(true);
+    setStatsError("");
+    fetch("/api/stats?days=" + days, { cache: "no-store", headers: { "x-admin-key": pass } })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        setStatsLoading(false);
+        if (ok) setStats(d);
+        else setStatsError((d && d.error) || "No se pudieron cargar las estadísticas.");
+      })
+      .catch(() => { setStatsLoading(false); setStatsError("Sin conexión con el servidor."); });
+  };
+  useEffect(() => {
+    if (activeTab === "admin" && isAdmin) loadStats(statsDays);
+  }, [activeTab, isAdmin, statsDays]);
+
   // Probar un enlace desde el panel
   const [linkStatus, setLinkStatus] = useState<Record<string, string>>({});
   const testLink = (movie: Movie) => {
@@ -1857,6 +1898,23 @@ export default function Home() {
   useEffect(() => {
     try { (window as any).__cvReady = true; } catch (e) {}
   }, []);
+
+  // Enlaces compartidos (/ver/ID -> /?ver=ID): abre la ficha de esa película
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (!isMounted || deepLinkDone.current) return;
+    deepLinkDone.current = true;
+    try {
+      const v = new URLSearchParams(window.location.search).get("ver");
+      if (!v) return;
+      const m = customMovies.find((x) => String(x.id) === v);
+      if (m) setSelectedMovie(m);
+      const params = new URLSearchParams(window.location.search);
+      params.delete("ver");
+      const q = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (q ? "?" + q : ""));
+    } catch (e) {}
+  }, [isMounted, customMovies]);
 
   // App instalable + carga rápida: registra el service worker (/sw.js)
   useEffect(() => {
@@ -2335,6 +2393,11 @@ export default function Home() {
     setIsPlaying(true);
   };
   const startPlayback = (movie: Movie) => {
+    if (movie.comingSoon) {
+      setSelectedMovie(movie);
+      showToast("Estreno: " + fmtRelease(movie.releaseDate) + ". Activa los avisos y te contamos cuando esté disponible.", 6000);
+      return;
+    }
     const eps = sortedEpisodes(movie);
     if (movie.type === "serie" && eps.length) {
       const saved = progressRef.current.find((p) => String(p.id) === String(movie.id));
@@ -2421,6 +2484,23 @@ export default function Home() {
     };
   }, [isPlaying]);
 
+  // Compartir: enlace /ver/ID con portada y título para WhatsApp, Facebook, etc.
+  const shareMovie = (m: Movie) => {
+    const url = window.location.origin + "/ver/" + encodeURIComponent(String(m.id));
+    const nav: any = navigator;
+    if (nav.share) {
+      nav.share({ title: m.title + " | Cineverso Mágico", text: "Mira " + m.title + " en Cineverso Mágico 🍿", url }).catch(() => {});
+      return;
+    }
+    try {
+      if (nav.clipboard && nav.clipboard.writeText) {
+        nav.clipboard.writeText(url).then(() => showToast("¡Enlace copiado! Pégalo en WhatsApp o Facebook.")).catch(() => showToast(url, 8000));
+        return;
+      }
+    } catch (e) {}
+    showToast(url, 8000);
+  };
+
   const copyLinkSafe = () => {
     const url = window.location.origin + window.location.pathname;
     const done = () => {
@@ -2477,7 +2557,7 @@ export default function Home() {
       setNewMovieVideoUrl(newEpisodes[0].videoUrl);
     }
     const mainUrl = newMovieVideoUrl || (newMovieType === "serie" && newEpisodes.length ? newEpisodes[0].videoUrl : "");
-    if (!newMovieTitle || !mainUrl) {
+    if (!newMovieTitle || (!mainUrl && !newComingSoon)) {
       alert(newMovieType === "serie" ? "Ingresa el título y agrega al menos un episodio." : "Por favor ingresa al menos el título y el enlace del vídeo.");
       return;
     }
@@ -2509,6 +2589,8 @@ export default function Home() {
           introStart: parseClock(newIntroStart),
           introEnd: parseClock(newIntroEnd),
           creditsStart: parseClock(newCreditsStart),
+          comingSoon: newComingSoon || undefined,
+          releaseDate: newComingSoon ? newReleaseDate || undefined : undefined,
           ...(tmdbExtra ? {
             rating: tmdbExtra.rating || m.rating,
             production: tmdbExtra.production || m.production,
@@ -2520,6 +2602,10 @@ export default function Home() {
             : m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
         };
         saveChange({ type: "upsert", movie: updated }, "¡Contenido actualizado!");
+        if (notifyAll) {
+          if (m.comingSoon && !newComingSoon) sendPush({ title: "¡Ya disponible! 🍿", body: updated.title + " ya se puede ver en Cineverso Mágico.", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
+          else if (!m.comingSoon && newComingSoon) sendPush({ title: "Próximo estreno 🎬", body: updated.title + " llega el " + fmtRelease(updated.releaseDate) + ".", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
+        }
       }
       setEditingMovieId(null);
     } else {
@@ -2545,11 +2631,18 @@ export default function Home() {
         introStart: parseClock(newIntroStart),
         introEnd: parseClock(newIntroEnd),
         creditsStart: parseClock(newCreditsStart),
+        comingSoon: newComingSoon || undefined,
+        releaseDate: newComingSoon ? newReleaseDate || undefined : undefined,
         originalLanguage: (tmdbExtra && tmdbExtra.originalLanguage) || "ES",
         ...(tmdbExtra ? { rating: tmdbExtra.rating || "8.0", production: tmdbExtra.production, backdrop: tmdbExtra.backdrop } : {}),
       };
 
       saveChange({ type: "upsert", movie: createdMovie }, "¡Película agregada!");
+      if (notifyAll) {
+        const img = createdMovie.backdrop || createdMovie.bgImage;
+        if (createdMovie.comingSoon) sendPush({ title: "Próximo estreno 🎬", body: createdMovie.title + " llega el " + fmtRelease(createdMovie.releaseDate) + ".", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id });
+        else sendPush({ title: createdMovie.type === "serie" ? "Nueva serie 🍿" : "Nueva película 🍿", body: createdMovie.title + " ya está disponible en Cineverso Mágico.", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id });
+      }
     }
 
     resetMovieForm();
@@ -2570,6 +2663,8 @@ export default function Home() {
     setNewIntroStart("");
     setNewIntroEnd("");
     setNewCreditsStart("");
+    setNewComingSoon(false);
+    setNewReleaseDate("");
     setTmdbExtra(null);
     setTmdbResults(null);
     setEpSeason("1");
@@ -2696,6 +2791,8 @@ export default function Home() {
     setNewMovieTrailer(movie.trailerUrl || "");
     const eps = movie.episodes || [];
     setNewEpisodes(eps);
+    setNewComingSoon(!!movie.comingSoon);
+    setNewReleaseDate(movie.releaseDate || "");
     setNewIntroStart(fmtClock(movie.introStart));
     setNewIntroEnd(fmtClock(movie.introEnd));
     setNewCreditsStart(fmtClock(movie.creditsStart));
@@ -2910,6 +3007,136 @@ export default function Home() {
     postAccount({ action: "logout" }).then(reset, reset);
   };
 
+  // ---------- Estadísticas anónimas ----------
+  const sendStat = (payload: any) => {
+    if (isAdminRef.current) return; // tus propias visitas no cuentan
+    try {
+      const body = JSON.stringify(payload);
+      const nav: any = navigator;
+      if (nav.sendBeacon && nav.sendBeacon("/api/stats", new Blob([body], { type: "text/plain" }))) return;
+      fetch("/api/stats", { method: "POST", body, keepalive: true }).catch(() => {});
+    } catch (e) {}
+  };
+  const deviceKind = () => {
+    try {
+      if (tvMode || isSmartTvBrowser() || document.documentElement.classList.contains("tv-legacy")) return "tv";
+      if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return "mobile";
+    } catch (e) {}
+    return "desktop";
+  };
+  const accountUserRef = useRef<AccountUser | null>(null);
+  accountUserRef.current = accountUser;
+  useEffect(() => {
+    let sent = false;
+    try { sent = sessionStorage.getItem("cv_visit") === "1"; sessionStorage.setItem("cv_visit", "1"); } catch (e) {}
+    if (sent) return;
+    const t = setTimeout(() => {
+      let vid = "";
+      try {
+        vid = localStorage.getItem("cv_vid") || "";
+        if (!vid) { vid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("cv_vid", vid); }
+      } catch (e) {}
+      sendStat({ type: "visit", device: deviceKind(), vid, logged: !!accountUserRef.current });
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
+  // Seguimiento de cada reproducción: inicio, segundos vistos y hasta qué % llegó
+  const watchRef = useRef<{ id: string; title: string; maxPct: number; secs: number; lastT: number; played: boolean } | null>(null);
+  const flushWatch = () => {
+    const w = watchRef.current;
+    watchRef.current = null;
+    if (w && w.played && w.secs >= 10) sendStat({ type: "watch", movieId: w.id, title: w.title, pct: Math.round(w.maxPct), secs: Math.round(w.secs) });
+  };
+  const trackTime = (video: HTMLVideoElement, m: Movie) => {
+    const w = watchRef.current;
+    if (!w || w.id !== String(m.id)) return;
+    const t = video.currentTime || 0;
+    const d = t - w.lastT;
+    if (d > 0 && d < 5) w.secs += d;
+    w.lastT = t;
+    if (video.duration && isFinite(video.duration)) w.maxPct = Math.max(w.maxPct, (t / video.duration) * 100);
+  };
+  const trackPlaying = (m: Movie) => {
+    const w = watchRef.current;
+    if (w && w.id === String(m.id)) {
+      if (!w.played) { w.played = true; sendStat({ type: "play", movieId: String(m.id), title: m.title }); }
+      return;
+    }
+    flushWatch();
+    watchRef.current = { id: String(m.id), title: m.title, maxPct: 0, secs: 0, lastT: 0, played: true };
+    sendStat({ type: "play", movieId: String(m.id), title: m.title });
+  };
+  useEffect(() => { if (!isPlaying) flushWatch(); }, [isPlaying]);
+  useEffect(() => {
+    const onHide = () => flushWatch();
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, []);
+
+  // ---------- Avisos push ----------
+  const [pushState, setPushState] = useState<"unsupported" | "ios-install" | "default" | "denied" | "subscribed">("default");
+  useEffect(() => {
+    try {
+      const w = window as any;
+      const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const standalone = (w.matchMedia && w.matchMedia("(display-mode: standalone)").matches) || (navigator as any).standalone;
+      if (!("serviceWorker" in navigator) || !("PushManager" in w) || !("Notification" in w)) {
+        setPushState(ios && !standalone ? "ios-install" : "unsupported");
+        return;
+      }
+      if (Notification.permission === "denied") { setPushState("denied"); return; }
+      navigator.serviceWorker.ready
+        .then((reg) => reg.pushManager.getSubscription())
+        .then((sub) => { if (sub) setPushState("subscribed"); })
+        .catch(() => {});
+    } catch (e) { setPushState("unsupported"); }
+  }, []);
+  const b64ToBytes = (b64: string) => {
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  };
+  const enablePush = () => {
+    if (pushState === "subscribed") { showToast("Los avisos ya están activados en este dispositivo ✔"); return; }
+    if (pushState === "ios-install") { showToast("En iPhone primero instala la app: botón Compartir → \"Agregar a pantalla de inicio\". Luego ábrela desde el ícono y activa los avisos.", 9000); return; }
+    if (pushState === "unsupported") { showToast("Este navegador no permite avisos. Prueba con Chrome o Edge.", 6000); return; }
+    if (pushState === "denied") { showToast("Bloqueaste los avisos. Actívalos en el candado 🔒 junto a la dirección de la página.", 8000); return; }
+    Notification.requestPermission()
+      .then((perm) => {
+        if (perm !== "granted") { setPushState(perm === "denied" ? "denied" : "default"); throw new Error("no"); }
+        return Promise.all([
+          navigator.serviceWorker.register("/sw.js").then(() => navigator.serviceWorker.ready),
+          fetch("/api/push", { cache: "no-store" }).then((r) => r.json()),
+        ]);
+      })
+      .then(([reg, d]: any) =>
+        reg.pushManager.getSubscription().then((old: any) => old || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(d.publicKey) }))
+      )
+      .then((sub: any) =>
+        fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "subscribe", sub: sub.toJSON ? sub.toJSON() : sub }) })
+      )
+      .then((r: any) => {
+        if (r && r.ok) { setPushState("subscribed"); showToast("🔔 ¡Listo! Te avisaremos de estrenos y películas nuevas."); }
+        else showToast("No se pudieron activar los avisos. Inténtalo de nuevo.");
+      })
+      .catch((e: any) => { if (!e || e.message !== "no") showToast("No se pudieron activar los avisos en este dispositivo."); });
+  };
+  // Administrador: enviar un aviso a todos los dispositivos suscritos
+  const sendPush = (msg: { title: string; body: string; image?: string; url?: string; tag?: string }) => {
+    let pass = "";
+    try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!pass) { showToast("Para enviar avisos vuelve a entrar con ?admin.", 6000); return; }
+    fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", password: pass, ...msg }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (ok) showToast("📣 Aviso enviado a " + (d.sent || 0) + " dispositivo" + (d.sent === 1 ? "" : "s") + ".", 5000);
+        else showToast("No se pudo enviar el aviso (" + ((d && d.error) || "error") + ").", 6000);
+      })
+      .catch(() => showToast("No se pudo enviar el aviso."));
+  };
+
   // ---------- 👍 / 👎 ----------
   const rateMovie = (m: Movie | null, v: 1 | -1) => {
     if (!m) return;
@@ -2938,9 +3165,9 @@ export default function Home() {
     const out: { key: string; title: string; text: string; time: number; movie: Movie }[] = [];
     if (!nowTs) return out;
     const limit = nowTs - 45 * 24 * 3600 * 1000;
-    catalog.forEach((m) => {
+    catalogAll.forEach((m) => {
       const t = movieTime(m);
-      if (t > limit) out.push({ key: "m-" + m.id, title: m.title, text: m.type === "serie" ? "Nueva serie disponible" : "Nueva película disponible", time: t, movie: m });
+      if (t > limit) out.push({ key: "m-" + m.id, title: m.title, text: m.comingSoon ? "Próximo estreno: " + fmtRelease(m.releaseDate) : m.type === "serie" ? "Nueva serie disponible" : "Nueva película disponible", time: t, movie: m });
       (m.episodes || []).forEach((ep) => {
         if (ep.addedAt && ep.addedAt > limit && ep.addedAt - t > 60000) {
           out.push({ key: "e-" + m.id + "-" + ep.id, title: m.title, text: "Nuevo episodio: T" + ep.season + ":E" + ep.number + " · " + ep.title, time: ep.addedAt, movie: m });
@@ -3327,6 +3554,12 @@ export default function Home() {
               <div className="absolute right-0 mt-2 bg-[#141414] border border-gray-800 rounded-xl shadow-2xl overflow-hidden" style={{ width: 340, maxWidth: "88vw", zIndex: 50 }}>
                 <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
                   <span className="text-sm font-bold text-white">Novedades</span>
+                  <button
+                    onClick={enablePush}
+                    className={`ml-auto mr-2 text-[11px] font-bold px-2.5 py-1 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${pushState === "subscribed" ? "bg-green-500/15 text-green-400" : "bg-white text-black hover:bg-gray-200"}`}
+                  >
+                    {pushState === "subscribed" ? "✔ Avisos activados" : "🔔 Activar avisos"}
+                  </button>
                   <button data-close-on-back onClick={() => setShowNotif(false)} className="text-gray-400 hover:text-white p-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Cerrar"><X className="w-4 h-4" /></button>
                 </div>
                 {notifications.length === 0 ? (
@@ -3534,6 +3767,36 @@ export default function Home() {
                         </div>
                       );
                     })}
+                  </div>
+                </section>
+              )}
+
+              {/* Próximos estrenos */}
+              {upcoming.length > 0 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Próximos estrenos</h2>
+                  <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {upcoming.map((m) => (
+                      <div key={"up-" + m.id} className="shrink-0" style={{ width: 300 }}>
+                        <div
+                          onClick={() => setSelectedMovie(m)}
+                          tabIndex={0}
+                          className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                          style={{ width: 300, height: 168 }}
+                        >
+                          <img src={m.backdrop || m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                          <span className="absolute top-2 left-2 bg-green-500 text-black text-[11px] font-black px-2 py-0.5 rounded">ESTRENO {fmtRelease(m.releaseDate).toUpperCase()}</span>
+                          <p className="absolute left-3 right-3 bottom-3 text-sm font-bold text-white truncate">{m.title}</p>
+                        </div>
+                        <button
+                          onClick={enablePush}
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg border border-gray-700 text-gray-200 hover:bg-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                          {pushState === "subscribed" ? "✔ Te avisaremos" : "🔔 Avísame del estreno"}
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </section>
               )}
@@ -3853,6 +4116,139 @@ export default function Home() {
       {/* PANEL DE ADMINISTRACIÓN */}
       {activeTab === "admin" && isAdmin && (
         <div className="max-w-4xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-10 overflow-x-hidden">
+          {/* ESTADÍSTICAS */}
+          <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-bold text-white mr-auto">📊 Estadísticas</h3>
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={"sd-" + d}
+                  onClick={() => setStatsDays(d)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${statsDays === d ? "bg-white text-black" : "bg-[#181818] text-gray-300 border border-gray-800"}`}
+                >
+                  {d === 7 ? "7 días" : d === 30 ? "30 días" : "90 días"}
+                </button>
+              ))}
+              <button onClick={() => loadStats(statsDays)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#181818] text-gray-300 border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                {statsLoading ? "Cargando..." : "↻ Actualizar"}
+              </button>
+            </div>
+            {statsError && <p className="text-xs text-red-400 font-bold">{statsError}</p>}
+            {stats && (() => {
+              const plays: Record<string, number> = stats.plays || {};
+              const watch: Record<string, number> = stats.watchSecs || {};
+              const comp: Record<string, number> = stats.completes || {};
+              const drop: Record<string, number[]> = stats.dropoff || {};
+              const titles: Record<string, string> = stats.titles || {};
+              const nameOf = (id: string) => titles[id] || (customMovies.find((m) => String(m.id) === id) || { title: "Título " + id }).title;
+              const totalPlays = Object.keys(plays).reduce((a, k) => a + plays[k], 0);
+              const totalHours = Object.keys(watch).reduce((a, k) => a + watch[k], 0) / 3600;
+              const totalComp = Object.keys(comp).reduce((a, k) => a + comp[k], 0);
+              const totalEnded = totalComp + Object.keys(drop).reduce((a, k) => a + drop[k].reduce((x, y) => x + y, 0), 0);
+              const devices: Record<string, number> = stats.devices || {};
+              const devTotal = Math.max(1, Object.keys(devices).reduce((a, k) => a + devices[k], 0));
+              const daily: { day: number; visits: number; plays: number }[] = stats.daily || [];
+              const maxDaily = Math.max(1, ...daily.map((d) => d.visits));
+              const top = Object.keys(plays).sort((a, b) => plays[b] - plays[a]).slice(0, 10);
+              const kpis = [
+                { label: "Visitas", value: stats.visits || 0 },
+                { label: "Visitantes únicos", value: stats.uniqueVisitors || 0 },
+                { label: "Reproducciones", value: totalPlays },
+                { label: "Horas vistas", value: totalHours < 10 ? totalHours.toFixed(1) : Math.round(totalHours) },
+                { label: "Terminan la película", value: totalEnded ? Math.round((totalComp / totalEnded) * 100) + "%" : "—" },
+                { label: "Visitas con cuenta", value: stats.visits ? Math.round(((stats.loggedVisits || 0) / stats.visits) * 100) + "%" : "—" },
+              ];
+              return (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {kpis.map((k) => (
+                      <div key={k.label} className="bg-[#050505] border border-gray-900 rounded-2xl p-4">
+                        <p className="text-2xl font-black text-white">{k.value}</p>
+                        <p className="text-[11px] text-gray-400 mt-1">{k.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {daily.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-300 mb-2">Visitas por día</p>
+                      <div className="flex items-end gap-1 h-28 bg-[#050505] border border-gray-900 rounded-2xl p-3">
+                        {daily.map((d) => (
+                          <div key={"day-" + d.day} className="flex-1 flex flex-col items-center justify-end h-full" title={String(d.day).slice(6) + "/" + String(d.day).slice(4, 6) + ": " + d.visits + " visitas, " + d.plays + " reproducciones"}>
+                            <div className="w-full bg-green-500 rounded-t" style={{ height: Math.max(3, (d.visits / maxDaily) * 100) + "%" }} />
+                            {daily.length <= 14 && <span className="text-[9px] text-gray-500 mt-1">{String(d.day).slice(6)}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-xs font-bold text-gray-300 mb-2">Dispositivos</p>
+                    <div className="space-y-2">
+                      {[["tv", "📺 Smart TV"], ["mobile", "📱 Celular / tablet"], ["desktop", "💻 Computadora"]].map(([k, label]) => {
+                        const pct = Math.round(((devices[k] || 0) / devTotal) * 100);
+                        return (
+                          <div key={"dev-" + k} className="flex items-center gap-3">
+                            <span className="text-xs text-gray-300 w-36 shrink-0">{label}</span>
+                            <div className="flex-1 h-3 bg-[#1f1f1f] rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: pct + "%" }} /></div>
+                            <span className="text-xs text-gray-400 w-16 text-right">{pct}% ({devices[k] || 0})</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold text-gray-300 mb-2">Lo más visto</p>
+                    {top.length === 0 ? (
+                      <p className="text-xs text-gray-500">Todavía no hay reproducciones en este periodo.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {top.map((id, i) => {
+                          const ended = (comp[id] || 0) + (drop[id] || []).reduce((x, y) => x + y, 0);
+                          const compPct = ended ? Math.round(((comp[id] || 0) / ended) * 100) : null;
+                          return (
+                            <div key={"top-" + id} className="bg-[#050505] border border-gray-900 rounded-xl p-3">
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg font-black text-gray-500 w-6 text-center">{i + 1}</span>
+                                <span className="text-sm font-bold text-white truncate flex-1">{nameOf(id)}</span>
+                                <span className="text-[11px] text-gray-400 shrink-0">{plays[id]} ▶ · {((watch[id] || 0) / 3600).toFixed(1)} h{compPct !== null ? " · " + compPct + "% termina" : ""}</span>
+                                {drop[id] && (
+                                  <button onClick={() => setDropoffFor(dropoffFor === id ? null : id)} className="text-[11px] font-bold text-green-400 hover:underline shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-1">
+                                    {dropoffFor === id ? "Ocultar" : "¿Dónde abandonan?"}
+                                  </button>
+                                )}
+                              </div>
+                              {dropoffFor === id && drop[id] && (() => {
+                                const arr = drop[id];
+                                const mx = Math.max(1, ...arr);
+                                return (
+                                  <div className="mt-3">
+                                    <div className="flex items-end gap-1 h-20">
+                                      {arr.map((n, j) => (
+                                        <div key={"dp-" + j} className="flex-1 flex flex-col items-center justify-end h-full" title={j * 10 + "–" + (j * 10 + 10) + "%: " + n + " personas dejaron de ver"}>
+                                          <div className="w-full bg-red-500/80 rounded-t" style={{ height: Math.max(2, (n / mx) * 100) + "%" }} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="flex justify-between text-[9px] text-gray-500 mt-1"><span>Inicio</span><span>Mitad</span><span>Final</span></div>
+                                    <p className="text-[11px] text-gray-400 mt-1">Cada barra es un 10 % de la película: muestra en qué parte la gente dejó de ver.</p>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-500">Datos anónimos: no se guarda quién vio qué. Tus propias visitas como administrador no cuentan.</p>
+                </div>
+              );
+            })()}
+          </div>
+
           <div className="bg-[#0f0f0f] border border-green-500/30 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-900 gap-4">
               <div className="flex items-center gap-3">
@@ -3951,7 +4347,7 @@ export default function Home() {
                 <label className="text-xs text-gray-400 block mb-1">Enlace del Vídeo (MP4 directo de Archive.org)</label>
                 <input 
                   type="url" 
-                  required={newMovieType !== "serie"}
+                  required={newMovieType !== "serie" && !newComingSoon}
                   placeholder={newMovieType === "serie" ? "Opcional en series: se usa el primer episodio" : "https://archive.org/download/..."} 
                   value={newMovieVideoUrl}
                   onChange={(e) => setNewMovieVideoUrl(e.target.value)}
@@ -4062,6 +4458,29 @@ export default function Home() {
                 </div>
               )}
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="flex items-center justify-between gap-3 bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 cursor-pointer">
+                  <span>
+                    <span className="block text-sm font-bold text-white">Próximo estreno</span>
+                    <span className="block text-[11px] text-gray-400">Sale en la fila "Próximos estrenos" y aún no se puede reproducir.</span>
+                  </span>
+                  <input type="checkbox" checked={newComingSoon} onChange={(e) => setNewComingSoon(e.target.checked)} className="w-5 h-5 accent-green-500 cursor-pointer" />
+                </label>
+                {newComingSoon ? (
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Fecha de estreno</label>
+                    <input type="date" value={newReleaseDate} onChange={(e) => setNewReleaseDate(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" style={{ colorScheme: "dark" }} />
+                  </div>
+                ) : <div />}
+                <label className="sm:col-span-2 flex items-center justify-between gap-3 bg-green-500/5 border border-green-500/30 rounded-xl px-4 py-3 cursor-pointer">
+                  <span>
+                    <span className="block text-sm font-bold text-white">📣 Avisar a todos al guardar</span>
+                    <span className="block text-[11px] text-gray-400">Envía una notificación a los dispositivos que activaron los avisos (nueva película, próximo estreno o "¡Ya disponible!").</span>
+                  </span>
+                  <input type="checkbox" checked={notifyAll} onChange={(e) => setNotifyAll(e.target.checked)} className="w-5 h-5 accent-green-500 cursor-pointer" />
+                </label>
+              </div>
+
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Saltar intro y créditos (opcional, en minutos:segundos{newMovieType === "serie" ? " — igual para todos los episodios" : ""})</label>
                 <div className="grid grid-cols-3 gap-3">
@@ -4161,6 +4580,17 @@ export default function Home() {
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      onClick={() => {
+                        if (!confirm("¿Enviar un aviso de \"" + movie.title + "\" a todos los dispositivos suscritos?")) return;
+                        sendPush(movie.comingSoon
+                          ? { title: "Próximo estreno 🎬", body: movie.title + " llega el " + fmtRelease(movie.releaseDate) + ".", image: movie.backdrop || movie.bgImage, url: "/ver/" + movie.id, tag: "m-" + movie.id }
+                          : { title: "Te recomendamos 🍿", body: movie.title + " ya está disponible en Cineverso Mágico.", image: movie.backdrop || movie.bgImage, url: "/ver/" + movie.id, tag: "m-" + movie.id });
+                      }}
+                      className="flex items-center gap-1 bg-[#181818] hover:bg-gray-800 text-gray-300 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      📣 Avisar
+                    </button>
                     <button
                       onClick={() => testLink(movie)}
                       className="flex items-center gap-1 bg-[#181818] hover:bg-gray-800 text-gray-300 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -4446,13 +4876,23 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <button 
-                    data-autofocus
-                    onClick={() => startPlayback(selectedMovie)}
-                    className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
-                  >
-                    <Play className="w-5 h-5 fill-black" /> Reproducir
-                  </button>
+                  {selectedMovie.comingSoon ? (
+                    <button
+                      data-autofocus
+                      onClick={enablePush}
+                      className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-300"
+                    >
+                      {pushState === "subscribed" ? "✔ Te avisaremos del estreno" : "🔔 Avísame del estreno"} · {fmtRelease(selectedMovie.releaseDate)}
+                    </button>
+                  ) : (
+                    <button 
+                      data-autofocus
+                      onClick={() => startPlayback(selectedMovie)}
+                      className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
+                    >
+                      <Play className="w-5 h-5 fill-black" /> Reproducir
+                    </button>
+                  )}
                   <button 
                     onClick={() => toggleMyList(selectedMovie)}
                     className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 sm:px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
@@ -4474,7 +4914,7 @@ export default function Home() {
                     <ThumbsDown className="w-5 h-5" />
                   </button>
                   <button 
-                    onClick={copyLinkSafe}
+                    onClick={() => shareMovie(selectedMovie)}
                     className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
                     <Share2 className="w-4 h-4" /> Compartir
@@ -4675,8 +5115,8 @@ export default function Home() {
               onLoadStart={() => setVideoLoading(true)}
               onWaiting={() => setVideoLoading(true)}
               onCanPlay={() => setVideoLoading(false)}
-              onPlaying={() => setVideoLoading(false)}
-              onTimeUpdate={(e) => { recordProgress(e.currentTarget, selectedMovie, false); updateSkip(e.currentTarget.currentTime, selectedMovie); }}
+              onPlaying={() => { setVideoLoading(false); trackPlaying(selectedMovie); }}
+              onTimeUpdate={(e) => { recordProgress(e.currentTarget, selectedMovie, false); updateSkip(e.currentTarget.currentTime, selectedMovie); trackTime(e.currentTarget, selectedMovie); }}
               onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
               onEnded={(e) => {
                 recordProgress(e.currentTarget, selectedMovie, true);
@@ -4833,6 +5273,21 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* PIE DE PÁGINA + ATRIBUCIÓN TMDB */}
+      {(activeTab === "inicio" || activeTab === "explorar") && (
+        <footer className="px-4 sm:px-6 md:px-12 pb-28 md:pb-10 pt-4 border-t border-gray-900 text-[11px] text-gray-500 space-y-1">
+          <p className="flex items-center gap-2 flex-wrap">
+            <img src="/icons/icon-192.png" alt="" className="w-5 h-5 rounded" />
+            <span className="font-bold text-gray-400">Cineverso Mágico</span>
+          </p>
+          <p>
+            Datos e imágenes de películas proporcionados por{" "}
+            <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" className="text-[#01b4e4] font-bold hover:underline">TMDB</a>.
+            Este producto usa la API de TMDB pero no está avalado ni certificado por TMDB.
+          </p>
+        </footer>
       )}
 
       {/* BARRA DE NAVEGACIÓN INFERIOR (MÓVIL) */}

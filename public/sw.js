@@ -3,7 +3,7 @@
  * - Guarda en el dispositivo los archivos de la app y las portadas para que abra mucho más rápido.
  * - Nunca guarda videos, transmisiones en vivo ni datos de cuentas (/api).
  */
-var VERSION = "cv-v1";
+var VERSION = "cv-v2";
 var STATIC_CACHE = VERSION + "-static";
 var PAGE_CACHE = VERSION + "-pages";
 var IMG_CACHE = VERSION + "-img";
@@ -107,4 +107,37 @@ self.addEventListener("fetch", function (event) {
       })
     );
   }
+});
+
+// ---------- Notificaciones push ----------
+self.addEventListener("push", function (event) {
+  var d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data ? event.data.text() : "" }; }
+  var opts = {
+    body: d.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: d.url || "/" },
+    vibrate: [80, 40, 80]
+  };
+  if (d.image) opts.image = d.image;
+  if (d.tag) { opts.tag = d.tag; opts.renotify = true; }
+  event.waitUntil(self.registration.showNotification(d.title || "Cineverso Mágico", opts));
+});
+
+self.addEventListener("notificationclick", function (event) {
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (c.url.indexOf(self.location.origin) === 0 && "focus" in c) {
+          if ("navigate" in c) { try { c.navigate(url); } catch (e) {} }
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
 });
