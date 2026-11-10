@@ -2032,6 +2032,41 @@ export default function Home() {
     };
   }, [selectedMovie]);
 
+  // Cuando aparece el error, el foco va directo a "Reintentar" (funciona con el control remoto)
+  useEffect(() => {
+    if (!playerError) return;
+    const t = setTimeout(() => {
+      const modals = document.querySelectorAll("[data-tv-modal]");
+      const scope = modals.length ? modals[modals.length - 1] : document;
+      const el = scope.querySelector("[data-autofocus]") as HTMLElement | null;
+      if (el) { try { el.focus(); } catch (e) {} }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [playerError]);
+
+  // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
+  const diagnoseVideo = (url: string, code: number) => {
+    const fallback = code === 2
+      ? "Se cortó la conexión con el servidor del video. Pulsa Reintentar."
+      : "El video no se pudo abrir. Pulsa Reintentar; si vuelve a fallar, el enlace necesita revisarse.";
+    if (!url) { setPlayerError("Esta película no tiene enlace de video."); return; }
+    fetch("/api/video-check?u=" + encodeURIComponent(url), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        if (!d) { setPlayerError(fallback); return; }
+        const st = d.status || 0;
+        const ct = String(d.contentType || "");
+        if (st === 401 || st === 403) setPlayerError("El servidor bloqueó este video (error " + st + "). Suele pasar cuando el archivo fue retirado. Hay que reemplazar el enlace desde el panel.");
+        else if (st === 404 || st === 410) setPlayerError("Este archivo ya no existe en el servidor (error " + st + "). Hay que reemplazar el enlace desde el panel.");
+        else if (st === 429) setPlayerError("El servidor del video está recibiendo demasiadas peticiones. Espera un minuto y pulsa Reintentar.");
+        else if (st >= 500) setPlayerError("El servidor del video está caído en este momento (error " + st + "). Inténtalo más tarde.");
+        else if (st === 0) setPlayerError("El servidor del video no responde. Revisa tu internet o inténtalo más tarde.");
+        else if (ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct)) setPlayerError("El enlace no es un video directo (es una página web). En el panel hay que poner el enlace directo al archivo .mp4.");
+        else setPlayerError(fallback);
+      });
+  };
+
   const startPlayback = (movie: Movie) => {
     setUsingBackup(false);
     setPlayerError("");
@@ -3454,7 +3489,7 @@ export default function Home() {
         >
           <div
             className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent"
-            style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi ? 1 : 0, visibility: playerUi ? "visible" : "hidden" }}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi && !playerError ? 1 : 0, visibility: playerUi && !playerError ? "visible" : "hidden" }}
           >
             <button 
               onClick={() => setIsPlaying(false)}
@@ -3493,10 +3528,12 @@ export default function Home() {
                   return;
                 }
                 setVideoLoading(false);
-                if (code === 2) setPlayerError("Se cortó la conexión con el servidor del video. Pulsa Reintentar.");
-                else if (code === 3) setPlayerError("Esta TV no puede decodificar este video (formato H.265/HEVC, 10 bits o audio Dolby). Necesita una versión en MP4 H.264 + AAC.");
-                else if (code === 4) setPlayerError("El enlace no funciona o el formato no es compatible con esta TV (por ejemplo MKV o H.265). Necesita MP4 H.264 + AAC.");
-                else setPlayerError("Este video no se puede reproducir en este dispositivo.");
+                if (code === 3) {
+                  setPlayerError("Este dispositivo no puede decodificar este video (H.265/HEVC, 10 bits o audio Dolby). Necesita una versión MP4 H.264 + AAC.");
+                  return;
+                }
+                setPlayerError("Comprobando el enlace del video...");
+                diagnoseVideo(selectedMovie.videoUrl || "", code);
               }}
             >
               Tu navegador no soporta el reproductor.
@@ -3508,28 +3545,43 @@ export default function Home() {
               </div>
             )}
             {playerError && (
-              <div style={{ position: "absolute", left: 0, right: 0, bottom: 24, textAlign: "center", padding: "0 16px" }}>
-                <span className="inline-block bg-red-950/90 border border-red-800 text-red-200 text-sm px-4 py-3 rounded-xl">{playerError}</span>
-                <button
-                  onClick={() => {
-                    setPlayerError("");
-                    setUsingBackup(false);
-                    const v = playerRef.current;
-                    if (v) {
-                      try { v.load(); const pr = v.play(); if (pr && pr.catch) pr.catch(() => {}); } catch (err) {}
-                    }
-                  }}
-                  className="ml-3 inline-block bg-white text-black font-bold text-sm px-4 py-3 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
-                >
-                  Reintentar
-                </button>
+              <div
+                data-tv-modal
+                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 40, background: "rgba(0,0,0,.82)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+              >
+                <div className="bg-[#141414] border border-red-900 rounded-2xl p-6 text-center" style={{ maxWidth: 640, width: "100%" }}>
+                  <p className="text-red-300 font-bold text-base mb-2">No se pudo reproducir «{selectedMovie.title}»</p>
+                  <p className="text-gray-200 text-sm leading-relaxed mb-5">{playerError}</p>
+                  <button
+                    data-autofocus
+                    onClick={() => {
+                      setPlayerError("");
+                      setUsingBackup(false);
+                      setVideoLoading(true);
+                      const v = playerRef.current;
+                      if (v) {
+                        try { v.load(); const pr = v.play(); if (pr && pr.catch) pr.catch(() => {}); } catch (err) {}
+                        setTimeout(() => { try { v.focus(); } catch (err) {} }, 50);
+                      }
+                    }}
+                    className="inline-block bg-white text-black font-bold text-sm px-6 py-3 rounded-xl cursor-pointer mr-3 focus:outline-none focus:ring-4 focus:ring-green-500"
+                  >
+                    Reintentar
+                  </button>
+                  <button
+                    onClick={() => { setPlayerError(""); setIsPlaying(false); }}
+                    className="inline-block bg-[#262626] text-white font-bold text-sm px-6 py-3 rounded-xl border border-gray-700 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                  >
+                    Volver
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
           <div
             className="p-3 sm:p-4 bg-gradient-to-t from-black/95 to-transparent flex flex-col sm:flex-row items-center justify-between gap-4"
-            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi ? 1 : 0, visibility: playerUi ? "visible" : "hidden" }}
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi && !playerError ? 1 : 0, visibility: playerUi && !playerError ? "visible" : "hidden" }}
           >
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button 

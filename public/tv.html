@@ -345,10 +345,19 @@ a { color: inherit; text-decoration: none; }
       try { video.load(); video.play(); } catch (e) {}
       return;
     }
-    if (code === 2) msg("Se cortó la conexión con el servidor del video. Sal y vuelve a intentarlo.");
-    else if (code === 3) msg("Esta TV no puede decodificar este video (H.265/HEVC, 10 bits o audio Dolby). Necesita MP4 H.264 + AAC.");
-    else if (code === 4) msg("El enlace no funciona o el formato no es compatible con esta TV (MKV o H.265). Necesita MP4 H.264 + AAC.");
-    else msg("Este video no se puede reproducir en esta TV.");
+    if (code === 3) { msg("Esta TV no puede decodificar este video (H.265/HEVC, 10 bits o audio Dolby). Necesita MP4 H.264 + AAC."); return; }
+    msg("Comprobando el enlace del video...");
+    var url = playing && playing.videoUrl ? playing.videoUrl : (playing && playing.v) || "";
+    getJSON("/api/video-check?u=" + encodeURIComponent(url), function (d) {
+      var st = d ? (d.status || 0) : -1, ct = d ? String(d.contentType || "") : "";
+      if (st === 401 || st === 403) msg("El servidor bloqueó este video (error " + st + "). Suele pasar cuando el archivo fue retirado. Hay que reemplazar el enlace.");
+      else if (st === 404 || st === 410) msg("Este archivo ya no existe en el servidor (error " + st + "). Hay que reemplazar el enlace.");
+      else if (st === 429) msg("El servidor del video está saturado. Espera un minuto y vuelve a intentarlo.");
+      else if (st >= 500) msg("El servidor del video está caído (error " + st + "). Inténtalo más tarde.");
+      else if (st === 0) msg("El servidor del video no responde. Revisa tu internet o inténtalo más tarde.");
+      else if (ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct)) msg("El enlace no es un video directo (es una página web).");
+      else msg(code === 2 ? "Se cortó la conexión con el servidor del video. Sal (Atrás) y vuelve a intentarlo." : "El video no se pudo abrir. Sal (Atrás) y vuelve a intentarlo.");
+    });
   });
   function msg(t) { loading(false); $("playerMsgText").innerHTML = esc(t); show($("playerMsg")); }
   function closePlayer() {
