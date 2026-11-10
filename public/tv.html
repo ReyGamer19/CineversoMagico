@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cineverso Mágico · TV</title>
+<style>
+* { margin: 0; padding: 0; -webkit-box-sizing: border-box; box-sizing: border-box; }
+html { font-size: 16px; }
+body { background: #050505; color: #fff; font-family: Arial, Helvetica, sans-serif; overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+.hidden { display: none !important; }
+:focus { outline: none; }
+.f { cursor: pointer; }
+.f:focus, .f.foco { outline: 0.25rem solid #22c55e; outline-offset: 0.15rem; -webkit-box-shadow: 0 0 0 0.45rem rgba(34,197,94,.35); box-shadow: 0 0 0 0.45rem rgba(34,197,94,.35); }
+
+/* Barra superior */
+#top { position: fixed; top: 0; left: 0; right: 0; height: 4rem; background: #000; border-bottom: 1px solid #1a1a1a; z-index: 10; padding: 0 2.5rem; white-space: nowrap; }
+#logo { display: inline-block; vertical-align: middle; line-height: 4rem; font-size: 1.6rem; font-weight: bold; color: #34d399; margin-right: 2rem; }
+#logo b { display: inline-block; background: #22c55e; color: #000; padding: 0 0.5rem; border-radius: 0.3rem; margin-right: 0.5rem; line-height: 2.2rem; }
+.tab { display: inline-block; vertical-align: middle; font-size: 1.05rem; color: #d1d5db; padding: 0.5rem 1rem; margin-right: 0.5rem; border-radius: 0.5rem; border: 1px solid transparent; }
+.tab.on { color: #fff; font-weight: bold; background: rgba(255,255,255,.1); border-color: rgba(34,197,94,.5); }
+
+#main { padding-top: 4rem; }
+
+/* Portada */
+#hero { position: relative; height: 32rem; background-color: #111; background-size: cover; background-position: center; }
+#heroShade { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: -webkit-linear-gradient(left, #050505 0%, rgba(5,5,5,.75) 45%, rgba(5,5,5,0) 100%); background: linear-gradient(to right, #050505 0%, rgba(5,5,5,.75) 45%, rgba(5,5,5,0) 100%); }
+#heroShade2 { position: absolute; left: 0; right: 0; bottom: 0; height: 10rem; background: -webkit-linear-gradient(bottom, #050505, rgba(5,5,5,0)); background: linear-gradient(to top, #050505, rgba(5,5,5,0)); }
+#heroText { position: absolute; left: 2.5rem; bottom: 3rem; width: 46%; }
+#heroTitle { font-size: 3.2rem; font-weight: 900; text-transform: uppercase; line-height: 1.05; }
+#heroSub { font-size: 1.6rem; font-weight: bold; color: #f97316; margin-top: 0.3rem; }
+.meta { margin: 1rem 0; font-size: 1rem; color: #d1d5db; }
+.meta span { display: inline-block; margin-right: 1rem; }
+.meta .star { color: #4ade80; font-weight: bold; }
+.meta .tag { background: #121212; border: 1px solid #333; padding: 0.1rem 0.6rem; border-radius: 0.3rem; }
+#heroDesc { font-size: 1rem; color: #d1d5db; line-height: 1.45; max-height: 4.4rem; overflow: hidden; margin-bottom: 1.5rem; }
+.btn { display: inline-block; font-size: 1.1rem; font-weight: bold; padding: 0.8rem 1.6rem; border-radius: 0.6rem; margin-right: 0.8rem; background: #1c1c1c; color: #fff; border: 1px solid #333; }
+.btn.blanco { background: #fff; color: #000; border-color: #fff; }
+
+/* Filas */
+.row { padding: 1.2rem 0 0.4rem 2.5rem; }
+.row h2 { font-size: 1.4rem; margin-bottom: 0.8rem; }
+.rail { white-space: nowrap; overflow: hidden; padding: 0.5rem 0 0.8rem 0.5rem; }
+.card { display: inline-block; vertical-align: top; width: 11rem; margin-right: 1rem; white-space: normal; border-radius: 0.6rem; }
+.poster { position: relative; width: 11rem; height: 16.5rem; border-radius: 0.6rem; overflow: hidden; background: #1f2937; border: 1px solid #222; }
+.poster img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.poster .ph { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 1rem; font-size: 1.1rem; font-weight: bold; color: #9ca3af; background: #111827; }
+.poster .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 0.35rem; background: #374151; }
+.poster .bar i { display: block; height: 100%; background: #22c55e; }
+.card .t { font-size: 0.95rem; color: #e5e7eb; margin-top: 0.5rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* TV en vivo */
+#live { padding: 1.5rem 2.5rem 3rem; }
+#live h1 { font-size: 1.8rem; margin-bottom: 1rem; }
+.country { font-size: 1.15rem; font-weight: bold; color: #4ade80; margin: 1.4rem 0 0.6rem; text-transform: uppercase; }
+.ch { display: inline-block; vertical-align: top; width: 14rem; margin: 0 0.8rem 0.8rem 0; padding: 0.8rem; background: #111; border: 1px solid #222; border-radius: 0.6rem; }
+.ch b { display: inline-block; width: 3rem; height: 3rem; line-height: 3rem; text-align: center; background: #1f2937; border-radius: 0.4rem; font-size: 0.8rem; margin-right: 0.6rem; vertical-align: middle; overflow: hidden; }
+.ch span { display: inline-block; vertical-align: middle; width: 8.5rem; font-size: 0.95rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Ficha y reproductor */
+#detail, #player { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 20; background: #000; }
+#detail { background-color: #141414; background-size: cover; background-position: center; }
+#detailText { position: absolute; left: 3rem; bottom: 4rem; width: 55%; }
+#detailTitle { font-size: 3rem; font-weight: 900; color: #dc2626; text-transform: uppercase; line-height: 1.05; }
+#detailSub { font-size: 1.5rem; font-weight: bold; margin-top: 0.4rem; }
+#detailDesc { font-size: 1.1rem; color: #d1d5db; line-height: 1.5; margin: 1rem 0 1.6rem; max-height: 8.4rem; overflow: hidden; }
+#video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; }
+#frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+#playerTop { position: absolute; top: 0; left: 0; right: 0; padding: 1.2rem 2rem; background: rgba(0,0,0,.6); font-size: 1.3rem; font-weight: bold; }
+#playerMsg { position: absolute; left: 0; right: 0; bottom: 3rem; text-align: center; }
+#playerMsg span { display: inline-block; background: rgba(127,29,29,.95); color: #fecaca; padding: 0.9rem 1.4rem; border-radius: 0.6rem; font-size: 1.1rem; }
+#hint { position: absolute; right: 2rem; top: 1.3rem; font-size: 0.9rem; color: #9ca3af; font-weight: normal; }
+
+#toast { position: fixed; left: 2rem; bottom: 2rem; z-index: 30; background: #0f0f0f; border: 1px solid rgba(34,197,94,.5); padding: 1rem 1.3rem; border-radius: 0.8rem; font-size: 1rem; max-width: 30rem; }
+#loading { padding: 8rem 2.5rem; font-size: 1.4rem; color: #9ca3af; }
+</style>
+</head>
+<body>
+<div id="top">
+  <span id="logo"><b>H</b>Cineverso Mágico</span>
+  <a class="tab f on" tabindex="0" id="tabHome" data-go="home">Inicio</a>
+  <a class="tab f" tabindex="0" id="tabLive" data-go="live">TV en vivo</a>
+  <a class="tab f" tabindex="0" href="/?completa=1">Versión completa</a>
+</div>
+
+<div id="main">
+  <div id="loading">Cargando catálogo...</div>
+  <div id="home" class="hidden">
+    <div id="hero">
+      <div id="heroShade"></div><div id="heroShade2"></div>
+      <div id="heroText">
+        <div id="heroTitle"></div>
+        <div id="heroSub"></div>
+        <div class="meta" id="heroMeta"></div>
+        <div id="heroDesc"></div>
+        <a class="btn blanco f" tabindex="0" id="heroPlay">&#9654; Reproducir</a>
+        <a class="btn f" tabindex="0" id="heroInfo">Más información</a>
+      </div>
+    </div>
+    <div id="rows"></div>
+  </div>
+  <div id="live" class="hidden"><h1>TV en vivo</h1><div id="liveList"></div></div>
+</div>
+
+<div id="detail" class="hidden">
+  <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(10,10,10,.72)"></div>
+  <div id="detailText">
+    <div id="detailTitle"></div>
+    <div id="detailSub"></div>
+    <div class="meta" id="detailMeta"></div>
+    <div id="detailDesc"></div>
+    <a class="btn blanco f" tabindex="0" id="detailPlay">&#9654; Reproducir</a>
+    <a class="btn f" tabindex="0" id="detailBack">Volver</a>
+  </div>
+</div>
+
+<div id="player" class="hidden">
+  <video id="video" controls autoplay playsinline x-webkit-airplay="allow" class="f" tabindex="0"></video>
+  <iframe id="frame" class="hidden" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+  <div id="playerTop"><span id="playerTitle"></span><span id="hint">OK: pausa · &#9664; &#9654;: 10 s · Atrás: salir</span></div>
+  <div id="playerMsg" class="hidden"><span id="playerMsgText"></span></div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script>
+(function () {
+  "use strict";
+  var DEFAULT_MOVIES = [{"id":"def-1","title":"El Caballero Oscuro","rating":"9.0","year":"2008","tag":"Acción","type":"pelicula","desc":"Batman se enfrenta al Caos encarnado por el Joker en una de las mejores adaptaciones cinematográficas de superhéroes de la historia.","bgImage":"https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=800&auto=format&fit=crop","videoUrl":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4","duration":"2 h 32 min","genres":["Acción","Crimen","Drama"],"cast":"Christian Bale, Heath Ledger, Aaron Eckhart","director":"Christopher Nolan","production":"Warner Bros. Pictures","originalLanguage":"EN"},{"id":"def-2","title":"Wildwood","rating":"8.4","year":"2025","tag":"Aventura","type":"pelicula","desc":"Una joven se adentra en un bosque secreto repleto de magia, criaturas místicas y peligros inimaginables para rescatar a su hermano menor.","bgImage":"https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop","videoUrl":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4","duration":"1 h 58 min","genres":["Aventura","Fantasía","Animación"],"cast":"Carey Mulligan, Mahershala Ali, Peyton Elizabeth Lee","director":"Travis Knight","production":"Laika Studios","originalLanguage":"EN"},{"id":"def-3","title":"HOPE","subtitle":"EL PRIMER IMPACTO","rating":"8.8","year":"2026","tag":"Ciencia ficción","type":"pelicula","desc":"Los refuerzos se han desviado para combatir los incendios forestales y se han cortado todas las comunicaciones. El jefe del puesto policial de Hope, Bum-seok, y la agente Sung-ae luchan por defender un pueblo de ancianos, mientras que en las montañas, Sung-ki y los lugareños que se han lanzado a la búsqueda de la bestia se ven, por el contrario, acosados por ella. Lo que comienza como ignorancia siembra la semilla del desastre, que se intensifica a través del conflicto humano hasta convertirse en una tragedia de proporciones cósmicas.","bgImage":"https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=800&auto=format&fit=crop","videoUrl":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4","duration":"2 h 37 min","genres":["Ciencia ficción","Misterio","Acción"],"cast":"황정민, 조인성, 정호연, Alicia Vikander","director":"Na Hong-jin","production":"Forged Films","originalLanguage":"KO"},{"id":"def-4","title":"Toy Story 5","rating":"9.1","year":"2026","tag":"Animación","type":"pelicula","desc":"Woody, Buzz y el resto de la pandilla enfrentan los nuevos desafíos de la tecnología moderna y los dispositivos electrónicos en las manos de los niños.","bgImage":"https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop","videoUrl":"https://archive.org/download/toy-story-5-2026-pelisde-rey/Toy%20Story%205%20%282026%25","duration":"1 h 45 min","genres":["Animación","Comedia","Familia"],"cast":"Tom Hanks, Tim Allen, Joan Cusack","director":"Andrew Stanton","production":"Pixar Animation Studios","originalLanguage":"EN"}];
+  var CHANNELS = [{"n":"ATV HD","s":"ATV","c":"Perú 🇵🇪","v":"https://ddycmnicl95kp.cloudfront.net/live/1wk5g7itgjof/master.m3u8","e":""},{"n":"ATV Sur","s":"ATVS","c":"Perú 🇵🇪","v":"https://ddycmnicl95kp.cloudfront.net/live/jryddd3ktckq/master.m3u8","e":""},{"n":"ATV+ Noticias","s":"ATV+","c":"Perú 🇵🇪","v":"https://ddycmnicl95kp.cloudfront.net/live/32nynqn38go4/master.m3u8","e":""},{"n":"RPP Noticias TV","s":"RPP","c":"Perú 🇵🇪","v":"http://190.93.224.42/RPP/index.m3u8","e":""},{"n":"Exitosa TV","s":"EX","c":"Perú 🇵🇪","v":"https://luna-1-video.mediaserver.digital/exitosatv_server2_3d41s0d1/index.m3u8","e":""},{"n":"Nativa Deportes & TV","s":"NAT","c":"Perú 🇵🇪","v":"https://oneplay.iptvperu.tv:1936/static/nativa1.stream/playlist.m3u8","e":""},{"n":"USMP TV","s":"USMP","c":"Perú 🇵🇪","v":"https://stream.usmptvmedia.net.pe/hls/web_hls/index.m3u8","e":""},{"n":"Bethel TV","s":"BET","c":"Perú 🇵🇪","v":"https://alfa.betheltv.tv/srt/3_abr/playlist.m3u8","e":""},{"n":"SOL TV Trujillo","s":"SOL","c":"Perú 🇵🇪","v":"https://5790d294af2dc.streamlock.net/streamtv/streamtv/playlist.m3u8","e":""},{"n":"TV Perú Oficial","s":"TVP","c":"Perú 🇵🇪","v":"https://cdnhd.iblups.net/hls/777b4d4cc0984575a7d14f6ee57dbcaf7.m3u8","e":""},{"n":"Panamericana TV","s":"PT","c":"Perú 🇵🇪","v":"http://45.171.108.253:8888/PANAMERICANA/index.m3u8","e":""},{"n":"Willax Televisión","s":"WIL","c":"Perú 🇵🇪","v":"http://190.93.224.42/WILLAX/index.m3u8","e":""},{"n":"Latina Noticias","s":"LN","c":"Perú 🇵🇪","v":"","e":"https://www.youtube.com/embed/sLzfveqNEJc"},{"n":"36 TV Huacho","s":"36T","c":"Perú 🇵🇪","v":"https://live-evg10.tv360.bitel.com.pe/bitel/36tvSRT/playlist.m3u8","e":""},{"n":"América TV (Directo)","s":"AT","c":"Perú 🇵🇪","v":"http://190.93.224.42/AMERICA-TV/index.m3u8","e":""},{"n":"Canal 8 Perú","s":"C8","c":"Perú 🇵🇪","v":"https://live.obslivestream.com/canal8/index.m3u8","e":""},{"n":"Más TV Perú","s":"MTV","c":"Perú 🇵🇪","v":"https://live-evg11.tv360.bitel.com.pe/bitel/mastvSRT/playlist.m3u8","e":""},{"n":"Onda Tv","s":"ON","c":"Perú 🇵🇪","v":"https://live-evg5.tv360.bitel.com.pe/bitel/onda/playlist.m3u8","e":""},{"n":"Agro TV","s":"AG","c":"Perú 🇵🇪","v":"https://live-evg8.tv360.bitel.com.pe/bitel/agroSRT/playlist.m3u8","e":""},{"n":"Amazonica TV","s":"AMZ","c":"Perú 🇵🇪","v":"https://live-evg8.tv360.bitel.com.pe/bitel/amazonicatvSRT/playlist.m3u8","e":""},{"n":"Antena SUR","s":"AS","c":"Perú 🇵🇪","v":"https://cloudpro.servidoresdestream.com:8081/8010/index.m3u8","e":""},{"n":"Canal 21 Huancayo","s":"C21","c":"Perú 🇵🇪","v":"https://play.agenciastreaming.com:8081/tvwanka/tracks-v1/index.fmp4.m3u8","e":""},{"n":"Casma TV","s":"CSM","c":"Perú 🇵🇪","v":"https://live-evg7.tv360.bitel.com.pe/bitel/casmatvSRT-TRA/playlist.m3u8","e":""},{"n":"DTV (Peru)","s":"DTV","c":"Perú 🇵🇪","v":"https://live-evg7.tv360.bitel.com.pe/bitel/sabormixtvSRT/playlist.m3u8","e":""},{"n":"Folklore TV","s":"FOLK","c":"Perú 🇵🇪","v":"https://play.folkloretv.pe/StreamSD/index.m3u8","e":""},{"n":"Foro TV","s":"FORO","c":"Perú 🇵🇪","v":"https://mc.servidor.stream:19360/8274/8274.m3u8","e":""},{"n":"Huacho Peru TV","s":"HCH","c":"Perú 🇵🇪","v":"https://tv.huachotv.com/stream.m3u8","e":""},{"n":"Lider TV (Peru)","s":"LID","c":"Perú 🇵🇪","v":"https://chankillo.agenciastreaming.com/lidertv/index.m3u8","e":""},{"n":"Miel TV","s":"MIEL","c":"Perú 🇵🇪","v":"https://live-evg5.tv360.bitel.com.pe/bitel/mieltvSRT/playlist.m3u8","e":""},{"n":"Nativa TV Satipo","s":"NATS","c":"Perú 🇵🇪","v":"https://live-evg7.tv360.bitel.com.pe/bitel/nativachanchamayoSRT/playlist.m3u8","e":""},{"n":"Unitel (Peru)","s":"UNI","c":"Perú 🇵🇪","v":"https://play.agenciastreaming.com:8081/uniteltv/index.m3u8","e":""},{"n":"TVN Chile HD","s":"TVN","c":"Chile 🇨🇱","v":"http://15.204.246.24:8080/TVNHD/index.m3u8","e":""},{"n":"24 Horas TVN","s":"24H","c":"Chile 🇨🇱","v":"","e":"https://www.youtube.com/embed/VGaoFnRtL7s"},{"n":"T13 Teletrece","s":"T13","c":"Chile 🇨🇱","v":"","e":"https://www.youtube.com/embed/oy1dvCRd42s"},{"n":"TV+ Chile","s":"TV+","c":"Chile 🇨🇱","v":"https://redirector.rudo.video/hls-video/ey6283je82983je9823je8jowowiekldk9838274/tvmas/tvmas.smil/playlist.m3u8?did=h5cl15920770042f7a4dd9c5a77c21873fa8d1d0b8a43a&ndvc=0","e":""},{"n":"Aysén TV","s":"AYS","c":"Chile 🇨🇱","v":"https://v2.tustreaming.cl/aysentv/tracks-v1a1/mono.ts.m3u8","e":""},{"n":"Canal 21 Ñuble","s":"C21","c":"Chile 🇨🇱","v":"https://tls-cl.cdnz.cl/canal21tv/live/playlist.m3u8","e":""},{"n":"Marga Marga TV","s":"MMT","c":"Chile 🇨🇱","v":"https://v1.tustreaming.cl/margamargatv/index.m3u8","e":""},{"n":"Mi Radio TV","s":"MRT","c":"Chile 🇨🇱","v":"https://scl.edge.grupoz.cl/miradio2/live/playlist.m3u8","e":""},{"n":"Puranoticia TV","s":"PRN","c":"Chile 🇨🇱","v":"https://pnt.janus.cl/playlist/stream.m3u8?t=0&q=0&s=&p=&id=mvz2houd&d=w","e":""},{"n":"Antofagasta TV","s":"ATV","c":"Chile 🇨🇱","v":"https://unlimited6-cl.dps.live/atv/atv.smil/playlist.m3u8","e":""},{"n":"13C","s":"13C","c":"Chile 🇨🇱","v":"https://origin.dpsgo.com/ssai/event/GI-9cp_bT8KcerLpZwkuhw/master.m3u8","e":""},{"n":"13 Realities","s":"13R","c":"Chile 🇨🇱","v":"https://origin.dpsgo.com/ssai/event/g7_JOM0ORki9SR5RKHe-Kw/master.m3u8","e":""},{"n":"13T","s":"13T","c":"Chile 🇨🇱","v":"https://origin.dpsgo.com/ssai/event/f4TrySe8SoiGF8Lu3EIq1g/master.m3u8","e":""},{"n":"ADN TV","s":"ADN","c":"Chile 🇨🇱","v":"https://redirector.rudo.video/hls-video/931b584451fa6dd1313ee66efbfd5802e3f3bcea/adntv/adntv.smil/playlist.m3u8","e":""},{"n":"AM Canal","s":"AMC","c":"Chile 🇨🇱","v":"https://streaming.bitsur.cl:3534/live/vdo1102live.m3u8","e":""},{"n":"Bio Bio TV","s":"BBT","c":"Chile 🇨🇱","v":"https://redirector.rudo.video/hls-video/339f69c6122f6d8f4574732c235f09b7683e31a5/bbtv/bbtv.smil/playlist.m3u8","e":""},{"n":"Canal 2 Quellon","s":"C2Q","c":"Chile 🇨🇱","v":"https://pantera1-100gb-cl-movistar.dps.live/tvquellon/tvquellon.smil/playlist.m3u8","e":""},{"n":"Canal 9 Bio-Bio","s":"C9B","c":"Chile 🇨🇱","v":"https://unlimited6-cl.dps.live/c9/c9.smil/playlist.m3u8","e":""},{"n":"Canal 13","s":"C13","c":"Chile 🇨🇱","v":"http://15.204.246.24:8080/Canal13HD/index.m3u8","e":""},{"n":"Caracola TV","s":"CAR","c":"Chile 🇨🇱","v":"https://wifispeed.trapemn.tv:1936/comunales/caracola-tv/chunks.m3u8","e":""},{"n":"Central TV","s":"CEN","c":"Chile 🇨🇱","v":"https://freya.mivideo.pro/centraltv/video.m3u8","e":""},{"n":"ChileVision","s":"CHV","c":"Chile 🇨🇱","v":"http://15.204.246.24:8080/CHVHD/index.m3u8","e":""},{"n":"Estacion TV","s":"EST","c":"Chile 🇨🇱","v":"https://unlimited1-cl-isp.dps.live/supersonikatv/supersonikatv.smil/playlist.m3u8","e":""},{"n":"Iquique TV","s":"ITV","c":"Chile 🇨🇱","v":"https://origin.skarnetchile.com:8081/iquiquetv-hd/index.m3u8","e":""},{"n":"Juntos TV","s":"JNT","c":"Chile 🇨🇱","v":"https://video.juntostvchile.cl:8879/hls/web-jntv.m3u8","e":""},{"n":"Mega 2","s":"MG2","c":"Chile 🇨🇱","v":"http://15.204.246.24:8080/Mega2HD/index.m3u8","e":""},{"n":"Mega","s":"MGA","c":"Chile 🇨🇱","v":"http://tr.live.clarovtrcdn.vtrplay.com/megahdchi/vxfmt=dp/playlist.m3u8?device_profile=STB_HLS_VCAS_LIVE_HD","e":""},{"n":"Mega Ficcion","s":"MGF","c":"Chile 🇨🇱","v":"http://15.204.196.147:22880/MEGAFICCION-MEGAMEDIA-EE.UU-PROVEEDOR/index.m3u8","e":""},{"n":"Televida","s":"TVD","c":"Chile 🇨🇱","v":"https://tls-cl.cdnz.cl/televida/live/playlist.m3u8","e":""},{"n":"Canal 26","s":"C26","c":"Argentina 🇦🇷","v":"https://stream-gtlc.telecentro.net.ar/hls/canal26hls/main.m3u8","e":""},{"n":"HTV Argentina","s":"HTV","c":"Argentina 🇦🇷","v":"http://45.134.141.161:2200/ARG/HTV/index.m3u8","e":""},{"n":"Stream 12 Argentina","s":"S12","c":"Argentina 🇦🇷","v":"https://streamtv12.ddns.net:5443/LiveApp/streams/193945633734205616732920.m3u8","e":""},{"n":"Neo TV Digital","s":"NEO","c":"Argentina 🇦🇷","v":"https://videostream.shockmedia.com.ar:19360/neotvdigital/neotvdigital.m3u8","e":""},{"n":"RTN Neuquén","s":"RTN","c":"Argentina 🇦🇷","v":"https://media.neuquen.gov.ar/rtn/television/media.m3u8","e":""},{"n":"Telemax","s":"TMX","c":"Argentina 🇦🇷","v":"https://stream-gtlc.telecentro.net.ar/hls/telemaxhls/main.m3u8","e":""},{"n":"TV Mana Argentina","s":"MNA","c":"Argentina 🇦🇷","v":"https://w2.manasat.com/tvmana-ar/smil:tvmana-ar.smil/playlist.m3u8","e":""},{"n":"Todo Noticias (TN)","s":"TN","c":"Argentina 🇦🇷","v":"","e":"https://www.youtube.com/embed/cb12KmMMDJA"},{"n":"América TV","s":"AMA","c":"Argentina 🇦🇷","v":"","e":"https://www.youtube.com/embed/zcWXboTnous"},{"n":"C5N","s":"C5N","c":"Argentina 🇦🇷","v":"","e":"https://www.youtube.com/embed/1ivxAla_IvE"},{"n":"Bolivia Stream 1","s":"BS1","c":"Bolivia 🇧🇴","v":"http://190.181.61.93:8000/play/a001/index.m3u8","e":""},{"n":"F TV HD Bolivia","s":"FTV","c":"Bolivia 🇧🇴","v":"https://master.tucableip.com/ftvhd/index.m3u8","e":""},{"n":"Bolivia Stream 2","s":"BS2","c":"Bolivia 🇧🇴","v":"http://190.181.61.93:8000/play/a00n/index.m3u8","e":""},{"n":"Telefe HD Bolivia","s":"TLF","c":"Bolivia 🇧🇴","v":"https://59d39900ebfb8.streamlock.net/telefehd/telefehd/playlist.m3u8","e":""},{"n":"Bolivia Stream 3","s":"BS3","c":"Bolivia 🇧🇴","v":"http://190.181.61.93:8000/play/1909/index.m3u8","e":""},{"n":"Red Uno Bolivia","s":"RUN","c":"Bolivia 🇧🇴","v":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4","e":""},{"n":"Router TV Italia","s":"RTR","c":"Italia 🇮🇹","v":"https://router.xdevel.com/video0s975363-69/stream/playlist.m3u8","e":""},{"n":"Mediaset Italia 2","s":"IT2","c":"Italia 🇮🇹","v":"https://59d7d6f47d7fc.streamlock.net/italia2/italia2/playlist.m3u8","e":""},{"n":"Fishing TV Italia","s":"FSH","c":"Italia 🇮🇹","v":"https://fms.premio.link/fishingtv/playlist.m3u8","e":""},{"n":"RAI Scuola","s":"RAI","c":"Italia 🇮🇹","v":"https://d3k8wzt41aflvx.cloudfront.net/RAIScuola/Live.m3u8","e":""},{"n":"JCN Italia","s":"JCN","c":"Italia 🇮🇹","v":"https://1601580044.rsc.cdn77.org/live/_jcn_/amlst:CHANNEL_2/playlist.m3u8","e":""},{"n":"Mediaset EU","s":"MSE","c":"Italia 🇮🇹","v":"https://d3k8wzt41aflvx.cloudfront.net/MediasetEU/Live.m3u8","e":""},{"n":"Medjugorje Italia TV","s":"MED","c":"Italia 🇮🇹","v":"https://5f22d76e220e1.streamlock.net/medjugorjeitaliatv/medjugorjeitaliatv/playlist.m3u8","e":""},{"n":"Cine Western ES","s":"WES","c":"España 🇪🇸","v":"https://d2nq34q0i1r3la.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-awohw8g217ho8/CineWestern_ES.m3u8","e":""},{"n":"Eurosport 1 HD","s":"EU1","c":"España 🇪🇸","v":"http://45.134.141.161:2200/ARG/Eurosport_1_HD/index.m3u8","e":""},{"n":"Eurosport 2 HD","s":"EU2","c":"España 🇪🇸","v":"http://45.134.141.161:2200/ARG/Eurosport_2_HD/index.m3u8","e":""},{"n":"Rakuten TV FIFA Plus","s":"FIF","c":"España 🇪🇸","v":"https://d63fabad.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWVzX0ZJRkFQbHVzU3BhbmlzaF9ITFM/playlist.m3u8","e":""},{"n":"My Time Spain","s":"MTS","c":"España 🇪🇸","v":"https://appletree-mytimespain-rakuten.amagi.tv/playlist.m3u8","e":""},{"n":"TVE 24h España","s":"24H","c":"España 🇪🇸","v":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4","e":""},{"n":"ESPN HD","s":"ESP","c":"Deportes ⚽","v":"https://barinaslive1.boldmss.com/ESPN/ESPN.isml/ESPN.m3u8","e":""},{"n":"ESPN 4","s":"ES4","c":"Deportes ⚽","v":"https://barinaslive1.boldmss.com/ESPN_4/ESPN_4.isml/ESPN_4.m3u8","e":""},{"n":"ESPN 5","s":"ES5","c":"Deportes ⚽","v":"https://barinaslive1.boldmss.com/ESPN_5/ESPN_5.isml/ESPN_5.m3u8","e":""},{"n":"ESPN 6","s":"ES6","c":"Deportes ⚽","v":"https://barinaslive1.boldmss.com/ESPN_6/ESPN_6.isml/ESPN_6.m3u8","e":""},{"n":"ESPN 7","s":"ES7","c":"Deportes ⚽","v":"https://barinaslive1.boldmss.com/ESPN_7/ESPN_7.isml/ESPN_7.m3u8","e":""},{"n":"Ecuavisa","s":"ECU","c":"Ecuador 🇪🇨","v":"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4","e":""}];
+
+  // Tamaño de letra según el ancho de la pantalla (1280 px = 16 px)
+  function scale() {
+    var w = window.innerWidth || document.documentElement.clientWidth || 1280;
+    var fs = Math.max(11, Math.min(30, w / 80));
+    document.documentElement.style.fontSize = fs + "px";
+  }
+  scale();
+  window.onresize = scale;
+
+  function $(id) { return document.getElementById(id); }
+  function show(el) { el.className = el.className.replace(/\s*hidden/g, ""); }
+  function hide(el) { if (!/\bhidden\b/.test(el.className)) el.className += " hidden"; }
+  function isHidden(el) { return /\bhidden\b/.test(el.className); }
+  function esc(t) { return String(t == null ? "" : t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function img(url) { return String(url || "").replace("auto=format", "fm=jpg"); }
+  function toast(msg, ms) {
+    var t = $("toast"); t.innerHTML = esc(msg); show(t);
+    clearTimeout(toast.timer); toast.timer = setTimeout(function () { hide(t); }, ms || 4000);
+  }
+  function getJSON(url, cb) {
+    var x;
+    try { x = new XMLHttpRequest(); } catch (e) { cb(null); return; }
+    x.open("GET", url, true);
+    try { x.timeout = 10000; } catch (e) {}
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status >= 200 && x.status < 300) { try { cb(JSON.parse(x.responseText)); } catch (e) { cb(null); } }
+      else cb(null);
+    };
+    x.ontimeout = function () { cb(null); };
+    try { x.send(null); } catch (e) { cb(null); }
+  }
+
+  // Progreso "Continuar viendo" (solo durante esta sesión, como invitado)
+  var progress = {};
+
+  var movies = [];
+  var current = null;
+
+  function loadCatalog() {
+    getJSON("/api/catalog?v=" + new Date().getTime(), function (d) {
+      if (d && d.movies && d.movies.length) { start(d.movies); return; }
+      getJSON("/catalogo.json?v=" + new Date().getTime(), function (f) {
+        start(f && f.length ? f : DEFAULT_MOVIES);
+      });
+    });
+  }
+
+  function cardHTML(m, i) {
+    var p = progress[String(m.id)];
+    var bar = p ? '<div class="bar"><i style="width:' + Math.min(100, Math.round(p.time / p.duration * 100)) + '%"></i></div>' : "";
+    return '<a class="card f" tabindex="0" data-i="' + i + '">' +
+      '<div class="poster"><div class="ph">' + esc(m.title) + '</div>' +
+      '<img src="' + esc(img(m.bgImage || m.img)) + '" alt="" onerror="this.style.display=\'none\'">' + bar + '</div>' +
+      '<div class="t">' + esc(m.title) + '</div></a>';
+  }
+
+  function renderRows() {
+    var html = "";
+    var cont = [], i;
+    for (i = 0; i < movies.length; i++) if (progress[String(movies[i].id)]) cont.push(i);
+    if (cont.length) {
+      html += '<div class="row"><h2>Continuar viendo</h2><div class="rail">';
+      for (i = 0; i < cont.length; i++) html += cardHTML(movies[cont[i]], cont[i]);
+      html += "</div></div>";
+    }
+    html += '<div class="row"><h2>Recién agregadas</h2><div class="rail">';
+    for (i = 0; i < movies.length; i++) html += cardHTML(movies[i], i);
+    html += "</div></div>";
+    var groups = {}, order = [];
+    for (i = 0; i < movies.length; i++) {
+      var g = movies[i].tag || "Otros";
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(i);
+    }
+    for (var k = 0; k < order.length; k++) {
+      if (groups[order[k]].length < 2) continue;
+      html += '<div class="row"><h2>' + esc(order[k]) + '</h2><div class="rail">';
+      for (i = 0; i < groups[order[k]].length; i++) html += cardHTML(movies[groups[order[k]][i]], groups[order[k]][i]);
+      html += "</div></div>";
+    }
+    $("rows").innerHTML = html;
+  }
+
+  function metaHTML(m) {
+    return '<span class="star">&#9733; ' + esc(m.rating || "") + '</span><span>' + esc(m.year || "") + '</span><span>' +
+      esc(m.duration || "") + '</span><span class="tag">' + esc(m.tag || "") + '</span>';
+  }
+
+  function start(list) {
+    movies = [];
+    for (var i = 0; i < list.length; i++) if (list[i] && list[i].title) movies.push(list[i]);
+    if (!movies.length) movies = DEFAULT_MOVIES;
+    var h = movies[2] || movies[0];
+    $("hero").style.backgroundImage = "url('" + img(h.bgImage) + "')";
+    $("heroTitle").innerHTML = esc(h.title);
+    $("heroSub").innerHTML = esc(h.subtitle || "");
+    $("heroMeta").innerHTML = metaHTML(h);
+    $("heroDesc").innerHTML = esc(h.desc || "");
+    $("heroPlay").onclick = function () { play(h); };
+    $("heroInfo").onclick = function () { openDetail(h); };
+    renderRows();
+    hide($("loading"));
+    goTab("home");
+    setTimeout(function () { focusEl($("heroPlay")); }, 50);
+  }
+
+  function renderLive() {
+    var html = "", last = "";
+    for (var i = 0; i < CHANNELS.length; i++) {
+      var c = CHANNELS[i];
+      var country = String(c.c).replace(/[^\u0000-ɏ ]/g, "").replace(/\s+$/, "");
+      if (country !== last) { html += '<div class="country">' + esc(country) + "</div>"; last = country; }
+      html += '<a class="ch f" tabindex="0" data-ch="' + i + '"><b>' + esc(c.s || c.n.slice(0, 3)) + "</b><span>" + esc(c.n) + "</span></a>";
+    }
+    $("liveList").innerHTML = html;
+  }
+
+  function goTab(name) {
+    if (name === "live") { hide($("home")); show($("live")); if (!$("liveList").innerHTML) renderLive(); }
+    else { hide($("live")); show($("home")); }
+    $("tabHome").className = "tab f" + (name === "home" ? " on" : "");
+    $("tabLive").className = "tab f" + (name === "live" ? " on" : "");
+    window.scrollTo(0, 0);
+  }
+
+  var returnFocus = null;
+  function openDetail(m) {
+    current = m;
+    returnFocus = document.activeElement;
+    $("detail").style.backgroundImage = "url('" + img(m.bgImage) + "')";
+    $("detailTitle").innerHTML = esc(m.title);
+    $("detailSub").innerHTML = esc(m.subtitle || "");
+    $("detailMeta").innerHTML = metaHTML(m);
+    $("detailDesc").innerHTML = esc(m.desc || "");
+    show($("detail"));
+    setTimeout(function () { focusEl($("detailPlay")); }, 50);
+  }
+  function closeDetail() {
+    hide($("detail"));
+    if (returnFocus) focusEl(returnFocus);
+  }
+
+  var video = $("video"), frame = $("frame");
+  var playing = null, usedBackup = false, playerReturn = null;
+  function play(m, isLive) {
+    playing = m; usedBackup = false;
+    if (isHidden($("player"))) playerReturn = document.activeElement;
+    $("playerTitle").innerHTML = esc(m.title || m.n);
+    hide($("playerMsg"));
+    show($("player"));
+    if (m.e) {
+      hide(video); show(frame);
+      frame.src = m.e + (m.e.indexOf("?") === -1 ? "?" : "&") + "autoplay=1";
+      return;
+    }
+    hide(frame); show(video);
+    var src = isLive ? m.v : (m.videoUrl || "");
+    if (!src) { msg("Este contenido no tiene enlace de video."); return; }
+    video.src = src;
+    try { video.load(); } catch (e) {}
+    var p = video.play();
+    if (p && p["catch"]) p["catch"](function () {});
+    focusEl(video);
+  }
+  video.addEventListener("loadedmetadata", function () {
+    if (!playing || !playing.id) return;
+    var s = progress[String(playing.id)];
+    if (s && s.time > 5 && s.time < video.duration - 60) { try { video.currentTime = s.time; } catch (e) {} }
+  });
+  video.addEventListener("timeupdate", function () {
+    if (!playing || !playing.id || !video.duration || !isFinite(video.duration)) return;
+    if (video.duration - video.currentTime < 60) delete progress[String(playing.id)];
+    else if (video.currentTime > 5) progress[String(playing.id)] = { time: video.currentTime, duration: video.duration };
+  });
+  video.addEventListener("error", function () {
+    if (playing && playing.backupVideoUrl && !usedBackup) {
+      usedBackup = true; video.src = playing.backupVideoUrl;
+      try { video.load(); video.play(); } catch (e) {}
+      return;
+    }
+    msg("Este video no se puede reproducir en esta TV. Formato recomendado: MP4 (H.264 + AAC) con enlace https.");
+  });
+  function msg(t) { $("playerMsgText").innerHTML = esc(t); show($("playerMsg")); }
+  function closePlayer() {
+    try { video.pause(); } catch (e) {}
+    video.removeAttribute("src");
+    try { video.load(); } catch (e) {}
+    frame.src = "about:blank";
+    hide($("player"));
+    playing = null;
+    renderRows();
+    if (playerReturn) focusEl(playerReturn);
+  }
+
+  // ---------- Clics ----------
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    while (el && el !== document.body && !el.getAttribute("data-i") && !el.getAttribute("data-ch") && !el.getAttribute("data-go")) el = el.parentNode;
+    if (!el || el === document.body) return;
+    if (el.getAttribute("data-go")) { goTab(el.getAttribute("data-go")); return; }
+    if (el.getAttribute("data-i") !== null && el.getAttribute("data-i") !== "") { openDetail(movies[+el.getAttribute("data-i")]); return; }
+    if (el.getAttribute("data-ch")) play(CHANNELS[+el.getAttribute("data-ch")], true);
+  }, false);
+  $("detailPlay").onclick = function () { if (current) play(current); };
+  $("detailBack").onclick = closeDetail;
+
+  // ---------- Control remoto ----------
+  function visible(el) {
+    if (!el.offsetWidth && !el.offsetHeight) return false;
+    var p = el;
+    while (p && p !== document.body) { if (isHidden(p)) return false; p = p.parentNode; }
+    return true;
+  }
+  function scope() {
+    if (!isHidden($("player"))) return $("player");
+    if (!isHidden($("detail"))) return $("detail");
+    return document.body;
+  }
+  function focusables() {
+    var all = scope().querySelectorAll(".f"), out = [];
+    for (var i = 0; i < all.length; i++) if (visible(all[i])) out.push(all[i]);
+    return out;
+  }
+  function focusEl(el) {
+    if (!el) return;
+    try { el.focus(); } catch (e) {}
+    // Desplaza la fila horizontal para que la tarjeta se vea
+    var rail = el.parentNode;
+    if (rail && /\brail\b/.test(rail.className)) {
+      var left = el.offsetLeft - rail.offsetLeft - 40;
+      rail.scrollLeft = left < 0 ? 0 : left;
+    }
+    var r = el.getBoundingClientRect();
+    var h = window.innerHeight || 720;
+    if (scope() === document.body) {
+      if (r.top < 90) window.scrollBy(0, r.top - 120);
+      else if (r.bottom > h - 20) window.scrollBy(0, r.bottom - h + 60);
+      if (el.id === "heroPlay" || el.className.indexOf("tab") !== -1) window.scrollTo(0, 0);
+    }
+  }
+  function move(dir) {
+    var items = focusables();
+    if (!items.length) return;
+    var cur = document.activeElement;
+    var idx = -1;
+    for (var i = 0; i < items.length; i++) if (items[i] === cur) idx = i;
+    if (idx === -1) { focusEl(items[0]); return; }
+    var c = cur.getBoundingClientRect();
+    var cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+    var best = null, bestScore = 1e9;
+    for (i = 0; i < items.length; i++) {
+      if (i === idx) continue;
+      var r = items[i].getBoundingClientRect();
+      var x = r.left + r.width / 2, y = r.top + r.height / 2, pr, sc;
+      if (dir === "left" || dir === "right") {
+        pr = dir === "right" ? x - cx : cx - x;
+        if (pr <= 1) continue;
+        sc = (r.top < c.bottom && r.bottom > c.top) ? 0 : Math.abs(y - cy) * 3;
+      } else {
+        pr = dir === "down" ? y - cy : cy - y;
+        if (pr <= 1) continue;
+        sc = Math.abs(x - cx) * ((r.left < c.right && r.right > c.left) ? 0.3 : 1.2);
+      }
+      // En filas horizontales las tarjetas ocultas a la derecha también cuentan
+      if (pr + sc < bestScore) { bestScore = pr + sc; best = items[i]; }
+    }
+    if (best) focusEl(best);
+    else if (dir === "up") window.scrollTo(0, 0);
+  }
+
+  document.addEventListener("keydown", function (e) {
+    var k = e.keyCode || e.which;
+    var key = e.key || "";
+    var playerOpen = !isHidden($("player"));
+    // Atrás: Samsung 10009, LG 461, Escape 27, Retroceso 8, Android/Fire 4 o "GoBack"
+    if (k === 10009 || k === 461 || k === 27 || k === 8 || k === 166 || key === "GoBack" || key === "BrowserBack") {
+      if (playerOpen) { closePlayer(); e.preventDefault(); return; }
+      if (!isHidden($("detail"))) { closeDetail(); e.preventDefault(); return; }
+      if (!isHidden($("live"))) { goTab("home"); focusEl($("tabLive")); e.preventDefault(); return; }
+      return;
+    }
+    // Teclas multimedia
+    if (playerOpen && !isHidden(video)) {
+      if (k === 415 || k === 19 || k === 10252 || k === 179 || key === "MediaPlayPause") {
+        if (video.paused) video.play(); else video.pause();
+        e.preventDefault(); return;
+      }
+      if (k === 417 || k === 228) { video.currentTime += 30; e.preventDefault(); return; }
+      if (k === 412 || k === 227) { video.currentTime = Math.max(0, video.currentTime - 30); e.preventDefault(); return; }
+      if (k === 413) { closePlayer(); e.preventDefault(); return; }
+      if (document.activeElement === video) {
+        if (k === 13) { if (video.paused) video.play(); else video.pause(); e.preventDefault(); return; }
+        if (k === 37) { video.currentTime = Math.max(0, video.currentTime - 10); e.preventDefault(); return; }
+        if (k === 39) { video.currentTime += 10; e.preventDefault(); return; }
+      }
+    }
+    if (k === 13) {
+      var a = document.activeElement;
+      if (a && a.className && a.className.indexOf("f") !== -1 && a.tagName !== "VIDEO") {
+        if (a.getAttribute("href")) return;
+        e.preventDefault();
+        if (a.click) a.click();
+        else { var ev = document.createEvent("MouseEvents"); ev.initEvent("click", true, true); a.dispatchEvent(ev); }
+      }
+      return;
+    }
+    var dir = k === 37 ? "left" : k === 38 ? "up" : k === 39 ? "right" : k === 40 ? "down" : null;
+    if (dir) { e.preventDefault(); move(dir); }
+  }, false);
+
+  // Registrar teclas multimedia en Samsung Tizen (si se permite)
+  try {
+    if (window.tizen && tizen.tvinputdevice) {
+      var keys = ["MediaPlayPause", "MediaPlay", "MediaPause", "MediaFastForward", "MediaRewind", "MediaStop"];
+      for (var i = 0; i < keys.length; i++) { try { tizen.tvinputdevice.registerKey(keys[i]); } catch (e) {} }
+    }
+  } catch (e) {}
+
+  loadCatalog();
+})();
+</script>
+</body>
+</html>

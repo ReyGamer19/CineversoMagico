@@ -130,7 +130,7 @@ function isSmartTvBrowser(): boolean {
 
 // CSS de compatibilidad para navegadores antiguos (TVs). Solo se activa con la clase
 // "tv-legacy" en <html>, así que NO cambia nada en celulares ni PCs modernos.
-const LEGACY_CSS = `
+const LEGACY_RULES = `
 html{color-scheme:dark}
 .inset-0{top:0;right:0;bottom:0;left:0}
 html.tv-legacy button,html.tv-legacy input,html.tv-legacy select,html.tv-legacy textarea{font-family:inherit;line-height:inherit}
@@ -163,6 +163,26 @@ html.tv-mode{font-size:112.5%}
 html.tv-mode :focus{outline:4px solid #22c55e !important;outline-offset:3px;box-shadow:0 0 0 6px rgba(34,197,94,.35) !important}
 html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
 `;
+
+// Los mismos arreglos se activan SOLO con CSS en navegadores sin aspect-ratio
+// (funciona aunque el JavaScript de la TV falle)
+const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}";
+
+// Se ejecuta antes que todo. Si el navegador es antiguo o la app no arranca,
+// manda a la versión TV ultraligera (/tv.html), que funciona en cualquier Smart TV.
+const TV_GUARD_JS = [
+  "(function(){try{",
+  "var s=location.search;",
+  "if(/[?&](completa|admin)\\b/.test(s)){try{sessionStorage.setItem('cv_full','1')}catch(e){}return;}",
+  "try{if(sessionStorage.getItem('cv_full')==='1')return;}catch(e){}",
+  "var go=function(){if(!window.__cvReady)location.replace('/tv.html');};",
+  "var tv=/SMART-TV|SmartTV|Tizen|Web0S|webOS|NetCast|HbbTV|Android TV|GoogleTV|AFT[A-Z]|BRAVIA|CrKey|Roku|VIDAA|Hisense|NETTV|Viera|AQUOS|Opera TV|TVHTML5|SonyCEBrowser/i.test(navigator.userAgent);",
+  "var modern=false;try{new Function('var a={b:1};return a?.b??0');modern=typeof Promise!=='undefined'&&typeof fetch!=='undefined'&&!!window.CSS&&!!window.CSS.supports;}catch(e){}",
+  "if(!modern){go();return;}",
+  "window.addEventListener('error',function(ev){var m=String((ev&&ev.message)||'');if(/SyntaxError|Unexpected|is not defined|is not a function|undefined is not/i.test(m))setTimeout(go,1500);});",
+  "if(tv)setTimeout(go,15000);",
+  "}catch(e){}})();",
+].join("");
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), a[href], input:not([disabled]), select, textarea, video, [tabindex]:not([tabindex="-1"])';
 
@@ -1604,6 +1624,11 @@ export default function Home() {
   const [usingBackup, setUsingBackup] = useState(false);
   const lastFocusRef = useRef<HTMLElement | null>(null);
 
+  // Avisa al guardián de TV que la app arrancó bien
+  useEffect(() => {
+    try { (window as any).__cvReady = true; } catch (e) {}
+  }, []);
+
   // Detecta navegador antiguo y Smart TV
   useEffect(() => {
     const html = document.documentElement;
@@ -2285,6 +2310,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
+      <script dangerouslySetInnerHTML={{ __html: TV_GUARD_JS }} />
       <style dangerouslySetInnerHTML={{ __html: LEGACY_CSS }} />
       {/* Navegación Superior Optimizada para Smart TV */}
       <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 md:h-auto md:py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
