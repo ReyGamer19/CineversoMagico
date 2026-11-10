@@ -3177,6 +3177,17 @@ export default function Home() {
     return out.sort((a, b) => b.time - a.time).slice(0, 20);
   })();
   const unreadCount = notifications.filter((n) => n.time > notifSeen).length;
+  useEffect(() => {
+    if (!showNotif) return;
+    const t = setTimeout(() => {
+      const modals = document.querySelectorAll("[data-tv-modal]");
+      const scope = modals.length ? modals[modals.length - 1] : document;
+      const el = (scope.querySelector("[data-autofocus]") || scope.querySelector("button")) as HTMLElement | null;
+      if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [showNotif]);
+
   const openNotifications = () => {
     setShowNotif((v) => !v);
     if (notifications.length) setNotifSeen(Date.now());
@@ -3421,7 +3432,7 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
+    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 lg:pb-0">
       <script dangerouslySetInnerHTML={{ __html: TV_GUARD_JS }} />
       <style dangerouslySetInnerHTML={{ __html: LEGACY_CSS }} />
       {showSplash && (
@@ -3470,15 +3481,15 @@ export default function Home() {
         </div>
       )}
       {/* Navegación Superior Optimizada para Smart TV */}
-      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 md:h-auto md:py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
+      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 h-14 lg:h-16 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
         <div className="flex items-center gap-4 sm:gap-6 min-w-0">
           <div onClick={() => setActiveTab("inicio")} tabIndex={0} role="button" aria-label="Inicio" className="flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1">
             <img src="/icons/icon-192.png" alt="CV" className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-lg" />
-            <span className="whitespace-nowrap text-base sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
+            <span className="whitespace-nowrap text-base sm:text-xl xl:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
               Cineverso Magico <Sparkle className="hidden sm:block w-4 h-4 text-emerald-400 animate-pulse" />
             </span>
           </div>
-          <div className="hidden md:flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm font-medium text-gray-300">
+          <div className="hidden lg:flex items-center gap-2 xl:gap-4 text-sm font-medium text-gray-300 whitespace-nowrap">
             <button 
               onClick={() => setActiveTab("inicio")} 
               className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "inicio" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
@@ -3519,7 +3530,7 @@ export default function Home() {
 
         <div className="flex items-center gap-3 text-gray-300 ml-auto">
           {isAdmin && (
-            <button onClick={() => setActiveTab("admin")} className="md:hidden p-2 rounded-full text-green-400 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Panel de administración">
+            <button onClick={() => setActiveTab("admin")} className="lg:hidden p-2 rounded-full text-green-400 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Panel de administración">
               <Settings className="w-5 h-5" />
             </button>
           )}
@@ -3551,38 +3562,80 @@ export default function Home() {
               )}
             </button>
             {showNotif && (
-              <div className="absolute right-0 mt-2 bg-[#141414] border border-gray-800 rounded-xl shadow-2xl overflow-hidden" style={{ width: 340, maxWidth: "88vw", zIndex: 50 }}>
-                <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-                  <span className="text-sm font-bold text-white">Novedades</span>
-                  <button
-                    onClick={enablePush}
-                    className={`ml-auto mr-2 text-[11px] font-bold px-2.5 py-1 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${pushState === "subscribed" ? "bg-green-500/15 text-green-400" : "bg-white text-black hover:bg-gray-200"}`}
-                  >
-                    {pushState === "subscribed" ? "✔ Avisos activados" : "🔔 Activar avisos"}
-                  </button>
-                  <button data-close-on-back onClick={() => setShowNotif(false)} className="text-gray-400 hover:text-white p-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Cerrar"><X className="w-4 h-4" /></button>
-                </div>
-                {notifications.length === 0 ? (
-                  <p className="px-4 py-6 text-xs text-gray-500 text-center">No hay novedades por ahora.</p>
-                ) : (
-                  <div className="max-h-[60vh] overflow-y-auto">
-                    {notifications.map((n) => (
-                      <button
-                        key={n.key}
-                        onClick={() => { setShowNotif(false); setSelectedMovie(n.movie); }}
-                        className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[#1c1c1c] border-b border-gray-900 focus:outline-none focus:bg-[#1c1c1c]"
-                      >
-                        <img src={n.movie.bgImage} alt="" className="shrink-0 rounded-md object-cover bg-gray-900" style={{ width: 64, height: 40 }} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-bold text-white truncate">{n.title}</span>
-                          <span className="block text-[11px] text-gray-400 truncate">{n.text}</span>
-                          <span className="block text-[10px] text-gray-500">{timeAgo(n.time)}</span>
-                        </span>
-                      </button>
-                    ))}
+              <>
+                {/* fondo: tocar fuera cierra el panel */}
+                <div className="fixed inset-0" style={{ zIndex: 48, background: "rgba(0,0,0,.35)" }} onClick={() => setShowNotif(false)} aria-hidden="true" />
+                <div
+                  data-tv-modal
+                  role="dialog"
+                  aria-label="Novedades"
+                  className="fixed left-2 right-2 sm:left-auto sm:right-4 md:right-12 bg-[#141414] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                  style={{ top: 66, zIndex: 49, maxHeight: "calc(100vh - 160px)", width: "auto", maxWidth: 440 }}
+                >
+                  <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2 shrink-0">
+                    <Bell className="w-4 h-4 text-green-400" />
+                    <span className="text-base font-bold text-white">Novedades</span>
+                    <button
+                      data-close-on-back
+                      onClick={() => setShowNotif(false)}
+                      className="ml-auto text-gray-400 hover:text-white p-2 -mr-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      aria-label="Cerrar"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
-                )}
-              </div>
+
+                  {/* Activar avisos: cambia según el dispositivo */}
+                  <div className="px-4 py-3 border-b border-gray-800 shrink-0">
+                    {pushState === "subscribed" ? (
+                      <p className="text-xs text-green-400 font-bold">✔ Avisos activados en este dispositivo</p>
+                    ) : tvMode || pushState === "unsupported" ? (
+                      <p className="text-xs text-gray-400">Este dispositivo no permite avisos emergentes. Aquí verás siempre las novedades.</p>
+                    ) : pushState === "ios-install" ? (
+                      <div className="text-xs text-gray-300 space-y-1">
+                        <p className="font-bold text-white">🔔 Avisos en iPhone / iPad</p>
+                        <p>1. Toca el botón <b>Compartir</b> de Safari (cuadro con flecha ↑).</p>
+                        <p>2. Elige <b>"Agregar a pantalla de inicio"</b>.</p>
+                        <p>3. Abre Cineverso desde ese ícono y vuelve aquí para activar los avisos.</p>
+                      </div>
+                    ) : pushState === "denied" ? (
+                      <p className="text-xs text-yellow-300">Bloqueaste los avisos. Para activarlos toca el candado 🔒 junto a la dirección de la página → Notificaciones → Permitir.</p>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <p className="text-xs text-gray-300 flex-1">Recibe un aviso cuando agreguemos películas o estrenos, aunque tengas la página cerrada.</p>
+                        <button
+                          data-autofocus
+                          onClick={enablePush}
+                          className="shrink-0 bg-white hover:bg-gray-200 text-black text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                        >
+                          🔔 Activar avisos
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <p className="px-4 py-8 text-sm text-gray-500 text-center">No hay novedades por ahora.</p>
+                  ) : (
+                    <div className="overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                      {notifications.map((n) => (
+                        <button
+                          key={n.key}
+                          onClick={() => { setShowNotif(false); setSelectedMovie(n.movie); }}
+                          className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[#1c1c1c] border-b border-gray-900 focus:outline-none focus:bg-[#1c1c1c] focus:ring-2 focus:ring-inset focus:ring-green-500"
+                        >
+                          <img src={n.movie.backdrop || n.movie.bgImage} alt="" loading="lazy" className="shrink-0 rounded-lg object-cover bg-gray-900" style={{ width: 96, height: 54 }} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold text-white line-clamp-2 leading-snug">{n.title}</span>
+                            <span className="block text-xs text-gray-400 line-clamp-2">{n.text}</span>
+                            <span className="block text-[11px] text-gray-500 mt-0.5">{timeAgo(n.time)}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
           <div 
@@ -3636,7 +3689,7 @@ export default function Home() {
           .map((p) => ({ p, m: catalog.find((x) => String(x.id) === String(p.id)) }))
           .filter((x) => !!x.m) as { p: ProgressItem; m: Movie }[];
         return (
-          <div className="pt-14 md:pt-16">
+          <div className="pt-14 lg:pt-16">
             {/* Portada */}
             <div
               className="relative w-full bg-cover bg-center flex items-end overflow-hidden"
@@ -3702,7 +3755,7 @@ export default function Home() {
                     onBlur={() => setHeroPaused(false)}
                     className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-3 rounded-xl border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base"
                   >
-                    <Info className="w-5 h-5" /> Más información
+                    <Info className="w-5 h-5" /> <span className="hidden sm:inline">Más información</span><span className="sm:hidden">Info</span>
                   </button>
                   <button
                     onClick={() => toggleMyList(heroMovie)}
@@ -3810,7 +3863,7 @@ export default function Home() {
                       <div key={"top-" + m.id} className="shrink-0 flex items-end" style={{ marginRight: 18 }}>
                         <span
                           aria-hidden="true"
-                          style={{ fontSize: 150, lineHeight: 0.8, fontWeight: 900, color: "#050505", WebkitTextStroke: "3px #4b5563", marginRight: -18, letterSpacing: -8, userSelect: "none" }}
+                          style={{ fontSize: "clamp(96px, 22vw, 150px)", lineHeight: 0.8, fontWeight: 900, color: "#050505", WebkitTextStroke: "3px #4b5563", marginRight: -14, letterSpacing: -6, userSelect: "none" }}
                         >
                           {i + 1}
                         </span>
@@ -3951,7 +4004,7 @@ export default function Home() {
 
       {/* VISTA TV EN VIVO - reproductor fijo, solo la guia hace scroll */}
       {activeTab === "tv" && (
-        <div className="fixed left-0 right-0 top-14 md:top-20 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-0 bg-[#050505] flex flex-col lg:flex-row overflow-hidden">
+        <div className="fixed left-0 right-0 top-14 lg:top-16 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-0 bg-[#050505] flex flex-col lg:flex-row overflow-hidden">
 
           {/* REPRODUCTOR */}
           <div className="w-full lg:flex-1 lg:h-full relative bg-black flex flex-col shrink-0">
@@ -4880,7 +4933,7 @@ export default function Home() {
                     <button
                       data-autofocus
                       onClick={enablePush}
-                      className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-300"
+                      className="w-full sm:w-auto justify-center flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-300"
                     >
                       {pushState === "subscribed" ? "✔ Te avisaremos del estreno" : "🔔 Avísame del estreno"} · {fmtRelease(selectedMovie.releaseDate)}
                     </button>
@@ -4888,16 +4941,17 @@ export default function Home() {
                     <button 
                       data-autofocus
                       onClick={() => startPlayback(selectedMovie)}
-                      className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
+                      className="w-full sm:w-auto justify-center flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                     >
                       <Play className="w-5 h-5 fill-black" /> Reproducir
                     </button>
                   )}
                   <button 
                     onClick={() => toggleMyList(selectedMovie)}
-                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 sm:px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
+                    aria-label="Mi Lista"
+                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-3 sm:px-6 py-3 rounded-full sm:rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
-                    {inMyList(selectedMovie) ? <><Check className="w-5 h-5 text-green-400" /> En Mi Lista</> : <><Plus className="w-5 h-5" /> Mi Lista</>}
+                    {inMyList(selectedMovie) ? <><Check className="w-5 h-5 text-green-400" /> <span className="hidden sm:inline">En Mi Lista</span></> : <><Plus className="w-5 h-5" /> <span className="hidden sm:inline">Mi Lista</span></>}
                   </button>
                   <button
                     onClick={() => rateMovie(selectedMovie, 1)}
@@ -4915,9 +4969,10 @@ export default function Home() {
                   </button>
                   <button 
                     onClick={() => shareMovie(selectedMovie)}
-                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
+                    aria-label="Compartir"
+                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-3 sm:px-5 py-3 rounded-full sm:rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
-                    <Share2 className="w-4 h-4" /> Compartir
+                    <Share2 className="w-4 h-4" /> <span className="hidden sm:inline">Compartir</span>
                   </button>
                 </div>
 
@@ -5277,7 +5332,7 @@ export default function Home() {
 
       {/* PIE DE PÁGINA + ATRIBUCIÓN TMDB */}
       {(activeTab === "inicio" || activeTab === "explorar") && (
-        <footer className="px-4 sm:px-6 md:px-12 pb-28 md:pb-10 pt-4 border-t border-gray-900 text-[11px] text-gray-500 space-y-1">
+        <footer className="px-4 sm:px-6 md:px-12 pb-28 lg:pb-10 pt-4 border-t border-gray-900 text-[11px] text-gray-500 space-y-1">
           <p className="flex items-center gap-2 flex-wrap">
             <img src="/icons/icon-192.png" alt="" className="w-5 h-5 rounded" />
             <span className="font-bold text-gray-400">Cineverso Mágico</span>
@@ -5292,7 +5347,7 @@ export default function Home() {
 
       {/* BARRA DE NAVEGACIÓN INFERIOR (MÓVIL) */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-2xl border-t border-white/10"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-2xl border-t border-white/10"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-around px-2 pt-3 pb-3">
