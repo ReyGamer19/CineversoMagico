@@ -132,6 +132,12 @@ function isSmartTvBrowser(): boolean {
 // "tv-legacy" en <html>, así que NO cambia nada en celulares ni PCs modernos.
 const LEGACY_RULES = `
 html{color-scheme:dark}
+html,body{background:#050505;margin:0}
+html.tv-mode,html.tv-mode body{scrollbar-width:none;-ms-overflow-style:none;overflow-x:hidden}
+html.tv-mode ::-webkit-scrollbar,html.tv-legacy ::-webkit-scrollbar{width:0 !important;height:0 !important;display:none;background:transparent}
+html.tv-mode *:not(.animate-spin){-webkit-transition:none !important;transition:none !important;-webkit-animation:none !important;animation:none !important}
+html.tv-mode *{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}
+html.tv-mode .group-hover\:scale-105,html.tv-mode .group:hover .group-hover\:scale-105,html.tv-mode .hover\:scale-105:hover{-webkit-transform:none !important;transform:none !important}
 .inset-0{top:0;right:0;bottom:0;left:0}
 html.tv-legacy button,html.tv-legacy input,html.tv-legacy select,html.tv-legacy textarea{font-family:inherit;line-height:inherit}
 html.tv-legacy button:not([class*="bg-"]){background-color:transparent;background-image:none}
@@ -1676,12 +1682,17 @@ export default function Home() {
       return out;
     };
     const focusEl = (el: HTMLElement) => {
-      el.focus();
+      try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
       try {
-        el.scrollIntoView({ block: "center", inline: "nearest" });
+        el.scrollIntoView({ block: "nearest", inline: "nearest" });
       } catch (e) {
         el.scrollIntoView(false);
       }
+      // Que no quede tapado por la barra superior fija
+      const r = el.getBoundingClientRect();
+      const h = window.innerHeight || 720;
+      if (r.top < 90) window.scrollBy(0, r.top - 110);
+      else if (r.bottom > h - 10) window.scrollBy(0, r.bottom - h + 30);
     };
     const moveFocus = (dir: "up" | "down" | "left" | "right"): boolean => {
       const items = getFocusable();
@@ -1900,8 +1911,10 @@ export default function Home() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoFit, setVideoFit] = useState<"contain" | "cover">("contain");
   const uiTimer = useRef<any>(null);
+  const playerUiRef = useRef(true);
+  playerUiRef.current = playerUi;
   const wakePlayerUi = () => {
-    setPlayerUi(true);
+    if (!playerUiRef.current) setPlayerUi(true);
     if (uiTimer.current) clearTimeout(uiTimer.current);
     uiTimer.current = setTimeout(() => {
       const v = playerRef.current;
@@ -1973,6 +1986,16 @@ export default function Home() {
       window.removeEventListener("resize", schedule);
     };
   }, [tvMode]);
+
+  useEffect(() => {
+    const lock = !!selectedMovie;
+    document.body.style.overflow = lock ? "hidden" : "";
+    document.documentElement.style.overflow = lock ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    };
+  }, [selectedMovie]);
 
   const startPlayback = (movie: Movie) => {
     setUsingBackup(false);
