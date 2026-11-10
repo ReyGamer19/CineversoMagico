@@ -36,6 +36,21 @@ interface Movie {
   originalLanguage?: string;
 }
 
+interface ProgressItem {
+  id: number | string;
+  title: string;
+  img: string;
+  time: number;
+  duration: number;
+  updatedAt: number;
+}
+
+interface AccountUser {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+}
+
 interface Channel {
   id: string;
   name: string;
@@ -212,9 +227,7 @@ export default function Home() {
   // Configuración del dispositivo
   const [tvMode, setTvMode] = useState(false);
   const [skipAdsNotice, setSkipAdsNotice] = useState(true);
-  const [continueWatchingList, setContinueWatchingList] = useState([
-    { id: 1, title: "El caballero oscuro", progress: "Quedan 2 h 32 min", img: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=400&auto=format&fit=crop" }
-  ]);
+  const [continueWatchingList, setContinueWatchingList] = useState<ProgressItem[]>([]);
 
   // CANALES DE TV EN VIVO COMPLETO
   const [liveChannels] = useState<Channel[]>([
@@ -1244,6 +1257,7 @@ export default function Home() {
 
   // Perfiles
   const guestProfile: Profile = { id: "invitado", name: "Invitado", avatar: "/avatares/bojack1.png", isKid: false };
+  const reyProfile: Profile = { id: "admin-rey", name: "Rey", avatar: "/avatares/bojack1.png", isKid: false };
   const [profiles, setProfiles] = useState<Profile[]>([guestProfile]);
   const [activeProfile, setActiveProfile] = useState<Profile>(profiles[0]);
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
@@ -1348,6 +1362,10 @@ export default function Home() {
 
   // ¿Este dispositivo es del administrador? (solo afecta a la interfaz; el servidor
   // vuelve a comprobar la clave ADMIN_PASSWORD antes de guardar cualquier cosa)
+  const wantsAdmin = (): boolean => {
+    try { return /[?&]admin\b/.test(window.location.search); } catch (e) { return false; }
+  };
+
   const readAdminDevice = (): boolean => {
     try {
       const key = localStorage.getItem("cineverso_admin_key");
@@ -1364,13 +1382,13 @@ export default function Home() {
     let cancelled = false;
     let adminLocal: Movie[] | null = null;
     try {
-      if (readAdminDevice()) {
+      if (readAdminDevice() && wantsAdmin()) {
         const saved = localStorage.getItem("cineverso_custom_movies");
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) adminLocal = parsed;
         }
-      } else {
+      } else if (!readAdminDevice()) {
         // Visitantes: limpiar copias viejas que se guardaron antes por error
         localStorage.removeItem("cineverso_custom_movies");
       }
@@ -1407,25 +1425,9 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  // Modo invitado: no se guarda nada. Se borran perfiles viejos que quedaron guardados antes.
   useEffect(() => {
-    try {
-      const savedProfiles = localStorage.getItem("cineverso_profiles");
-      if (savedProfiles) {
-        const parsedProfiles = JSON.parse(savedProfiles);
-        const cleanProfiles = Array.isArray(parsedProfiles)
-          ? parsedProfiles.filter((p: Profile) => p && p.name && p.name.trim().toLowerCase() !== "rey")
-          : [];
-        if (cleanProfiles.length > 0) {
-          setProfiles(cleanProfiles);
-          setActiveProfile(cleanProfiles[0]);
-          localStorage.setItem("cineverso_profiles", JSON.stringify(cleanProfiles));
-        } else {
-          localStorage.removeItem("cineverso_profiles");
-        }
-      }
-    } catch (e) {
-      console.error("Error cargando perfiles:", e);
-    }
+    try { localStorage.removeItem("cineverso_profiles"); } catch (e) {}
   }, []);
 
   // ===== ADMIN: solo con clave =====
@@ -1441,12 +1443,12 @@ export default function Home() {
     setTimeout(() => setToastMessage(""), ms);
   };
 
+  // El panel solo aparece si la dirección tiene ?admin. Con la dirección normal
+  // hasta tú ves la página como cualquier visitante.
   useEffect(() => {
     const adminDevice = readAdminDevice();
-    if (adminDevice) setIsAdmin(true);
-    try {
-      if (window.location.search.indexOf("admin") !== -1 && !adminDevice) setShowAdminLogin(true);
-    } catch (e) {}
+    if (wantsAdmin() && adminDevice) setIsAdmin(true);
+    if (wantsAdmin() && !adminDevice) setShowAdminLogin(true);
   }, []);
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -1534,7 +1536,7 @@ export default function Home() {
 
   // Cuando el admin inicia sesión aparece su perfil "Rey" (no se guarda para visitantes)
   useEffect(() => {
-    const adminProfile: Profile = { id: "admin-rey", name: "Rey", avatar: "/avatares/bojack1.png", isKid: false };
+    const adminProfile = reyProfile;
     if (isAdmin) {
       setProfiles((prev) => (prev.some((p) => p.id === "admin-rey") ? prev : [adminProfile].concat(prev.filter((p) => p.id !== "invitado"))));
       setActiveProfile(adminProfile);
@@ -1554,6 +1556,7 @@ export default function Home() {
     } catch (err) {}
     setIsAdmin(false);
     setActiveTab("inicio");
+    try { window.history.replaceState(null, "", window.location.pathname); } catch (err) {}
   };
 
   const handleExportCatalog = () => {
@@ -1833,6 +1836,14 @@ export default function Home() {
         });
       }
     };
+    const saved = progressRef.current.find((p) => String(p.id) === String(selectedMovie.id));
+    const onMeta = () => {
+      if (saved && saved.time > 5 && (!video.duration || saved.time < video.duration - 60)) {
+        try { video.currentTime = saved.time; } catch (e) {}
+      }
+    };
+    video.addEventListener("loadedmetadata", onMeta);
+    const movieForProgress = selectedMovie;
     const isHlsSrc = /\.m3u8(\?|$)/i.test(src);
     if (isHlsSrc && !video.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
       hls = new Hls();
@@ -1848,6 +1859,8 @@ export default function Home() {
       tryPlay();
     }
     return () => {
+      video.removeEventListener("loadedmetadata", onMeta);
+      try { recordProgress(video, movieForProgress, true); } catch (e) {}
       if (hls) hls.destroy();
       try {
         video.pause();
@@ -1876,7 +1889,7 @@ export default function Home() {
   };
 
   const copyLinkSafe = () => {
-    const url = window.location.href;
+    const url = window.location.origin + window.location.pathname;
     const done = () => {
       setToastMessage("¡Enlace copiado al portapapeles!");
       setTimeout(() => setToastMessage(""), 3000);
@@ -1976,32 +1989,210 @@ export default function Home() {
     }
   };
 
-  const handleSendCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.toLowerCase().endsWith("@gmail.com")) {
-      alert("Por favor ingresa una dirección de correo Gmail válida.");
-      return;
-    }
-    if (password.length < 6) {
-      alert("La contraseña debe tener mínimo 6 caracteres.");
-      return;
-    }
+  // ================================================================
+  // CUENTAS REALES (/api/account + Supabase)
+  // Invitado: nada se guarda. Con sesión: perfiles, Mi Lista y
+  // "Continuar viendo" se guardan en el servidor para todos sus dispositivos.
+  // ================================================================
+  const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
+  const [accountLoaded, setAccountLoaded] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const isAdminRef = useRef(false);
+  isAdminRef.current = isAdmin;
+  const progressRef = useRef<ProgressItem[]>([]);
+  progressRef.current = continueWatchingList;
 
-    const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setVerificationCode(generatedCode);
-    setRegisterStep("verify");
-    alert(`[Gmail Verificación]\n\nSe envió un código de 6 dígitos a ${email}.\nTu código de verificación es: ${generatedCode}`);
+  const postAccount = (payload: any) =>
+    fetch("/api/account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    }).then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, status: r.status, d })));
+
+  const applyAccountData = (data: any, userEmail: string) => {
+    let loaded: Profile[] =
+      data && Array.isArray(data.profiles)
+        ? data.profiles.filter(
+            (p: any) => p && typeof p.id === "string" && typeof p.name === "string" &&
+              p.id !== "admin-rey" && p.id !== "invitado" && p.name.trim().toLowerCase() !== "rey"
+          )
+        : [];
+    if (!loaded.length) {
+      const base = (userEmail.split("@")[0] || "Perfil").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
+      let name = base ? base.charAt(0).toUpperCase() + base.slice(1, 20) : "Perfil 1";
+      if (name.trim().toLowerCase() === "rey") name = "Perfil 1";
+      loaded = [{ id: "p-" + Date.now(), name, avatar: myAvatars[7].file, isKid: false }];
+    }
+    const active = loaded.find((p) => data && p.id === data.activeProfileId) || loaded[0];
+    if (isAdminRef.current) {
+      setProfiles([reyProfile].concat(loaded));
+    } else {
+      setProfiles(loaded);
+      setActiveProfile(active);
+    }
+    setMyList(data && Array.isArray(data.myList) ? data.myList : []);
+    setContinueWatchingList(
+      data && Array.isArray(data.progress)
+        ? data.progress.filter((x: any) => x && x.id !== undefined && typeof x.time === "number" && typeof x.duration === "number")
+        : []
+    );
+  };
+
+  // ¿Ya había una sesión iniciada en este dispositivo?
+  useEffect(() => {
+    fetch("/api/account", { cache: "no-store", credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        if (d && d.user) {
+          setAccountUser(d.user);
+          setIsGuest(false);
+          setEmail(d.user.email || "");
+          applyAccountData(d.data, d.user.email || "");
+          setAccountLoaded(true);
+        }
+      });
+  }, []);
+
+  // Guarda los datos de la cuenta en el servidor (solo con sesión iniciada)
+  useEffect(() => {
+    if (!accountUser || !accountLoaded) return;
+    const t = setTimeout(() => {
+      const data = {
+        profiles: profiles.filter((p) => p.id !== "admin-rey" && p.id !== "invitado"),
+        activeProfileId: activeProfile.id === "admin-rey" ? "" : activeProfile.id,
+        myList,
+        progress: continueWatchingList.slice(0, 50),
+      };
+      fetch("/api/account", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ data }),
+      })
+        .then((r) => {
+          if (r.status === 401) {
+            setAccountUser(null);
+            setIsGuest(true);
+            setAccountLoaded(false);
+            showToast("Tu sesión venció. Vuelve a iniciar sesión para seguir guardando.", 6000);
+          }
+        })
+        .catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [profiles, activeProfile, myList, continueWatchingList, accountUser, accountLoaded]);
+
+  const onLoggedIn = (d: any) => {
+    setAccountUser(d.user);
+    setIsGuest(false);
+    setRegisterStep("form");
+    setPassword("");
+    setInputCode("");
+    setAuthError("");
+    applyAccountData(d.data, d.user.email || email);
+    setAccountLoaded(true);
+    showToast("¡Sesión iniciada! Tus datos se guardarán en todos tus dispositivos.");
+  };
+
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authBusy) return;
+    setAuthError("");
+    setAuthBusy(true);
+    postAccount({ action: authMode, email, password })
+      .then(({ ok, status, d }) => {
+        setAuthBusy(false);
+        if (ok && d.user) { onLoggedIn(d); return; }
+        if (ok && d.pending) {
+          setRegisterStep("verify");
+          showToast("Te enviamos un código a " + email, 6000);
+          return;
+        }
+        if (status === 403 && d.needsVerification) {
+          setRegisterStep("verify");
+          setAuthError(d.error || "Verifica tu correo.");
+          return;
+        }
+        setAuthError((d && d.error) || "No se pudo conectar. Inténtalo de nuevo.");
+      })
+      .catch(() => {
+        setAuthBusy(false);
+        setAuthError("Sin conexión con el servidor.");
+      });
   };
 
   const handleVerifyCode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputCode === verificationCode) {
-      setRegisterStep("success");
-      setIsGuest(false);
-      alert("¡Cuenta de Gmail autenticada correctamente!");
-    } else {
-      alert("El código ingresado es incorrecto.");
-    }
+    if (authBusy) return;
+    setAuthError("");
+    setAuthBusy(true);
+    postAccount({ action: "verify", email, code: inputCode })
+      .then(({ ok, d }) => {
+        setAuthBusy(false);
+        if (ok && d.user) onLoggedIn(d);
+        else setAuthError((d && d.error) || "Código incorrecto.");
+      })
+      .catch(() => {
+        setAuthBusy(false);
+        setAuthError("Sin conexión con el servidor.");
+      });
+  };
+
+  const handleResendCode = () => {
+    if (authBusy) return;
+    setAuthBusy(true);
+    postAccount({ action: "resend", email })
+      .then(({ ok, d }) => {
+        setAuthBusy(false);
+        if (ok) showToast("Código reenviado a " + email);
+        else setAuthError((d && d.error) || "No se pudo reenviar el código.");
+      })
+      .catch(() => {
+        setAuthBusy(false);
+        setAuthError("Sin conexión con el servidor.");
+      });
+  };
+
+  const handleLogout = () => {
+    const reset = () => {
+      setAccountUser(null);
+      setAccountLoaded(false);
+      setIsGuest(true);
+      setRegisterStep("form");
+      setPassword("");
+      setAuthError("");
+      setProfiles(isAdminRef.current ? [reyProfile, guestProfile] : [guestProfile]);
+      setActiveProfile(isAdminRef.current ? reyProfile : guestProfile);
+      setMyList([]);
+      setContinueWatchingList([]);
+      showToast("Sesión cerrada.");
+    };
+    postAccount({ action: "logout" }).then(reset, reset);
+  };
+
+  // Progreso de "Continuar viendo" (cada 15 s, al pausar y al cerrar)
+  const lastProgressSave = useRef(0);
+  const recordProgress = (video: HTMLVideoElement, movie: Movie, force: boolean) => {
+    const now = Date.now();
+    if (!force && now - lastProgressSave.current < 15000) return;
+    lastProgressSave.current = now;
+    const time = Math.floor(video.currentTime || 0);
+    const duration = Math.floor(video.duration || 0);
+    if (!duration || !isFinite(duration) || time < 5) return;
+    setContinueWatchingList((prev) => {
+      const rest = prev.filter((p) => String(p.id) !== String(movie.id));
+      if (duration - time < 60) return rest; // terminada
+      return [{ id: movie.id, title: movie.title, img: movie.img || movie.bgImage, time, duration, updatedAt: now }].concat(rest).slice(0, 50);
+    });
+  };
+
+  const formatRemaining = (secs: number) => {
+    const m = Math.max(1, Math.round(secs / 60));
+    return m >= 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : m + " min";
   };
 
   const handleCreateProfile = () => {
@@ -2031,7 +2222,6 @@ export default function Home() {
 
     const updatedProfiles = [...profiles, newP];
     setProfiles(updatedProfiles);
-    localStorage.setItem("cineverso_profiles", JSON.stringify(updatedProfiles.filter((p) => p.id !== "admin-rey")));
     setShowAddProfileModal(false);
     setNewProfileName("");
     setNewProfilePin("");
@@ -2177,6 +2367,36 @@ export default function Home() {
           </div>
 
           <div className="px-4 sm:px-6 md:px-12 space-y-10 relative z-20 pb-20 w-full overflow-x-hidden mt-4">
+            {continueWatchingList.length > 0 && (
+              <div>
+                <h2 className="text-lg sm:text-2xl font-bold mb-4 text-white">Continuar viendo</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {continueWatchingList.map((p) => {
+                    const movie = customMovies.find((m) => String(m.id) === String(p.id));
+                    if (!movie) return null;
+                    const pct = Math.min(100, Math.round((p.time / p.duration) * 100));
+                    return (
+                      <div
+                        key={"cw-" + p.id}
+                        onClick={() => startPlayback(movie)}
+                        tabIndex={0}
+                        className="group cursor-pointer rounded-xl overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500 transition duration-200"
+                      >
+                        <div className="aspect-[2/3] w-full bg-gray-900 overflow-hidden relative rounded-xl border border-gray-800 group-hover:border-green-500">
+                          <img src={movie.bgImage} alt={movie.title} className="w-full h-full object-cover" />
+                          <div className="absolute left-0 right-0 bottom-0 h-1.5 bg-gray-700">
+                            <div className="h-full bg-green-500" style={{ width: pct + "%" }} />
+                          </div>
+                        </div>
+                        <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{movie.title}</h4>
+                        <p className="text-[10px] text-gray-500">Quedan {formatRemaining(p.duration - p.time)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {customMovies.length > 0 && (
               <div>
                 <h2 className="text-lg sm:text-2xl font-bold mb-4 text-white flex items-center gap-2">
@@ -2709,70 +2929,83 @@ export default function Home() {
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-white">Cuenta</h3>
             <div className="bg-[#0f0f0f] p-6 rounded-2xl border border-gray-900 space-y-4">
-              {isGuest ? (
+              {accountUser ? (
+                <div className="flex items-center justify-between">
+                  <div className="truncate pr-2">
+                    <span className="text-xs text-green-400 font-bold">Sesión iniciada · se guarda en todos tus dispositivos</span>
+                    <p className="text-sm font-bold text-white truncate">{accountUser.email}</p>
+                  </div>
+                  <button onClick={handleLogout} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cerrar sesión</button>
+                </div>
+              ) : (
                 <>
                   <div className="flex items-start gap-3">
                     <div className="p-2.5 bg-green-500/10 text-green-400 rounded-xl shrink-0">
                       <User className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-white">Estás como Invitado (Máximo 3 perfiles)</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">Crea tu cuenta con Gmail para desbloquear hasta 5 perfiles y guardar tu lista.</p>
+                      <h4 className="text-sm font-bold text-white">Estás como Invitado</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">En modo invitado no se guarda nada: tu lista, tu progreso y tus perfiles se borran al cerrar la página. Inicia sesión para guardarlos en todos tus dispositivos (hasta 5 perfiles).</p>
                     </div>
                   </div>
 
-                  {registerStep === "form" && (
-                    <form onSubmit={handleSendCode} className="space-y-3 pt-2">
-                      <input 
-                        type="email" 
+                  {registerStep === "verify" ? (
+                    <form onSubmit={handleVerifyCode} className="space-y-3 pt-2">
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300">
+                        Te enviamos un código a <b>{email}</b>. Revisa tu bandeja de entrada (y la carpeta de spam).
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
                         required
-                        placeholder="tu@gmail.com" 
+                        maxLength={8}
+                        placeholder="Código del correo"
+                        value={inputCode}
+                        onChange={(e) => setInputCode(e.target.value)}
+                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest font-mono text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      <button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                        {authBusy ? "Verificando..." : "Verificar código"}
+                      </button>
+                      <div className="flex items-center justify-between text-xs">
+                        <button type="button" onClick={handleResendCode} className="text-emerald-400 hover:underline cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Reenviar código</button>
+                        <button type="button" onClick={() => { setRegisterStep("form"); setAuthError(""); }} className="text-gray-400 hover:underline cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cambiar correo</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleAuthSubmit} className="space-y-3 pt-2">
+                      <div className="flex items-center bg-[#050505] border border-gray-800 rounded-xl p-1">
+                        <button type="button" onClick={() => { setAuthMode("login"); setAuthError(""); }} className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${authMode === "login" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}>
+                          Iniciar sesión
+                        </button>
+                        <button type="button" onClick={() => { setAuthMode("register"); setAuthError(""); }} className={`flex-1 py-2 rounded-lg text-xs font-bold transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${authMode === "register" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}>
+                          Crear cuenta
+                        </button>
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        placeholder="tu@correo.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
                       />
-                      <input 
-                        type="password" 
+                      <input
+                        type="password"
                         required
-                        placeholder="Contraseña (mínimo 6)" 
+                        minLength={6}
+                        placeholder="Contraseña (mínimo 6)"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
                       />
                       <button type="submit" className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
-                        Crear cuenta y verificar con Gmail
+                        {authBusy ? "Un momento..." : authMode === "login" ? "Iniciar sesión" : "Crear cuenta (te enviaremos un código)"}
                       </button>
                     </form>
                   )}
-
-                  {registerStep === "verify" && (
-                    <form onSubmit={handleVerifyCode} className="space-y-3 pt-2">
-                      <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300">
-                        Código enviado a <b>{email}</b>. Ingrésalo para verificar.
-                      </div>
-                      <input 
-                        type="text" 
-                        required
-                        maxLength={6}
-                        placeholder="Código de 6 dígitos" 
-                        value={inputCode}
-                        onChange={(e) => setInputCode(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest font-mono text-white focus:ring-2 focus:ring-green-500"
-                      />
-                      <button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
-                        Verificar código de Gmail
-                      </button>
-                    </form>
-                  )}
+                  {authError && <p className="text-xs text-red-400 font-bold">{authError}</p>}
                 </>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div className="truncate pr-2">
-                    <span className="text-xs text-green-400 font-bold">Cuenta de Correo Verificada (Hasta 5 perfiles)</span>
-                    <p className="text-sm font-bold text-white truncate">{email}</p>
-                  </div>
-                  <button onClick={() => { setIsGuest(true); setRegisterStep("form"); }} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cerrar sesión</button>
-                </div>
               )}
             </div>
           </div>
@@ -2836,7 +3069,7 @@ export default function Home() {
                   </div>
                 </div>
                 <button 
-                  onClick={() => { setContinueWatchingList([]); alert("Historial borrado."); }}
+                  onClick={() => { setContinueWatchingList([]); showToast("Historial borrado."); }}
                   className="bg-[#181818] hover:bg-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg text-white border border-gray-800 cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   Borrar
@@ -2845,12 +3078,14 @@ export default function Home() {
             </div>
           </div>
 
-          <button 
-            onClick={() => { setIsGuest(true); alert("Has salido del modo invitado."); }} 
-            className="w-full flex items-center justify-center gap-2 p-3.5 bg-[#121212] hover:bg-gray-800 text-red-400 font-bold rounded-2xl text-xs border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <LogOut className="w-4 h-4" /> Salir del modo invitado
-          </button>
+          {accountUser && (
+            <button 
+              onClick={handleLogout} 
+              className="w-full flex items-center justify-center gap-2 p-3.5 bg-[#121212] hover:bg-gray-800 text-red-400 font-bold rounded-2xl text-xs border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <LogOut className="w-4 h-4" /> Cerrar sesión
+            </button>
+          )}
         </div>
       )}
 
@@ -3029,6 +3264,9 @@ export default function Home() {
               controlsList="nodownload"
               className="w-full h-full object-contain focus:outline-none"
               style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+              onTimeUpdate={(e) => recordProgress(e.currentTarget, selectedMovie, false)}
+              onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
+              onEnded={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
               onError={() => {
                 if (!usingBackup && selectedMovie.backupVideoUrl) {
                   setUsingBackup(true);
