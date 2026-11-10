@@ -1888,6 +1888,46 @@ export default function Home() {
     }
   };
 
+  // TRANSMITIR a TV: AirPlay (iPhone/iPad/Mac) o Chromecast / TV compatible (Chrome, Android)
+  const handleCast = () => {
+    const v: any = playerRef.current;
+    if (!v) return;
+    try {
+      if (typeof v.webkitShowPlaybackTargetPicker === "function") {
+        v.webkitShowPlaybackTargetPicker();
+        return;
+      }
+      if (v.remote && typeof v.remote.prompt === "function") {
+        v.remote
+          .prompt()
+          .then(() => showToast("Conectando con tu TV..."))
+          .catch((err: any) => {
+            const n = err && err.name;
+            if (n === "NotFoundError") showToast("No se encontró ninguna TV o Chromecast. Revisa que estén en la misma red Wi-Fi.", 7000);
+            else if (n === "NotSupportedError") showToast("Este video no se puede transmitir desde aquí. En Chrome usa el menú ⋮ → Transmitir.", 7000);
+            else if (n !== "AbortError" && n !== "NotAllowedError") showToast("No se pudo transmitir. Inténtalo de nuevo.", 5000);
+          });
+        return;
+      }
+    } catch (e) {}
+    showToast("Tu navegador no permite transmitir desde la página. En Chrome usa el menú ⋮ → Transmitir; en iPhone usa AirPlay.", 8000);
+  };
+
+  // Avisos cuando la TV se conecta o se desconecta
+  useEffect(() => {
+    if (!isPlaying) return;
+    const v: any = playerRef.current;
+    if (!v || !v.remote || !v.remote.addEventListener) return;
+    const onConnect = () => showToast("Transmitiendo a tu TV.");
+    const onDisconnect = () => showToast("Transmisión terminada.");
+    v.remote.addEventListener("connect", onConnect);
+    v.remote.addEventListener("disconnect", onDisconnect);
+    return () => {
+      v.remote.removeEventListener("connect", onConnect);
+      v.remote.removeEventListener("disconnect", onDisconnect);
+    };
+  }, [isPlaying]);
+
   const copyLinkSafe = () => {
     const url = window.location.origin + window.location.pathname;
     const done = () => {
@@ -3255,6 +3295,7 @@ export default function Home() {
           <div className="flex-1 flex items-center justify-center relative bg-black overflow-hidden">
             <video 
               ref={playerRef}
+              x-webkit-airplay="allow"
               data-autofocus
               tabIndex={0}
               controls 
@@ -3299,7 +3340,7 @@ export default function Home() {
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
               <button 
-                onClick={() => alert("Transmitiendo a dispositivo externo...")}
+                onClick={handleCast}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Cast className="w-4 h-4 text-green-400" /> Transmitir
