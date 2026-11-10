@@ -49,6 +49,10 @@ interface Movie {
   trailerUrl?: string;
   episodes?: Episode[];
   addedAt?: number;
+  backdrop?: string;
+  introStart?: number;
+  introEnd?: number;
+  creditsStart?: number;
 }
 
 interface ProgressItem {
@@ -1345,6 +1349,12 @@ export default function Home() {
   const [newMovieTrailer, setNewMovieTrailer] = useState("");
   const [detectingDuration, setDetectingDuration] = useState(false);
   const [newEpisodes, setNewEpisodes] = useState<Episode[]>([]);
+  const [newIntroStart, setNewIntroStart] = useState("");
+  const [newIntroEnd, setNewIntroEnd] = useState("");
+  const [newCreditsStart, setNewCreditsStart] = useState("");
+  const [tmdbExtra, setTmdbExtra] = useState<{ genres?: string[]; rating?: string; production?: string; originalLanguage?: string; backdrop?: string } | null>(null);
+  const [tmdbResults, setTmdbResults] = useState<{ id: number; title: string; original: string; year: string; poster: string }[] | null>(null);
+  const [tmdbBusy, setTmdbBusy] = useState(false);
   const [epSeason, setEpSeason] = useState("1");
   const [epNumber, setEpNumber] = useState("1");
   const [epTitle, setEpTitle] = useState("");
@@ -1428,10 +1438,11 @@ export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
 
   // Perfil Niños: solo contenido infantil (ATP / +7, o Animación y Familia sin clasificación)
+  // Perfil Niños: SOLO la categoría Animación (y nunca algo marcado +13, +16 o +18)
   const isKidFriendly = (m: Movie) => {
-    if (m.ageRating) return m.ageRating === "ATP" || m.ageRating === "+7";
-    const g = (m.genres && m.genres.length ? m.genres : [m.tag]).map((x) => String(x || "").toLowerCase());
-    return g.some((x) => x.indexOf("anim") !== -1 || x.indexOf("famil") !== -1 || x.indexOf("infantil") !== -1);
+    if (m.ageRating && m.ageRating !== "ATP" && m.ageRating !== "+7") return false;
+    const g = [m.tag].concat(m.genres || []).map((x) => String(x || "").toLowerCase());
+    return g.some((x) => x.indexOf("anim") !== -1);
   };
   const kidsMode = !!activeProfile.isKid;
   const catalog: Movie[] = kidsMode ? customMovies.filter(isKidFriendly) : customMovies;
@@ -2112,6 +2123,20 @@ export default function Home() {
   const currentEpisodeRef = useRef<Episode | null>(null);
   currentEpisodeRef.current = currentEpisode;
   const [nextUp, setNextUp] = useState<{ ep: Episode; secs: number } | null>(null);
+  // "intro" | "credits" | "" -> qué botón de saltar se muestra (solo cambia el estado cuando hace falta)
+  const [skipMode, setSkipMode] = useState<"" | "intro" | "credits">("");
+  const skipModeRef = useRef<"" | "intro" | "credits">("");
+  const updateSkip = (t: number, m: Movie | null) => {
+    let mode: "" | "intro" | "credits" = "";
+    if (m) {
+      if (m.introEnd && t >= (m.introStart || 0) && t < m.introEnd - 1) mode = "intro";
+      else if (m.creditsStart && t >= m.creditsStart) mode = "credits";
+    }
+    if (mode !== skipModeRef.current) {
+      skipModeRef.current = mode;
+      setSkipMode(mode);
+    }
+  };
   // Reproductor de películas: MP4 directo o HLS (.m3u8), autoplay con respaldo en silencio
   useEffect(() => {
     if (!isPlaying || !selectedMovie) return;
@@ -2334,7 +2359,16 @@ export default function Home() {
     const t = setTimeout(() => setNextUp((n) => (n ? { ep: n.ep, secs: n.secs - 1 } : n)), 1000);
     return () => clearTimeout(t);
   }, [nextUp]);
-  useEffect(() => { if (!isPlaying) { setNextUp(null); } }, [isPlaying]);
+  useEffect(() => { if (!isPlaying) { setNextUp(null); } skipModeRef.current = ""; setSkipMode(""); }, [isPlaying, currentEpisode]);
+  // En TV, cuando aparece "Saltar intro" el control remoto lo puede pulsar con OK al instante
+  useEffect(() => {
+    if (!skipMode || !tvMode) return;
+    const t = setTimeout(() => {
+      const b = document.querySelector("[data-skip-btn]") as HTMLElement | null;
+      if (b) { try { b.focus(); } catch (e) {} }
+    }, 50);
+    return () => clearTimeout(t);
+  }, [skipMode, tvMode]);
 
   const requestFullscreenSafe = () => {
     const el: any = playerRef.current || document.documentElement;
@@ -2472,7 +2506,18 @@ export default function Home() {
           trailerUrl: newMovieTrailer.trim() || undefined,
           episodes: newMovieType === "serie" ? newEpisodes : undefined,
           addedAt: m.addedAt || movieTime(m) || undefined,
-          genres: m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
+          introStart: parseClock(newIntroStart),
+          introEnd: parseClock(newIntroEnd),
+          creditsStart: parseClock(newCreditsStart),
+          ...(tmdbExtra ? {
+            rating: tmdbExtra.rating || m.rating,
+            production: tmdbExtra.production || m.production,
+            originalLanguage: tmdbExtra.originalLanguage || m.originalLanguage,
+            backdrop: tmdbExtra.backdrop || m.backdrop,
+          } : {}),
+          genres: tmdbExtra && tmdbExtra.genres && tmdbExtra.genres.length
+            ? [newMovieCategory].concat(tmdbExtra.genres.filter((g) => g !== newMovieCategory))
+            : m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
         };
         saveChange({ type: "upsert", movie: updated }, "¡Contenido actualizado!");
       }
@@ -2490,14 +2535,18 @@ export default function Home() {
         img: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         videoUrl: mainUrl.trim(),
         duration: newMovieDuration.trim() || undefined,
-        genres: [newMovieCategory],
+        genres: tmdbExtra && tmdbExtra.genres && tmdbExtra.genres.length ? [newMovieCategory].concat(tmdbExtra.genres.filter((g) => g !== newMovieCategory)) : [newMovieCategory],
         cast: newMovieCast.trim() || undefined,
         director: newMovieDirector.trim() || undefined,
         ageRating: newMovieAge || undefined,
         trailerUrl: newMovieTrailer.trim() || undefined,
         episodes: newMovieType === "serie" ? newEpisodes : undefined,
         addedAt: Date.now(),
-        originalLanguage: "ES"
+        introStart: parseClock(newIntroStart),
+        introEnd: parseClock(newIntroEnd),
+        creditsStart: parseClock(newCreditsStart),
+        originalLanguage: (tmdbExtra && tmdbExtra.originalLanguage) || "ES",
+        ...(tmdbExtra ? { rating: tmdbExtra.rating || "8.0", production: tmdbExtra.production, backdrop: tmdbExtra.backdrop } : {}),
       };
 
       saveChange({ type: "upsert", movie: createdMovie }, "¡Película agregada!");
@@ -2518,6 +2567,11 @@ export default function Home() {
     setNewMovieCast("");
     setNewMovieTrailer("");
     setNewEpisodes([]);
+    setNewIntroStart("");
+    setNewIntroEnd("");
+    setNewCreditsStart("");
+    setTmdbExtra(null);
+    setTmdbResults(null);
     setEpSeason("1");
     setEpNumber("1");
     setEpTitle("");
@@ -2534,6 +2588,68 @@ export default function Home() {
     setEpNumber(String(number + 1));
     setEpTitle("");
     setEpUrl("");
+  };
+
+  // "1:25" -> 85 segundos ; "1:02:10" -> 3730
+  const parseClock = (t: string): number | undefined => {
+    const v = (t || "").trim();
+    if (!v) return undefined;
+    const parts = v.split(":").map((x) => parseInt(x, 10));
+    if (parts.some((x) => isNaN(x) || x < 0)) return undefined;
+    return parts.reduce((acc, x) => acc * 60 + x, 0);
+  };
+  const fmtClock = (n?: number) => {
+    if (n === undefined || n === null || !isFinite(n)) return "";
+    const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), sec = Math.floor(n % 60);
+    return (h ? h + ":" + String(m).padStart(2, "0") : String(m)) + ":" + String(sec).padStart(2, "0");
+  };
+
+  // ---------- Autocompletar con TMDB ----------
+  const tmdbErrorMsg = (status: number, d: any) =>
+    status === 503 || (d && d.error === "no_key")
+      ? "Falta la clave de TMDB. Agrega TMDB_API_KEY en Vercel → Settings → Environment Variables y luego Redeploy."
+      : status === 401 || (d && d.error === "bad_key")
+      ? "La clave de TMDB no es válida. Revisa TMDB_API_KEY en Vercel."
+      : "No se pudo conectar con TMDB. Inténtalo de nuevo.";
+  const searchTmdb = () => {
+    const q = newMovieTitle.trim();
+    if (!q) { showToast("Escribe primero el título."); return; }
+    setTmdbBusy(true);
+    setTmdbResults(null);
+    fetch("/api/tmdb?type=" + (newMovieType === "serie" ? "tv" : "movie") + "&q=" + encodeURIComponent(q), { cache: "no-store" })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        setTmdbBusy(false);
+        if (status !== 200) { showToast(tmdbErrorMsg(status, d), 8000); return; }
+        if (!d.results || !d.results.length) { showToast("No encontré resultados. Prueba con el título original en inglés."); return; }
+        setTmdbResults(d.results);
+      })
+      .catch(() => { setTmdbBusy(false); showToast("No se pudo conectar con TMDB."); });
+  };
+  const applyTmdb = (id: number) => {
+    setTmdbBusy(true);
+    fetch("/api/tmdb?type=" + (newMovieType === "serie" ? "tv" : "movie") + "&id=" + id, { cache: "no-store" })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        setTmdbBusy(false);
+        if (status !== 200) { showToast(tmdbErrorMsg(status, d), 8000); return; }
+        setTmdbResults(null);
+        if (d.title) setNewMovieTitle(d.title);
+        if (d.desc) setNewMovieDesc(d.desc);
+        if (d.year) setNewMovieYear(d.year);
+        if (d.duration) setNewMovieDuration(d.duration);
+        if (d.ageRating) setNewMovieAge(d.ageRating);
+        if (d.director) setNewMovieDirector(d.director);
+        if (d.cast) setNewMovieCast(d.cast);
+        if (d.trailerUrl) setNewMovieTrailer(d.trailerUrl);
+        if (d.poster) setNewMovieImage(d.poster);
+        const gs: string[] = Array.isArray(d.genres) ? d.genres : [];
+        const main = gs.find((g) => genresList.indexOf(g) !== -1);
+        if (main) setNewMovieCategory(main);
+        setTmdbExtra({ genres: gs, rating: d.rating, production: d.production, originalLanguage: d.originalLanguage, backdrop: d.backdrop });
+        showToast("✔ Ficha completada. Revisa los datos y pulsa Guardar.", 5000);
+      })
+      .catch(() => { setTmdbBusy(false); showToast("No se pudo conectar con TMDB."); });
   };
 
   // Lee la duración real del archivo de video (sin descargarlo entero)
@@ -2580,6 +2696,11 @@ export default function Home() {
     setNewMovieTrailer(movie.trailerUrl || "");
     const eps = movie.episodes || [];
     setNewEpisodes(eps);
+    setNewIntroStart(fmtClock(movie.introStart));
+    setNewIntroEnd(fmtClock(movie.introEnd));
+    setNewCreditsStart(fmtClock(movie.creditsStart));
+    setTmdbExtra(null);
+    setTmdbResults(null);
     const last = eps[eps.length - 1];
     setEpSeason(String(last ? last.season : 1));
     setEpNumber(String(last ? last.number + 1 : 1));
@@ -3091,7 +3212,7 @@ export default function Home() {
           style={{ left: preview.left, top: preview.top, width: 320, animation: "cvPreview .18s ease-out" }}
         >
           <div className="relative cursor-pointer" style={{ height: 180 }} onClick={() => { setSelectedMovie(preview.m); setPreview(null); }}>
-            <img src={preview.m.bgImage} alt={preview.m.title} className="w-full h-full object-cover" />
+            <img src={preview.m.backdrop || preview.m.bgImage} alt={preview.m.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#181818] via-transparent to-transparent" />
             <p className="absolute left-3 bottom-2 right-3 text-base font-black text-white truncate">{preview.m.title}</p>
           </div>
@@ -3286,7 +3407,7 @@ export default function Home() {
             {/* Portada */}
             <div
               className="relative w-full bg-cover bg-center flex items-end overflow-hidden"
-              style={{ backgroundImage: `url(${heroMovie.bgImage})`, minHeight: "68vh" }}
+              style={{ backgroundImage: `url(${heroMovie.backdrop || heroMovie.bgImage})`, minHeight: "68vh" }}
               onMouseEnter={() => setHeroPaused(true)}
               onMouseLeave={() => { if (!heroTrailerOn) setHeroPaused(false); }}
             >
@@ -3401,7 +3522,7 @@ export default function Home() {
                           className="group shrink-0 relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
                           style={{ width: 300, height: 168 }}
                         >
-                          <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                          <img src={m.backdrop || m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                           <div className="absolute left-3 right-3 bottom-4">
                             <p className="text-sm font-bold text-white truncate">{m.title}</p>
@@ -3783,14 +3904,47 @@ export default function Home() {
             <form onSubmit={handleSaveMovie} className="space-y-4">
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Título de la Película o Serie</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ej. Toy Story 5" 
-                  value={newMovieTitle}
-                  onChange={(e) => setNewMovieTitle(e.target.value)}
-                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Ej. Toy Story 5" 
+                    value={newMovieTitle}
+                    onChange={(e) => setNewMovieTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && newMovieTitle.trim()) { e.preventDefault(); searchTmdb(); } }}
+                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={searchTmdb}
+                    className="shrink-0 flex items-center gap-1.5 bg-green-500 hover:bg-green-400 text-black font-bold px-4 rounded-xl text-xs cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                  >
+                    <Sparkles className="w-4 h-4" /> {tmdbBusy ? "Buscando..." : "Autocompletar"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">Escribe el título y pulsa Autocompletar: se llenan la sinopsis, año, duración, clasificación, director, reparto, portada y tráiler.</p>
+                {tmdbResults && (
+                  <div className="mt-2 bg-[#0a0a0a] border border-gray-800 rounded-xl p-2 space-y-1 max-h-80 overflow-y-auto">
+                    <div className="flex items-center justify-between px-2 pb-1">
+                      <span className="text-[11px] text-gray-400 font-bold">¿Cuál es?</span>
+                      <button type="button" onClick={() => setTmdbResults(null)} className="text-gray-500 hover:text-white p-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Cerrar"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {tmdbResults.map((r) => (
+                      <button
+                        type="button"
+                        key={"tmdb-" + r.id}
+                        onClick={() => applyTmdb(r.id)}
+                        className="w-full text-left flex items-center gap-3 p-2 rounded-lg hover:bg-[#181818] focus:outline-none focus:bg-[#181818] focus:ring-2 focus:ring-green-500 cursor-pointer"
+                      >
+                        {r.poster ? <img src={r.poster} alt="" className="rounded object-cover shrink-0" style={{ width: 40, height: 60 }} /> : <span className="rounded bg-gray-800 shrink-0" style={{ width: 40, height: 60 }} />}
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold text-white truncate">{r.title}</span>
+                          <span className="block text-[11px] text-gray-400 truncate">{r.year || "Sin año"}{r.original && r.original !== r.title ? " · " + r.original : ""}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -3907,6 +4061,16 @@ export default function Home() {
                   <p className="text-[11px] text-gray-500">T = temporada, E = número de episodio. Si repites T y E, se reemplaza ese episodio.</p>
                 </div>
               )}
+
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Saltar intro y créditos (opcional, en minutos:segundos{newMovieType === "serie" ? " — igual para todos los episodios" : ""})</label>
+                <div className="grid grid-cols-3 gap-3">
+                  <input type="text" placeholder="Intro empieza 0:30" value={newIntroStart} onChange={(e) => setNewIntroStart(e.target.value.replace(/[^0-9:]/g, ""))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="La intro empieza en" />
+                  <input type="text" placeholder="Intro termina 1:45" value={newIntroEnd} onChange={(e) => setNewIntroEnd(e.target.value.replace(/[^0-9:]/g, ""))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="La intro termina en" />
+                  <input type="text" placeholder="Créditos 1:38:20" value={newCreditsStart} onChange={(e) => setNewCreditsStart(e.target.value.replace(/[^0-9:]/g, ""))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Los créditos empiezan en" />
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">Ejemplo: intro de 0:30 a 1:45 y créditos desde 1:38:20. Déjalo vacío si no aplica.</p>
+              </div>
 
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Tráiler (opcional: enlace MP4 o de YouTube) — se reproduce sin sonido en la portada</label>
@@ -4261,7 +4425,7 @@ export default function Home() {
               <X className="w-6 h-6" />
             </button>
 
-            <div className="relative min-h-[50vh] sm:min-h-[60vh] w-full bg-cover bg-center flex items-end overflow-hidden pb-8" style={{ backgroundImage: `url(${selectedMovie.bgImage})` }}>
+            <div className="relative min-h-[50vh] sm:min-h-[60vh] w-full bg-cover bg-center flex items-end overflow-hidden pb-8" style={{ backgroundImage: `url(${selectedMovie.backdrop || selectedMovie.bgImage})` }}>
               <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-black/70" />
               <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
               
@@ -4512,7 +4676,7 @@ export default function Home() {
               onWaiting={() => setVideoLoading(true)}
               onCanPlay={() => setVideoLoading(false)}
               onPlaying={() => setVideoLoading(false)}
-              onTimeUpdate={(e) => recordProgress(e.currentTarget, selectedMovie, false)}
+              onTimeUpdate={(e) => { recordProgress(e.currentTarget, selectedMovie, false); updateSkip(e.currentTarget.currentTime, selectedMovie); }}
               onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
               onEnded={(e) => {
                 recordProgress(e.currentTarget, selectedMovie, true);
@@ -4538,6 +4702,32 @@ export default function Home() {
             >
               Tu navegador no soporta el reproductor.
             </video>
+            {skipMode && !nextUp && !playerError && (
+              <button
+                data-skip-btn
+                onClick={() => {
+                  const v = playerRef.current;
+                  if (!v || !selectedMovie) return;
+                  if (skipMode === "intro" && selectedMovie.introEnd) {
+                    try { v.currentTime = selectedMovie.introEnd; } catch (err) {}
+                    updateSkip(selectedMovie.introEnd, selectedMovie);
+                    try { v.focus(); } catch (err) {}
+                    return;
+                  }
+                  const nx = nextEpisodeOf(selectedMovie, currentEpisode);
+                  if (nx) { playEpisode(selectedMovie, nx); return; }
+                  // película: termina y vuelve a la ficha
+                  recordProgress(v, selectedMovie, true);
+                  setContinueWatchingList((prev) => prev.filter((p) => String(p.id) !== String(selectedMovie.id)));
+                  setIsPlaying(false);
+                }}
+                style={{ position: "absolute", right: 24, bottom: playerUi ? 110 : 40, zIndex: 34 }}
+                className="flex items-center gap-2 bg-white/95 hover:bg-white text-black font-bold text-sm px-5 py-3 rounded-lg shadow-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+              >
+                <SkipForward className="w-4 h-4" />
+                {skipMode === "intro" ? "Saltar intro" : nextEpisodeOf(selectedMovie, currentEpisode) ? "Siguiente episodio" : "Saltar créditos"}
+              </button>
+            )}
             {nextUp && (
               <div style={{ position: "absolute", right: 24, bottom: 96, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-4 shadow-2xl" data-tv-modal>
                 <p className="text-[11px] text-gray-400 uppercase font-bold">Siguiente episodio en {nextUp.secs} s</p>
@@ -4896,7 +5086,7 @@ export default function Home() {
                 <label className="flex items-center justify-between cursor-pointer">
                   <span>
                     <span className="block text-sm font-bold text-white">Perfil Niños</span>
-                    <span className="block text-[11px] text-gray-400">Solo muestra contenido infantil (ATP, +7, animación y familia).</span>
+                    <span className="block text-[11px] text-gray-400">Solo muestra la categoría Animación.</span>
                   </span>
                   <input type="checkbox" checked={newProfileIsKid} onChange={(e) => { setNewProfileIsKid(e.target.checked); if (usernameError) setUsernameError(""); }} className="w-5 h-5 accent-green-500 cursor-pointer" />
                 </label>
