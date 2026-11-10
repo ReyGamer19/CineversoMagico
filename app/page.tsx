@@ -1635,6 +1635,15 @@ export default function Home() {
     try { (window as any).__cvReady = true; } catch (e) {}
   }, []);
 
+  // App instalable + carga rápida: registra el service worker (/sw.js)
+  useEffect(() => {
+    try {
+      if ("serviceWorker" in navigator && window.location.protocol === "https:") {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      }
+    } catch (e) {}
+  }, []);
+
   // Detecta navegador antiguo y Smart TV
   useEffect(() => {
     const html = document.documentElement;
