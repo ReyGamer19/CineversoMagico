@@ -1,0 +1,17 @@
+export const myAvatars = [
+  { name: "Bebé Jefazo 1", file: "/avatares/bebe jefazo1.png" },
+  { name: "Bebé Jefazo 2", file: "/avatares/bebe jefazo2.png" },
+  { name: "Bebé Jefazo 3", file: "/avatares/bebe jefazo3.png" },
+  { name: "Bebé Jefazo 4", file: "/avatares/bebe jefazo4.png" },
+  { name: "Big Mouth 1", file: "/avatares/bigmouth1.png" },
+  { name: "Big Mouth 2", file: "/avatares/bigmouth2.png" },
+  { name: "Big Mouth 3", file: "/avatares/bigmouth3.png" },
+  { name: "BoJack 1", file: "/avatares/bojack1.png" },
+  { name: "BoJack 2", file: "/avatares/bojack2.png" },
+  { name: "BoJack 3", file: "/avatares/bojack3.png" },
+  { name: "BoJack 4", file: "/avatares/bojack4.png" },
+  { name: "Carmen 1", file: "/avatares/carmen1.png" },
+  { name: "Carmen 2", file: "/avatares/Carmen2.png" },
+  { name: "Carmen 3", file: "/avatares/carmen3.png" },
+  { name: "Carmen 4", file: "/avatares/carmen4.png" },
+];
