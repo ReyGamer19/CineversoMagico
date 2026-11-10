@@ -1575,6 +1575,96 @@ export default function Home() {
     }
   }, [isAdmin]);
 
+  type CatalogOp = { type: "upsert"; movie: Movie } | { type: "delete"; id: number | string };
+  const applyOp = (list: Movie[], op: CatalogOp): Movie[] => {
+    if (op.type === "delete") return list.filter((m) => String(m.id) !== String(op.id));
+    const exists = list.some((m) => String(m.id) === String(op.movie.id));
+    return exists ? list.map((m) => (String(m.id) === String(op.movie.id) ? op.movie : m)) : [op.movie].concat(list);
+  };
+
+  // Guarda UN cambio sin pisar el resto: primero lee el catálogo actual del servidor,
+  // le aplica solo este cambio y lo vuelve a guardar. Así una copia vieja en otro
+  // dispositivo ya no puede borrar ni reemplazar tus enlaces.
+  const saveChange = (op: CatalogOp, okMsg: string) => {
+    setCustomMovies((prev) => applyOp(prev, op));
+    let pass = "";
+    try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!pass) {
+      showToast(okMsg + " (solo en este navegador: entra con la clave del servidor para publicarlo a todos)", 6000);
+      return;
+    }
+    setSyncing(true);
+    fetch("/api/catalog?v=" + Date.now(), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        if (!d || !Array.isArray(d.movies)) {
+          setSyncing(false);
+          showToast("No se pudo leer el catálogo del servidor; el cambio NO se publicó. Inténtalo de nuevo.", 7000);
+          return;
+        }
+        const finalList = applyOp(d.movies.length ? (d.movies as Movie[]) : customMovies, op);
+        return fetch("/api/catalog", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pass, movies: finalList }),
+        })
+          .then((r) => r.json().catch(() => ({})).then((x: any) => ({ ok: r.ok, status: r.status, x })))
+          .then(({ ok, status, x }) => {
+            setSyncing(false);
+            if (ok) {
+              setCustomMovies(finalList);
+              setServerCatalog(true);
+              showToast(okMsg + " ✔ Publicado en todos los dispositivos.");
+            } else if (status === 401) {
+              try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {}
+              showToast("La clave guardada ya no coincide con ADMIN_PASSWORD. Vuelve a entrar con ?admin.", 7000);
+            } else {
+              showToast("No se pudo publicar (" + ((x && x.error) || status) + ").", 7000);
+            }
+          });
+      })
+      .catch(() => {
+        setSyncing(false);
+        showToast("Sin conexión con el servidor. El cambio no se publicó.", 6000);
+      });
+  };
+
+  // Al abrir el panel, carga siempre la versión más nueva del servidor
+  useEffect(() => {
+    if (activeTab !== "admin" || !isAdmin) return;
+    fetch("/api/catalog?v=" + Date.now(), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        if (d && Array.isArray(d.movies) && d.movies.length) {
+          setCustomMovies(d.movies);
+          setServerCatalog(true);
+        }
+      });
+  }, [activeTab, isAdmin]);
+
+  // Probar un enlace desde el panel
+  const [linkStatus, setLinkStatus] = useState<Record<string, string>>({});
+  const testLink = (movie: Movie) => {
+    const key = String(movie.id);
+    setLinkStatus((p) => ({ ...p, [key]: "Probando..." }));
+    fetch("/api/video-check?u=" + encodeURIComponent(movie.videoUrl || ""), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        let t = "✖ No se pudo comprobar";
+        if (d) {
+          const st = d.status || 0;
+          const ct = String(d.contentType || "");
+          if (st === 200 || st === 206) t = ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct) ? "✖ No es un video directo (" + ct + ")" : "✔ Funciona (" + st + ")";
+          else if (st === 0) t = "✖ El servidor no responde";
+          else t = "✖ Error " + st + (st === 403 ? " (bloqueado/retirado)" : st === 404 ? " (no existe)" : "");
+        }
+        setLinkStatus((p) => ({ ...p, [key]: t }));
+      });
+  };
+
   const handleAdminLogout = () => {
     try {
       localStorage.removeItem("cineverso_admin_key");
@@ -2155,20 +2245,26 @@ export default function Home() {
       alert("Por favor ingresa al menos el título y el enlace del vídeo.");
       return;
     }
+    if (/gtv-videos-bucket|BigBuckBunny|ElephantsDream|ForBiggerBlazes/i.test(newMovieVideoUrl)) {
+      if (!confirm("Ese enlace es un VIDEO DE EJEMPLO de Google, no tu película. ¿Quieres guardarlo igual?")) return;
+    }
 
     if (editingMovieId) {
-      const updatedList = customMovies.map(m => m.id === editingMovieId ? {
-        ...m,
-        title: newMovieTitle,
-        tag: newMovieCategory,
-        type: newMovieType,
-        desc: newMovieDesc || m.desc,
-        bgImage: newMovieImage || m.bgImage,
-        img: newMovieImage || m.img,
-        videoUrl: newMovieVideoUrl
-      } : m);
-
-      saveCatalog(updatedList, "¡Contenido actualizado!");
+      const m = customMovies.find((x) => String(x.id) === String(editingMovieId));
+      if (m) {
+        const { backupVideoUrl: _oldBackup, ...rest } = m;
+        const updated: Movie = {
+          ...rest,
+          title: newMovieTitle,
+          tag: newMovieCategory,
+          type: newMovieType,
+          desc: newMovieDesc || m.desc,
+          bgImage: newMovieImage || m.bgImage,
+          img: newMovieImage || m.img,
+          videoUrl: newMovieVideoUrl.trim()
+        };
+        saveChange({ type: "upsert", movie: updated }, "¡Contenido actualizado!");
+      }
       setEditingMovieId(null);
     } else {
       const createdMovie: Movie = {
@@ -2181,7 +2277,7 @@ export default function Home() {
         desc: newMovieDesc || "Contenido añadido desde el panel de administración.",
         bgImage: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         img: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
-        videoUrl: newMovieVideoUrl,
+        videoUrl: newMovieVideoUrl.trim(),
         duration: "1 h 50 min",
         genres: [newMovieCategory],
         cast: "Elenco Estelar",
@@ -2190,8 +2286,7 @@ export default function Home() {
         originalLanguage: "ES"
       };
 
-      const newList = [createdMovie, ...customMovies];
-      saveCatalog(newList, "¡Película agregada!");
+      saveChange({ type: "upsert", movie: createdMovie }, "¡Película agregada!");
     }
 
     setNewMovieTitle("");
@@ -2213,8 +2308,7 @@ export default function Home() {
 
   const handleDeleteMovie = (id: number | string) => {
     if (confirm("¿Estás seguro de eliminar este contenido del catálogo?")) {
-      const filtered = customMovies.filter(m => m.id !== id);
-      saveCatalog(filtered, "Contenido eliminado.");
+      saveChange({ type: "delete", id }, "Contenido eliminado.");
       if (editingMovieId === id) {
         setEditingMovieId(null);
         setNewMovieTitle("");
@@ -3039,7 +3133,11 @@ export default function Home() {
                 <span>Gestión del Catálogo ({customMovies.length} títulos)</span>
               </h3>
               <button
-                onClick={() => saveCatalog(customMovies, "Catálogo completo enviado.")}
+                onClick={() => {
+                  if (confirm("Esto REEMPLAZA todo el catálogo del servidor por el que ves en este dispositivo. Úsalo solo si estás seguro de que esta lista es la correcta. ¿Continuar?")) {
+                    saveCatalog(customMovies, "Catálogo completo enviado.");
+                  }
+                }}
                 className="whitespace-nowrap flex items-center justify-center gap-1.5 bg-white text-black hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Globe className="w-3.5 h-3.5" /> {syncing ? "Publicando..." : "Publicar todo ahora"}
@@ -3082,10 +3180,20 @@ export default function Home() {
                         <span>{movie.year}</span>
                         <span className="uppercase text-[10px] text-gray-500 font-bold">({movie.type || 'película'})</span>
                       </div>
+                      <p className="text-[10px] text-gray-500 mt-1 truncate max-w-[260px] sm:max-w-[420px]" title={movie.videoUrl}>{movie.videoUrl}</p>
+                      {linkStatus[String(movie.id)] && (
+                        <p className={`text-[11px] font-bold mt-0.5 ${linkStatus[String(movie.id)].indexOf("✔") === 0 ? "text-green-400" : linkStatus[String(movie.id)].indexOf("✖") === 0 ? "text-red-400" : "text-gray-400"}`}>{linkStatus[String(movie.id)]}</p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      onClick={() => testLink(movie)}
+                      className="flex items-center gap-1 bg-[#181818] hover:bg-gray-800 text-gray-300 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <Play className="w-3.5 h-3.5" /> Probar
+                    </button>
                     <button 
                       onClick={() => handleEditClick(movie)}
                       className="flex items-center gap-1 bg-[#181818] hover:bg-emerald-950/40 text-emerald-400 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
