@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+reporte-canales.*
+page.limpio.tsx
+canales-quitados.txt
