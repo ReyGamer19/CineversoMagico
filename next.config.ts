@@ -7,14 +7,8 @@ const nextConfig: NextConfig = {
   },
   cacheComponents: true,
   partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
+  // Se quitó la regla de turbopack con @tailwindcss/turbopack (era de Tailwind v4).
+  // Tailwind v3 funciona solo con postcss.config.mjs.
   async headers() {
     return [
       {

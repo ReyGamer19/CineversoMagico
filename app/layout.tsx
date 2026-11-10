@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import TvSupport from "./TvSupport";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,8 +19,6 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
-// themeColor y viewport deben ir aquí (no dentro de metadata) en Next.js moderno.
-// viewportFit "cover" permite que la barra inferior respete el área segura del iPhone.
 export const viewport: Viewport = {
   themeColor: "#050505",
   width: "device-width",
@@ -32,8 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={{ background: "#050505" }}
     >
       <body className="min-h-full flex flex-col bg-[#050505] text-white w-full">
+        <TvSupport />
         {children}
       </body>
     </html>

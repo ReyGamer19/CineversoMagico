@@ -1,26 +1,79 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+html,
+body {
+  margin: 0;
+  background: #050505;
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* En TV todo se ve ~25% más grande (Tailwind usa rem) */
+html.tv {
+  font-size: 20px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Utilidad que tu código usa y Tailwind no trae */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+/* Foco visible para control remoto (se activa al usar flechas/OK) */
+html.using-keys *:focus {
+  outline: 4px solid #4ade80 !important;
+  outline-offset: 3px;
+}
+html.using-keys .cursor-pointer:focus {
+  transform: scale(1.04);
+}
+
+/* Fallback: TV sin soporte de aspect-ratio (Chromium < 88) */
+@supports not (aspect-ratio: 1 / 1) {
+  .aspect-video {
+    position: relative;
+    height: 0;
+    padding-bottom: 56.25%;
+  }
+  .aspect-video > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .aspect-\[2\/3\] {
+    position: relative;
+    height: 0;
+    padding-bottom: 150%;
+  }
+  .aspect-\[2\/3\] > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+  @media (min-width: 1024px) {
+    .aspect-video {
+      height: 100%;
+      padding-bottom: 0;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Fallback: TV sin "gap" en flex (Chromium < 84). La clase la pone TvSupport */
+html.no-flex-gap .flex[class*="gap-"]:not(.flex-col) > * + * {
+  margin-left: 0.75rem;
+}
+html.no-flex-gap .flex.flex-col[class*="gap-"] > * + * {
+  margin-top: 0.5rem;
 }
