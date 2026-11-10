@@ -1470,86 +1470,113 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 md:pb-0">
-      {/* Navegación Superior */}
-      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
-        <div className="flex items-center gap-6 sm:gap-8">
-          <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group">
+      {/* Navegación Superior Optimizada para Smart TV */}
+      <nav className="fixed top-0 left-0 right-0 z-40 flex flex-wrap items-center justify-between px-4 sm:px-6 md:px-12 py-3 bg-black/90 backdrop-blur-md border-b border-gray-900/80 gap-3">
+        <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
+          <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1">
             <span className="bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
-            <span className="text-xl sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
+            <span className="text-lg sm:text-2xl font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
               Cineverso Magico <Sparkle className="w-4 h-4 text-emerald-400 animate-pulse" />
             </span>
           </div>
-          <div className="hidden md:flex gap-6 text-sm font-medium text-gray-300">
-            <button onClick={() => setActiveTab("inicio")} className={`${activeTab === "inicio" ? "text-white font-bold" : "hover:text-green-400"}`}>Inicio</button>
-            <button onClick={() => setActiveTab("explorar")} className={`${activeTab === "explorar" ? "text-white font-bold" : "hover:text-green-400"}`}>Explorador</button>
-            <button onClick={() => setActiveTab("tv")} className={`${activeTab === "tv" ? "text-white font-bold" : "hover:text-green-400"}`}>TV en vivo</button>
-            <button onClick={() => setActiveTab("milista")} className={`${activeTab === "milista" ? "text-white font-bold" : "hover:text-green-400"}`}>Mi Lista ({myList.length})</button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm font-medium text-gray-300">
+            <button 
+              onClick={() => setActiveTab("inicio")} 
+              className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "inicio" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
+            >
+              Inicio
+            </button>
+            <button 
+              onClick={() => setActiveTab("explorar")} 
+              className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "explorar" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
+            >
+              Explorador
+            </button>
+            <button 
+              onClick={() => setActiveTab("tv")} 
+              className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "tv" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
+            >
+              TV en vivo
+            </button>
+            <button 
+              onClick={() => setActiveTab("milista")} 
+              className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "milista" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
+            >
+              Mi Lista ({myList.length})
+            </button>
             
             {isAdmin && (
-              <button onClick={() => setActiveTab("admin")} className={`flex items-center gap-1 text-green-400 font-bold ${activeTab === "admin" ? "underline" : "hover:text-green-300"}`}>
+              <button 
+                onClick={() => setActiveTab("admin")} 
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-green-400 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "admin" ? "bg-green-500/10 border border-green-500" : "hover:text-green-300"}`}
+              >
                 <Settings className="w-4 h-4" /> Panel de administración
               </button>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 text-gray-300">
-          <Search onClick={() => setActiveTab("explorar")} className="w-5 h-5 cursor-pointer hover:text-white" />
-          <button className="hidden sm:flex items-center gap-1.5 text-xs bg-[#121212] px-3 py-1.5 rounded-full border border-gray-800 hover:bg-gray-800">
-            <Sparkles className="w-3.5 h-3.5 text-yellow-400" /> Sorpréndeme
+        <div className="flex items-center gap-3 text-gray-300 ml-auto">
+          <button 
+            onClick={() => setActiveTab("explorar")}
+            className="p-2 rounded-full hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+            aria-label="Buscar"
+          >
+            <Search className="w-5 h-5 cursor-pointer hover:text-white" />
           </button>
-          <Bell className="w-5 h-5 cursor-pointer hover:text-white" />
           
           <div 
             onClick={() => setActiveTab("cuenta")} 
-            className="flex items-center gap-2 cursor-pointer bg-[#121212] p-1 pr-3 rounded-full border border-gray-800 hover:border-green-500 transition"
+            tabIndex={0}
+            className="flex items-center gap-2 cursor-pointer bg-[#121212] p-1 pr-3 rounded-full border border-gray-800 hover:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 transition"
           >
             <img src={activeProfile.avatar} alt={activeProfile.name} className="w-7 h-7 rounded-full object-cover bg-gray-900" />
-            <span className="text-xs font-bold text-white max-w-[80px] sm:max-w-none truncate">{activeProfile.name}</span>
+            <span className="text-xs font-bold text-white max-w-[100px] truncate">{activeProfile.name}</span>
           </div>
         </div>
       </nav>
 
       {/* VISTA INICIO */}
       {activeTab === "inicio" && (
-        <>
-          <div className="relative h-[80vh] sm:h-[85vh] w-full bg-cover bg-center flex items-center overflow-hidden" style={{ backgroundImage: `url(${heroMovie.bgImage})` }}>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/70" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/50 to-transparent" />
+        <div className="pt-16 sm:pt-20">
+          <div className="relative min-h-[60vh] sm:min-h-[70vh] w-full bg-cover bg-center flex items-end pb-12 sm:pb-16 overflow-hidden" style={{ backgroundImage: `url(${heroMovie.bgImage})` }}>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/50 to-black/70" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/60 to-transparent" />
             
-            <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-2xl mt-12 w-full">
-              <h1 className="text-3xl sm:text-6xl font-black tracking-tight uppercase leading-none text-white">
+            <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-3xl w-full pt-10">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight uppercase leading-tight text-white drop-shadow-lg">
                 {heroMovie.title}
-                {heroMovie.subtitle && <span className="block text-xl sm:text-4xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
+                {heroMovie.subtitle && <span className="block text-xl sm:text-3xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
               </h1>
               
-              <div className="flex items-center gap-3 my-3 sm:my-4 text-xs font-semibold">
-                <span className="text-green-400">★ {heroMovie.rating}</span>
-                <span className="text-gray-400">{heroMovie.year}</span>
-                <span className="text-gray-400">{heroMovie.duration}</span>
-                <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2 py-0.5 rounded">{heroMovie.tag}</span>
+              <div className="flex items-center gap-3 my-3 sm:my-4 text-xs sm:text-sm font-semibold flex-wrap">
+                <span className="text-green-400 font-bold">★ {heroMovie.rating}</span>
+                <span className="text-gray-300">{heroMovie.year}</span>
+                <span className="text-gray-300">{heroMovie.duration}</span>
+                <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2.5 py-0.5 rounded font-medium">{heroMovie.tag}</span>
               </div>
 
-              <p className="text-gray-300 text-xs sm:text-sm leading-relaxed mb-6 line-clamp-3">
+              <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed mb-6 line-clamp-3 max-w-2xl">
                 {heroMovie.desc}
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
                 <button 
                   onClick={() => setSelectedMovie(heroMovie)}
-                  className="flex items-center gap-2 bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition cursor-pointer text-sm"
+                  className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base shadow-lg"
                 >
                   <Play className="w-5 h-5 fill-black" /> Reproducir
                 </button>
                 <button 
                   onClick={() => setSelectedMovie(heroMovie)}
-                  className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800 transition cursor-pointer text-sm"
+                  className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-3 rounded-xl border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base"
                 >
                   <Info className="w-5 h-5" /> Más información
                 </button>
                 <button 
                   onClick={() => setMyList(prev => [...prev, heroMovie.title])}
-                  className="p-2.5 rounded-full bg-[#121212]/90 border border-gray-800 hover:bg-gray-800 transition cursor-pointer"
+                  className="p-3 rounded-xl bg-[#121212]/90 border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer"
+                  aria-label="Agregar a Mi Lista"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
@@ -1557,23 +1584,36 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="px-4 sm:px-6 md:px-12 space-y-10 -mt-20 relative z-20 pb-20 w-full overflow-x-hidden">
+          <div className="px-4 sm:px-6 md:px-12 space-y-10 relative z-20 pb-20 w-full overflow-x-hidden mt-4">
             {customMovies.length > 0 && (
               <div>
-                <h2 className="text-lg font-bold mb-4 text-white">Tus Películas Subidas</h2>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none w-full">
+                <h2 className="text-lg sm:text-2xl font-bold mb-4 text-white flex items-center gap-2">
+                  <span>Tus Películas Subidas</span>
+                  <span className="text-xs font-normal text-gray-400">({customMovies.length})</span>
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                   {customMovies.map((item) => (
-                    <div key={item.id} onClick={() => setSelectedMovie(item)} className="min-w-[150px] sm:min-w-[180px] group cursor-pointer shrink-0">
-                      <img src={item.bgImage} alt={item.title} className="w-full h-40 sm:h-48 object-cover rounded-xl border border-gray-900 group-hover:border-green-500 transition shadow-lg" />
-                      <h4 className="text-xs font-semibold mt-2 text-gray-300 truncate">{item.title}</h4>
-                      <span className="text-[10px] text-green-400 font-medium">{item.tag}</span>
+                    <div 
+                      key={item.id} 
+                      onClick={() => setSelectedMovie(item)} 
+                      tabIndex={0}
+                      className="group cursor-pointer rounded-xl overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500 transition duration-200"
+                    >
+                      <div className="aspect-[2/3] w-full bg-gray-900 overflow-hidden relative rounded-xl border border-gray-800 group-hover:border-green-500">
+                        <img src={item.bgImage} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
+                        <div className="absolute bottom-2 left-2 right-2">
+                          <span className="text-[10px] text-green-400 font-bold uppercase bg-black/60 px-2 py-0.5 rounded">{item.tag}</span>
+                        </div>
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{item.title}</h4>
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* VISTA EXPLORAR */}
@@ -1583,10 +1623,10 @@ export default function Home() {
             <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-500" />
             <input 
               type="text"
-              placeholder="Buscar películas, series o personas"
+              placeholder="Buscar películas, series o personas..."
               value={exploreSearch}
               onChange={(e) => setExploreSearch(e.target.value)}
-              className="w-full bg-[#121212] border border-gray-800 rounded-full pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-green-500 transition shadow-inner"
+              className="w-full bg-[#121212] border border-gray-800 rounded-full pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition shadow-inner"
             />
           </div>
 
@@ -1594,13 +1634,13 @@ export default function Home() {
             <div className="flex items-center bg-[#121212] border border-gray-800 rounded-full p-1">
               <button 
                 onClick={() => setExploreTypeFilter("pelicula")}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${exploreTypeFilter === "pelicula" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-green-500 ${exploreTypeFilter === "pelicula" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}
               >
                 Películas
               </button>
               <button 
                 onClick={() => setExploreTypeFilter("serie")}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${exploreTypeFilter === "serie" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-green-500 ${exploreTypeFilter === "serie" ? "bg-white text-black" : "text-gray-400 hover:text-white"}`}
               >
                 Series
               </button>
@@ -1609,7 +1649,7 @@ export default function Home() {
             <select 
               value={exploreYearFilter}
               onChange={(e) => setExploreYearFilter(e.target.value)}
-              className="bg-[#121212] border border-gray-800 px-4 py-1.5 rounded-full text-xs font-semibold text-gray-300 focus:outline-none cursor-pointer"
+              className="bg-[#121212] border border-gray-800 px-4 py-1.5 rounded-full text-xs font-semibold text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 cursor-pointer"
             >
               <option value="Cualquier año">Cualquier año</option>
               <option value="2026">2026</option>
@@ -1625,7 +1665,7 @@ export default function Home() {
                 setExploreGenreFilter("Todos");
                 setExploreYearFilter("Cualquier año");
               }}
-              className="text-xs text-gray-500 hover:text-white px-2 py-1.5 font-medium transition cursor-pointer"
+              className="text-xs text-gray-500 hover:text-white px-2 py-1.5 font-medium transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
             >
               Limpiar
             </button>
@@ -1634,7 +1674,7 @@ export default function Home() {
           <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-none border-b border-gray-900 w-full">
             <button
               onClick={() => setExploreGenreFilter("Todos")}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer ${exploreGenreFilter === "Todos" ? "bg-white text-black font-bold" : "bg-[#121212] text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-800"}`}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${exploreGenreFilter === "Todos" ? "bg-white text-black font-bold" : "bg-[#121212] text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-800"}`}
             >
               Todos
             </button>
@@ -1642,7 +1682,7 @@ export default function Home() {
               <button
                 key={genre}
                 onClick={() => setExploreGenreFilter(genre)}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer ${exploreGenreFilter.toLowerCase() === genre.toLowerCase() ? "bg-white text-black font-bold" : "bg-[#121212] text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-800"}`}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${exploreGenreFilter.toLowerCase() === genre.toLowerCase() ? "bg-white text-black font-bold" : "bg-[#121212] text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-800"}`}
               >
                 {genre}
               </button>
@@ -1659,12 +1699,13 @@ export default function Home() {
               <p className="text-xs">Prueba seleccionando otro género o limpia los filtros.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {filteredExploreMovies.map((movie) => (
                 <div 
                   key={movie.id}
                   onClick={() => setSelectedMovie(movie)}
-                  className="group relative cursor-pointer flex flex-col space-y-2"
+                  tabIndex={0}
+                  className="group relative cursor-pointer flex flex-col space-y-2 focus:outline-none focus:ring-4 focus:ring-green-500 rounded-2xl p-1"
                 >
                   <div className="aspect-[2/3] w-full rounded-2xl overflow-hidden bg-gray-900 border border-gray-900 group-hover:border-green-500 group-hover:scale-105 transition duration-300 shadow-xl relative">
                     <img src={movie.bgImage} alt={movie.title} className="w-full h-full object-cover" />
@@ -1686,17 +1727,16 @@ export default function Home() {
         </div>
       )}
 
-      {/* VISTA TV EN VIVO - OPTIMIZADA PARA MÓVILES Y PANTALLAS COMPLETAS */}
+      {/* VISTA TV EN VIVO - OPTIMIZADA PARA SMART TV Y PANTALLAS COMPLETAS */}
       {activeTab === "tv" && (
         <div className="pt-16 sm:pt-20 min-h-screen bg-[#050505] overflow-x-hidden">
           <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] bg-[#050505]">
             <div className="w-full lg:flex-1 relative bg-black flex flex-col justify-between overflow-y-auto">
-              <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate">
+              <div key={activeChannel.id} className="absolute top-3 left-4 z-20 flex items-center gap-2 sm:gap-3 bg-black/80 px-3 py-1.5 rounded-md backdrop-blur-md text-xs border border-gray-800 max-w-[90%] truncate shadow-lg">
                 <span className="bg-red-600 text-white font-extrabold text-[10px] px-2 py-0.5 rounded animate-pulse shrink-0">EN VIVO</span>
                 <span className="text-gray-200 font-bold truncate">{activeChannel.name} — {activeChannel.country}</span>
               </div>
 
-              {/* Contenedor estricto w-full aspect-video para evitar desbordes */}
               <div className="w-full aspect-video lg:h-full flex items-center justify-center relative bg-black shrink-0 overflow-hidden">
                 {activeChannel.embedUrl ? (
                   <iframe
@@ -1751,7 +1791,7 @@ export default function Home() {
                     placeholder="Buscar canal o sigla..." 
                     value={searchGuide}
                     onChange={(e) => setSearchGuide(e.target.value)}
-                    className="w-full bg-[#161616] border border-gray-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-green-500 transition"
+                    className="w-full bg-[#161616] border border-gray-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition"
                   />
                 </div>
 
@@ -1760,7 +1800,7 @@ export default function Home() {
                     <button
                       key={filter}
                       onClick={() => setSelectedCountryFilter(filter)}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition whitespace-nowrap cursor-pointer ${selectedCountryFilter === filter ? "bg-green-500 text-black font-bold" : "bg-[#161616] text-gray-400 hover:text-white border border-gray-800"}`}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${selectedCountryFilter === filter ? "bg-green-500 text-black font-bold" : "bg-[#161616] text-gray-400 hover:text-white border border-gray-800"}`}
                     >
                       {filter}
                     </button>
@@ -1785,7 +1825,8 @@ export default function Home() {
                         <div 
                           key={ch.id}
                           onClick={() => setActiveChannel(ch)}
-                          className={`p-2.5 rounded-xl flex items-center gap-3 cursor-pointer transition border ${activeChannel.id === ch.id ? "bg-[#1c1c1c] border-green-500/80 shadow-md shadow-green-950/30" : "hover:bg-[#151515] border-transparent"}`}
+                          tabIndex={0}
+                          className={`p-2.5 rounded-xl flex items-center gap-3 cursor-pointer transition border focus:outline-none focus:ring-2 focus:ring-green-500 ${activeChannel.id === ch.id ? "bg-[#1c1c1c] border-green-500/80 shadow-md shadow-green-950/30" : "hover:bg-[#151515] border-transparent"}`}
                         >
                           <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center font-black text-xs text-gray-200 border border-gray-800 shrink-0 overflow-hidden">
                             <span>{ch.shortCode || ch.name.slice(0, 2).toUpperCase()}</span>
@@ -1815,7 +1856,7 @@ export default function Home() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {myList.map((title, i) => (
-                <div key={i} className="bg-[#0f0f0f] p-4 rounded-xl border border-gray-900">
+                <div key={i} tabIndex={0} className="bg-[#0f0f0f] p-4 rounded-xl border border-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500">
                   <h4 className="text-sm font-bold text-white">{title}</h4>
                 </div>
               ))}
@@ -1851,7 +1892,7 @@ export default function Home() {
                     setNewMovieImage("");
                     setNewMovieVideoUrl("");
                   }}
-                  className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition self-start sm:self-auto"
+                  className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   Cancelar Edición
                 </button>
@@ -1867,7 +1908,7 @@ export default function Home() {
                   placeholder="Ej. Toy Story 5" 
                   value={newMovieTitle}
                   onChange={(e) => setNewMovieTitle(e.target.value)}
-                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
 
@@ -1879,7 +1920,7 @@ export default function Home() {
                   placeholder="https://archive.org/download/..." 
                   value={newMovieVideoUrl}
                   onChange={(e) => setNewMovieVideoUrl(e.target.value)}
-                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
 
@@ -1889,7 +1930,7 @@ export default function Home() {
                   <select 
                     value={newMovieType}
                     onChange={(e) => setNewMovieType(e.target.value as "pelicula" | "serie")}
-                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   >
                     <option value="pelicula">Película</option>
                     <option value="serie">Serie</option>
@@ -1900,7 +1941,7 @@ export default function Home() {
                   <select 
                     value={newMovieCategory}
                     onChange={(e) => setNewMovieCategory(e.target.value)}
-                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   >
                     {genresList.map((g) => (
                       <option key={g} value={g}>{g}</option>
@@ -1914,7 +1955,7 @@ export default function Home() {
                     placeholder="https://images.unsplash.com/..." 
                     value={newMovieImage}
                     onChange={(e) => setNewMovieImage(e.target.value)}
-                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
               </div>
@@ -1926,11 +1967,11 @@ export default function Home() {
                   placeholder="Descripción breve..." 
                   value={newMovieDesc}
                   onChange={(e) => setNewMovieDesc(e.target.value)}
-                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-green-500"
+                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
 
-              <button type="submit" className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-black font-black py-3.5 rounded-xl text-sm transition shadow-lg shadow-green-950/50 cursor-pointer">
+              <button type="submit" className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-black font-black py-3.5 rounded-xl text-sm transition shadow-lg shadow-green-950/50 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
                 {editingMovieId ? "Guardar Cambios de la Película" : "Publicar Contenido en la Web"}
               </button>
             </form>
@@ -1950,7 +1991,7 @@ export default function Home() {
                     window.location.reload();
                   }
                 }}
-                className="flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer self-start sm:self-auto"
+                className="flex items-center justify-center gap-1.5 bg-red-950/40 text-red-400 hover:bg-red-900/40 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-900/50 transition cursor-pointer self-start sm:self-auto focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Forzar Restauración
               </button>
@@ -1974,13 +2015,13 @@ export default function Home() {
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <button 
                       onClick={() => handleEditClick(movie)}
-                      className="flex items-center gap-1 bg-[#181818] hover:bg-emerald-950/40 text-emerald-400 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                      className="flex items-center gap-1 bg-[#181818] hover:bg-emerald-950/40 text-emerald-400 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <Edit3 className="w-3.5 h-3.5" /> Editar
                     </button>
                     <button 
                       onClick={() => handleDeleteMovie(movie.id)}
-                      className="flex items-center gap-1 bg-[#181818] hover:bg-red-950/40 text-red-400 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                      className="flex items-center gap-1 bg-[#181818] hover:bg-red-950/40 text-red-400 px-3 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <Trash2 className="w-3.5 h-3.5" /> Eliminar
                     </button>
@@ -2003,7 +2044,7 @@ export default function Home() {
                 <h2 className="text-2xl font-bold text-white truncate max-w-[200px] sm:max-w-none">{activeProfile.name}</h2>
               </div>
             </div>
-            <button onClick={() => setShowAddProfileModal(true)} className="flex items-center justify-center gap-2 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer">
+            <button onClick={() => setShowAddProfileModal(true)} className="flex items-center justify-center gap-2 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
               <User className="w-4 h-4" /> Cambiar perfil
             </button>
           </div>
@@ -2028,7 +2069,7 @@ export default function Home() {
                     </div>
                   </div>
                   {p.id !== activeProfile.id && (
-                    <button onClick={() => handleSelectProfile(p)} className="text-xs text-emerald-400 hover:underline cursor-pointer font-bold shrink-0 ml-2">Cambiar</button>
+                    <button onClick={() => handleSelectProfile(p)} className="text-xs text-emerald-400 hover:underline cursor-pointer font-bold shrink-0 ml-2 focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cambiar</button>
                   )}
                 </div>
               ))}
@@ -2042,7 +2083,7 @@ export default function Home() {
                   }
                   setShowAddProfileModal(true);
                 }}
-                className="w-full flex items-center justify-center gap-2 p-3 bg-[#050505] hover:bg-[#121212] rounded-xl text-sm font-bold border border-dashed border-gray-800 transition text-gray-400 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 p-3 bg-[#050505] hover:bg-[#121212] rounded-xl text-sm font-bold border border-dashed border-gray-800 transition text-gray-400 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <PlusCircle className="w-4 h-4 text-green-400" /> Agregar perfil
               </button>
@@ -2072,7 +2113,7 @@ export default function Home() {
                         placeholder="tu@gmail.com" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 text-white"
+                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
                       />
                       <input 
                         type="password" 
@@ -2080,9 +2121,9 @@ export default function Home() {
                         placeholder="Contraseña (mínimo 6)" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 text-white"
+                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
                       />
-                      <button type="submit" className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer">
+                      <button type="submit" className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
                         Crear cuenta y verificar con Gmail
                       </button>
                     </form>
@@ -2100,9 +2141,9 @@ export default function Home() {
                         placeholder="Código de 6 dígitos" 
                         value={inputCode}
                         onChange={(e) => setInputCode(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest font-mono text-white focus:border-green-500"
+                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest font-mono text-white focus:ring-2 focus:ring-green-500"
                       />
-                      <button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer">
+                      <button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
                         Verificar código de Gmail
                       </button>
                     </form>
@@ -2114,7 +2155,7 @@ export default function Home() {
                     <span className="text-xs text-green-400 font-bold">Cuenta de Correo Verificada (Hasta 5 perfiles)</span>
                     <p className="text-sm font-bold text-white truncate">{email}</p>
                   </div>
-                  <button onClick={() => { setIsGuest(true); setRegisterStep("form"); }} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0">Cerrar sesión</button>
+                  <button onClick={() => { setIsGuest(true); setRegisterStep("form"); }} className="text-xs text-red-400 hover:underline cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cerrar sesión</button>
                 </div>
               )}
             </div>
@@ -2135,7 +2176,7 @@ export default function Home() {
                   <div className="p-2 bg-[#181818] rounded-lg text-gray-400"><Tv className="w-4 h-4" /></div>
                   <div>
                     <h4 className="text-sm font-bold text-white">Modo TV</h4>
-                    <p className="text-xs text-gray-500">Interfaz más grande y navegación con mando o control remoto.</p>
+                    <p className="text-xs text-gray-500">Interfaz más grande y navegación optimizada para mando.</p>
                   </div>
                 </div>
                 <input 
@@ -2175,7 +2216,7 @@ export default function Home() {
                 </div>
                 <button 
                   onClick={() => { setContinueWatchingList([]); alert("Historial borrado."); }}
-                  className="bg-[#181818] hover:bg-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg text-white border border-gray-800 cursor-pointer transition"
+                  className="bg-[#181818] hover:bg-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg text-white border border-gray-800 cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   Borrar
                 </button>
@@ -2185,39 +2226,37 @@ export default function Home() {
 
           <button 
             onClick={() => { setIsGuest(true); alert("Has salido del modo invitado."); }} 
-            className="w-full flex items-center justify-center gap-2 p-3.5 bg-[#121212] hover:bg-gray-800 text-red-400 font-bold rounded-2xl text-xs border border-gray-800 transition cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 p-3.5 bg-[#121212] hover:bg-gray-800 text-red-400 font-bold rounded-2xl text-xs border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             <LogOut className="w-4 h-4" /> Salir del modo invitado
           </button>
         </div>
       )}
 
-      {/* MODAL DE INFORMACIÓN DE PELÍCULA (CON BOTONES FIJOS DE RETROCESO) */}
+      {/* MODAL DE INFORMACIÓN DE PELÍCULA */}
       {selectedMovie && !isPlaying && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto">
           <div className="bg-[#141414] w-full min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
-            {/* Botón de Retroceso Fijo Superior Izquierdo */}
             <button 
               onClick={() => setSelectedMovie(null)} 
-              className="fixed top-4 left-4 sm:top-6 sm:left-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center"
+              className="fixed top-4 left-4 sm:top-6 sm:left-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-500"
             >
               <ArrowLeft className="w-6 h-6" />
             </button>
 
-            {/* Botón Cerrar Fijo Superior Derecho */}
             <button 
               onClick={() => setSelectedMovie(null)} 
-              className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center"
+              className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-500"
             >
               <X className="w-6 h-6" />
             </button>
 
-            <div className="relative h-[55vh] sm:h-[65vh] w-full bg-cover bg-center flex items-end overflow-hidden" style={{ backgroundImage: `url(${selectedMovie.bgImage})` }}>
+            <div className="relative min-h-[50vh] sm:min-h-[60vh] w-full bg-cover bg-center flex items-end overflow-hidden pb-8" style={{ backgroundImage: `url(${selectedMovie.bgImage})` }}>
               <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-black/70" />
               <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
               
-              <div className="relative z-10 p-4 sm:p-14 space-y-4 max-w-4xl w-full">
-                <h2 className="text-3xl sm:text-7xl font-black tracking-wider uppercase leading-none text-red-600 drop-shadow-2xl">
+              <div className="relative z-10 p-4 sm:p-14 space-y-4 max-w-4xl w-full pt-16">
+                <h2 className="text-3xl sm:text-6xl font-black tracking-wider uppercase leading-none text-red-600 drop-shadow-2xl">
                   {selectedMovie.title}
                   {selectedMovie.subtitle && (
                     <span className="block text-lg sm:text-3xl text-white tracking-widest mt-2 font-extrabold">{selectedMovie.subtitle}</span>
@@ -2234,7 +2273,7 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button 
                     onClick={() => setIsPlaying(true)}
-                    className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base"
+                    className="flex items-center gap-2 bg-white hover:bg-gray-200 text-black font-bold px-6 sm:px-7 py-3 rounded-xl transition shadow-xl cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
                     <Play className="w-5 h-5 fill-black" /> Reproducir
                   </button>
@@ -2249,7 +2288,7 @@ export default function Home() {
                         setTimeout(() => setToastMessage(""), 3000);
                       }
                     }}
-                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 sm:px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base"
+                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-5 sm:px-6 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
                     <Plus className="w-5 h-5" /> Mi Lista
                   </button>
@@ -2259,13 +2298,13 @@ export default function Home() {
                       setToastMessage("¡Enlace copiado al portapapeles!");
                       setTimeout(() => setToastMessage(""), 3000);
                     }}
-                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base"
+                    className="flex items-center gap-2 bg-[#262626]/90 hover:bg-[#333] text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-700 transition cursor-pointer text-sm sm:text-base focus:outline-none focus:ring-4 focus:ring-green-500"
                   >
                     <Share2 className="w-4 h-4" /> Compartir
                   </button>
                 </div>
 
-                <p className="text-gray-300 text-xs sm:text-sm leading-relaxed max-w-3xl line-clamp-2 pt-1">
+                <p className="text-gray-300 text-xs sm:text-sm leading-relaxed max-w-3xl line-clamp-3 pt-1">
                   {selectedMovie.desc}
                 </p>
               </div>
@@ -2275,19 +2314,19 @@ export default function Home() {
               <div className="flex items-center gap-6 sm:gap-8 border-b border-gray-800 text-sm font-bold overflow-x-auto scrollbar-none">
                 <button 
                   onClick={() => setMovieModalTab("detalles")}
-                  className={`pb-3 relative cursor-pointer whitespace-nowrap ${movieModalTab === "detalles" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
+                  className={`pb-3 relative cursor-pointer whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-green-500 ${movieModalTab === "detalles" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
                 >
                   Detalles
                 </button>
                 <button 
                   onClick={() => setMovieModalTab("reparto")}
-                  className={`pb-3 relative cursor-pointer whitespace-nowrap ${movieModalTab === "reparto" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
+                  className={`pb-3 relative cursor-pointer whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-green-500 ${movieModalTab === "reparto" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
                 >
                   Reparto
                 </button>
                 <button 
                   onClick={() => setMovieModalTab("similares")}
-                  className={`pb-3 relative cursor-pointer whitespace-nowrap ${movieModalTab === "similares" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
+                  className={`pb-3 relative cursor-pointer whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-green-500 ${movieModalTab === "similares" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white"}`}
                 >
                   Más como esto
                 </button>
@@ -2336,7 +2375,7 @@ export default function Home() {
               {movieModalTab === "similares" && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-2 max-w-6xl">
                   {customMovies.filter(m => m.id !== selectedMovie.id).slice(0, 4).map(sim => (
-                    <div key={sim.id} onClick={() => setSelectedMovie(sim)} className="cursor-pointer group">
+                    <div key={sim.id} onClick={() => setSelectedMovie(sim)} tabIndex={0} className="cursor-pointer group focus:outline-none focus:ring-4 focus:ring-green-500 rounded-xl">
                       <img src={sim.bgImage} alt={sim.title} className="w-full h-44 object-cover rounded-xl group-hover:border border-green-500 transition shadow-lg" />
                       <h5 className="text-xs font-bold mt-2 text-gray-200 truncate">{sim.title}</h5>
                     </div>
@@ -2348,13 +2387,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* REPRODUCTOR FLOTANTE MODERNO - ADAPTADO A MÓVILES */}
+      {/* REPRODUCTOR FLOTANTE */}
       {selectedMovie && isPlaying && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col justify-between overflow-x-hidden">
           <div className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent z-20">
             <button 
               onClick={() => setIsPlaying(false)}
-              className="flex items-center gap-2 text-white font-bold hover:text-green-400 transition cursor-pointer"
+              className="flex items-center gap-2 text-white font-bold hover:text-green-400 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1"
             >
               <ArrowLeft className="w-5 h-5" /> <span className="truncate max-w-[250px] sm:max-w-none">{selectedMovie.title}</span>
             </button>
@@ -2377,7 +2416,7 @@ export default function Home() {
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button 
                 onClick={() => setIsPlaying(false)}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer text-gray-300"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <ArrowLeft className="w-4 h-4 text-green-400" /> Anterior
               </button>
@@ -2388,13 +2427,13 @@ export default function Home() {
                     elem.requestFullscreen().catch(() => {});
                   }
                 }}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
               <button 
                 onClick={() => alert("Transmitiendo a dispositivo externo...")}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Cast className="w-4 h-4 text-green-400" /> Transmitir
               </button>
@@ -2406,7 +2445,7 @@ export default function Home() {
                     setTimeout(() => setToastMessage(""), 3000);
                   }
                 }}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Plus className="w-4 h-4 text-green-400" /> Mi Lista
               </button>
@@ -2423,9 +2462,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* BARRA DE NAVEGACIÓN INFERIOR (SOLO MÓVIL) */}
+      {/* BARRA DE NAVEGACIÓN INFERIOR (MÓVIL) */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/60 backdrop-blur-2xl border-t border-white/10"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-2xl border-t border-white/10"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-around px-2 pt-3 pb-3">
@@ -2443,13 +2482,13 @@ export default function Home() {
                 onClick={() => setActiveTab(id as typeof activeTab)}
                 aria-label={label}
                 aria-current={active ? "page" : undefined}
-                className="flex flex-1 flex-col items-center gap-1.5 cursor-pointer select-none active:scale-95 transition"
+                className="flex flex-1 flex-col items-center gap-1.5 cursor-pointer select-none active:scale-95 transition focus:outline-none"
               >
                 <Icon
-                  className={`w-7 h-7 transition-colors ${active ? "text-white" : "text-gray-400"}`}
+                  className={`w-6 h-6 transition-colors ${active ? "text-green-400" : "text-gray-400"}`}
                   strokeWidth={active ? 2.2 : 1.8}
                 />
-                <span className={`text-[13px] leading-none transition-colors ${active ? "text-white font-semibold" : "text-gray-400 font-medium"}`}>
+                <span className={`text-[12px] leading-none transition-colors ${active ? "text-green-400 font-bold" : "text-gray-400 font-medium"}`}>
                   {label}
                 </span>
               </button>
@@ -2470,7 +2509,7 @@ export default function Home() {
           </div>
           <button 
             onClick={handleInstallClick}
-            className="bg-white text-black font-bold px-4 py-2 rounded-xl text-xs hover:bg-gray-200 transition cursor-pointer shrink-0"
+            className="bg-white text-black font-bold px-4 py-2 rounded-xl text-xs hover:bg-gray-200 transition cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             Instalar
           </button>
@@ -2489,7 +2528,7 @@ export default function Home() {
       {showAddProfileModal && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0c0c0c] border border-emerald-500/30 w-full max-w-lg rounded-2xl p-6 relative space-y-6 shadow-2xl">
-            <button onClick={() => { setShowAddProfileModal(false); setUsernameError(""); }} className="absolute top-4 right-4 text-gray-400 hover:text-white cursor-pointer">
+            <button onClick={() => { setShowAddProfileModal(false); setUsernameError(""); }} className="absolute top-4 right-4 text-gray-400 hover:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded p-1">
               <X className="w-5 h-5" />
             </button>
 
@@ -2509,7 +2548,7 @@ export default function Home() {
                     setNewProfileName(e.target.value);
                     if (usernameError) setUsernameError("");
                   }}
-                  className="w-full bg-[#121212] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 text-white"
+                  className="w-full bg-[#121212] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white"
                 />
                 {usernameError && (
                   <p className="text-xs text-red-500 font-bold mt-1.5">{usernameError}</p>
@@ -2527,7 +2566,7 @@ export default function Home() {
                     placeholder="Busca un personaje..."
                     value={avatarSearch}
                     onChange={(e) => setAvatarSearch(e.target.value)}
-                    className="w-full bg-[#121212] border border-gray-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-[#121212] border border-gray-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
 
@@ -2536,7 +2575,8 @@ export default function Home() {
                     <div 
                       key={i} 
                       onClick={() => setNewProfileAvatar(item.file)}
-                      className={`flex flex-col items-center p-2 rounded-xl cursor-pointer border-2 transition ${newProfileAvatar === item.file ? "border-emerald-400 bg-emerald-500/10 scale-105" : "border-transparent hover:bg-gray-900"}`}
+                      tabIndex={0}
+                      className={`flex flex-col items-center p-2 rounded-xl cursor-pointer border-2 transition focus:outline-none focus:ring-2 focus:ring-green-500 ${newProfileAvatar === item.file ? "border-emerald-400 bg-emerald-500/10 scale-105" : "border-transparent hover:bg-gray-900"}`}
                     >
                       <div className="w-14 h-14 bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center border border-gray-800 shadow-md">
                         <img src={item.file} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition" />
@@ -2549,10 +2589,10 @@ export default function Home() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button onClick={() => { setShowAddProfileModal(false); setUsernameError(""); }} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 transition cursor-pointer">
+              <button onClick={() => { setShowAddProfileModal(false); setUsernameError(""); }} className="flex-1 bg-[#1a1a1a] hover:bg-gray-800 text-white font-bold py-3 rounded-xl text-xs border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
                 Cancelar
               </button>
-              <button onClick={handleCreateProfile} className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs transition cursor-pointer">
+              <button onClick={handleCreateProfile} className="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-xs transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
                 Crear perfil
               </button>
             </div>
