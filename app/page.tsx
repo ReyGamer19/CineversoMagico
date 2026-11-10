@@ -1,16 +1,19 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  Play, Info, Plus, Search, Bell, Sparkles, Check, 
-  Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark
+import {
+  Play, Info, Plus, Search, Tv, Shield, User, PlusCircle, Trash2, X, AlertCircle, LogOut, Sparkle, Film,
+  Radio, Globe, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, Download, Bookmark, Home as HomeIcon
 } from "lucide-react";
 import Hls from "hls.js";
-import type { Profile, Movie, Channel, ContinueItem, EpgMap } from "./lib/types";
+import type { Profile, Movie, Channel, ContinueItem, EpgMap, Tab } from "./lib/types";
 import { tzCountryKey, tzForChannel, parseSchedule, getNowNext } from "./lib/epg";
-import { formatRemaining } from "./lib/format";
 import { proxyUrl, needsProxy } from "./lib/proxy";
 import MoviePlayer from "./components/MoviePlayer";
+import Navbar from "./components/Navbar";
+import Hero from "./components/Hero";
+import ContinueRow from "./components/ContinueRow";
+import MovieRow from "./components/MovieRow";
 import { liveChannels as liveChannelsData } from "./data/channels";
 import { genresList as genresListData } from "./data/genres";
 import { myAvatars as myAvatarsData } from "./data/avatars";
@@ -20,7 +23,7 @@ import { myAvatars as myAvatarsData } from "./data/avatars";
 export default function Home() {
   const myAvatars = myAvatarsData;
 
-  const [activeTab, setActiveTab] = useState<"inicio" | "explorar" | "tv" | "milista" | "cuenta" | "admin">("inicio");
+  const [activeTab, setActiveTab] = useState<Tab>("inicio");
   
   // Estados para Modal de Info de Película y Reproductor
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
@@ -65,7 +68,6 @@ export default function Home() {
   // Carrusel del banner principal
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
-  const heroTouchX = useRef(0);
 
   // Guía de programación de TV (Ahora / Después)
   const [epg, setEpg] = useState<EpgMap>({});
@@ -1304,183 +1306,31 @@ export default function Home() {
         `}</style>
       )}
       {/* Navegación Superior */}
-      <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 bg-gradient-to-b from-black via-black/80 to-transparent backdrop-blur-md">
-        <div className="flex items-center gap-6 sm:gap-8 min-w-0">
-          <div onClick={() => setActiveTab("inicio")} className="flex items-center gap-2 cursor-pointer group">
-            <span className="bg-green-500 text-black font-black px-2 py-0.5 rounded text-lg sm:text-xl shadow-lg shadow-green-500/20">H</span>
-            <span className="text-base sm:text-2xl whitespace-nowrap font-black tracking-wide bg-gradient-to-r from-green-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent flex items-center gap-1.5">
-              Cineverso Magico <Sparkle className="hidden sm:block w-4 h-4 text-emerald-400 animate-pulse" />
-            </span>
-          </div>
-          <div className="hidden md:flex gap-6 text-sm font-medium text-gray-300">
-            <button onClick={() => setActiveTab("inicio")} className={`${activeTab === "inicio" ? "text-white font-bold" : "hover:text-green-400"}`}>Inicio</button>
-            <button onClick={() => setActiveTab("explorar")} className={`${activeTab === "explorar" ? "text-white font-bold" : "hover:text-green-400"}`}>Explorador</button>
-            <button onClick={() => setActiveTab("tv")} className={`${activeTab === "tv" ? "text-white font-bold" : "hover:text-green-400"}`}>TV en vivo</button>
-            <button onClick={() => setActiveTab("milista")} className={`${activeTab === "milista" ? "text-white font-bold" : "hover:text-green-400"}`}>Mi Lista ({myList.length})</button>
-            
-            {isAdmin && (
-              <button onClick={() => setActiveTab("admin")} className={`flex items-center gap-1 text-green-400 font-bold ${activeTab === "admin" ? "underline" : "hover:text-green-300"}`}>
-                <Settings className="w-4 h-4" /> Panel de administración
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 sm:gap-4 text-gray-300">
-          <Search onClick={() => setActiveTab("explorar")} className="w-5 h-5 cursor-pointer hover:text-white" />
-          <button className="hidden sm:flex items-center gap-1.5 text-xs bg-[#121212] px-3 py-1.5 rounded-full border border-gray-800 hover:bg-gray-800">
-            <Sparkles className="w-3.5 h-3.5 text-yellow-400" /> Sorpréndeme
-          </button>
-          <Bell className="w-5 h-5 cursor-pointer hover:text-white" />
-          
-          <div 
-            onClick={() => setActiveTab("cuenta")} 
-            className="flex items-center gap-2 cursor-pointer bg-[#121212] p-1 pr-3 rounded-full border border-gray-800 hover:border-green-500 transition"
-          >
-            <img src={activeProfile.avatar} alt={activeProfile.name} className="w-7 h-7 rounded-full object-cover bg-gray-900" />
-            <span className="text-xs font-bold text-white max-w-[80px] sm:max-w-none truncate">{activeProfile.name}</span>
-          </div>
-        </div>
-      </nav>
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        myListCount={myList.length}
+        isAdmin={isAdmin}
+        activeProfile={activeProfile}
+      />
 
       {/* VISTA INICIO */}
       {activeTab === "inicio" && (
         <>
-          <div
-            className="relative h-[80vh] sm:h-[85vh] w-full flex items-center overflow-hidden bg-[#050505]"
-            onPointerEnter={(e) => { if (e.pointerType === "mouse") setHeroPaused(true); }}
-            onPointerLeave={(e) => { if (e.pointerType === "mouse") setHeroPaused(false); }}
-            onTouchStart={(e) => { heroTouchX.current = e.touches[0].clientX; }}
-            onTouchEnd={(e) => {
-              const dx = e.changedTouches[0].clientX - heroTouchX.current;
-              if (Math.abs(dx) > 50 && slides.length > 1) {
-                setHeroIndex((i) => (dx < 0 ? (i + 1) % slides.length : (i - 1 + slides.length) % slides.length));
-              }
-            }}
-          >
-            <style>{`
-              @keyframes heroFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-              .hero-fade { animation: heroFade 0.7s ease both; }
-              @media (prefers-reduced-motion: reduce) { .hero-fade { animation: none; } }
-            `}</style>
-
-            {slides.map((m, i) => (
-              <div
-                key={String(m.id)}
-                aria-hidden="true"
-                className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out"
-                style={{ backgroundImage: `url(${m.bgImage})`, opacity: i === safeIndex ? 1 : 0 }}
-              />
-            ))}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/70" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/50 to-transparent" />
-            
-            <div key={String(heroMovie.id)} className="hero-fade relative z-10 px-4 sm:px-6 md:px-12 max-w-2xl mt-12 w-full">
-              <h1 className="text-3xl sm:text-6xl font-black tracking-tight uppercase leading-none text-white">
-                {heroMovie.title}
-                {heroMovie.subtitle && <span className="block text-xl sm:text-4xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
-              </h1>
-              
-              <div className="flex items-center gap-3 my-3 sm:my-4 text-xs font-semibold">
-                <span className="text-green-400">★ {heroMovie.rating}</span>
-                <span className="text-gray-400">{heroMovie.year}</span>
-                <span className="text-gray-400">{heroMovie.duration}</span>
-                <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2 py-0.5 rounded">{heroMovie.tag}</span>
-              </div>
-
-              <p className="text-gray-300 text-xs sm:text-sm leading-relaxed mb-6 line-clamp-3">
-                {heroMovie.desc}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button 
-                  onClick={() => { setSelectedMovie(heroMovie); startPlayback(); }}
-                  className="flex items-center gap-2 bg-white text-black font-bold px-6 py-2.5 rounded-lg hover:bg-gray-200 transition cursor-pointer text-sm"
-                >
-                  <Play className="w-5 h-5 fill-black" /> Reproducir
-                </button>
-                <button 
-                  onClick={() => setSelectedMovie(heroMovie)}
-                  className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800 transition cursor-pointer text-sm"
-                >
-                  <Info className="w-5 h-5" /> Más información
-                </button>
-                <button 
-                  onClick={() => setMyList(prev => (prev.includes(heroMovie.title) ? prev : [...prev, heroMovie.title]))}
-                  className="p-2.5 rounded-full bg-[#121212]/90 border border-gray-800 hover:bg-gray-800 transition cursor-pointer"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {slides.length > 1 && (
-              <div className="absolute bottom-24 sm:bottom-28 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
-                {slides.map((m, i) => (
-                  <button
-                    key={String(m.id)}
-                    type="button"
-                    aria-label={`Ver ${m.title}`}
-                    aria-current={i === safeIndex}
-                    onClick={() => setHeroIndex(i)}
-                    className="group py-3 px-0.5 cursor-pointer"
-                  >
-                    <span
-                      className={`block h-1.5 rounded-full transition-all duration-500 ${
-                        i === safeIndex ? "w-7 bg-white" : "w-1.5 bg-white/40 group-hover:bg-white/70"
-                      }`}
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <Hero
+            slides={slides}
+            safeIndex={safeIndex}
+            setHeroIndex={setHeroIndex}
+            setHeroPaused={setHeroPaused}
+            setMyList={setMyList}
+            onPlay={(m) => { setSelectedMovie(m); startPlayback(); }}
+            onInfo={(m) => setSelectedMovie(m)}
+          />
 
           <div className="px-4 sm:px-6 md:px-12 space-y-10 -mt-20 relative z-20 pb-20 w-full overflow-x-hidden">
-            {continueWatchingList.length > 0 && (
-              <div>
-                <h2 className="text-lg font-bold mb-4 text-white">Continuar viendo</h2>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none w-full">
-                  {continueWatchingList.map((item) => {
-                    const pct = Math.min(100, Math.max(0, Math.round((item.t / item.d) * 100)));
-                    return (
-                      <div
-                        key={String(item.id)}
-                        onClick={() => {
-                          const m = customMovies.find((x) => String(x.id) === String(item.id));
-                          if (m) { setSelectedMovie(m); startPlayback(); }
-                        }}
-                        className="min-w-[200px] sm:min-w-[240px] group cursor-pointer shrink-0"
-                      >
-                        <div className="relative">
-                          <img src={item.img} alt={item.title} className="w-full h-28 sm:h-32 object-cover rounded-xl border border-gray-900 group-hover:border-green-500 transition shadow-lg" />
-                          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-800/80 rounded-b-xl overflow-hidden">
-                            <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                        <h4 className="text-xs font-semibold mt-2 text-gray-300 truncate">{item.title}</h4>
-                        <span className="text-[10px] text-gray-500">{formatRemaining(item.d - item.t)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <ContinueRow items={continueWatchingList} movies={customMovies} onResume={(m) => { setSelectedMovie(m); startPlayback(); }} />
 
-            {customMovies.length > 0 && (
-              <div>
-                <h2 className="text-lg font-bold mb-4 text-white">Tus Películas Subidas</h2>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none w-full">
-                  {customMovies.map((item) => (
-                    <div key={item.id} onClick={() => setSelectedMovie(item)} className="min-w-[150px] sm:min-w-[180px] group cursor-pointer shrink-0">
-                      <img src={item.bgImage} alt={item.title} className="w-full h-40 sm:h-48 object-cover rounded-xl border border-gray-900 group-hover:border-green-500 transition shadow-lg" />
-                      <h4 className="text-xs font-semibold mt-2 text-gray-300 truncate">{item.title}</h4>
-                      <span className="text-[10px] text-green-400 font-medium">{item.tag}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <MovieRow title="Tus Películas Subidas" movies={customMovies} onSelect={setSelectedMovie} />
           </div>
         </>
       )}

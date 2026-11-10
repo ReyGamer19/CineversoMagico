@@ -62,3 +62,6 @@ export interface NowNext {
   next: EpgItem | null;
   progress: number; // 0 a 100
 }
+
+// Pestañas principales de la app
+export type Tab = "inicio" | "explorar" | "tv" | "milista" | "cuenta" | "admin";
