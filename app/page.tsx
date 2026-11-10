@@ -787,16 +787,6 @@ export default function Home() {
       videoUrl: "https://tls-cl.cdnz.cl/aeradio/live/playlist.m3u8"
     },
     {
-      id: "chile-9-agricultura-tv",
-      name: "Agricultura TV",
-      shortCode: "AT",
-      country: "Chile 🇨🇱",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EAT%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Agricultura TV",
-      videoUrl: "https://redirector.rudo.video/hls-video/ey6283je82983je9823je8jowowiekldk9838274/921tv/921tv.smil/playlist.m3u8"
-    },
-    {
       id: "chile-10-am-canal",
       name: "AM Canal",
       shortCode: "AC",
@@ -945,16 +935,6 @@ export default function Home() {
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Caracola TV",
       videoUrl: "https://wifispeed.trapemn.tv:1936/comunales/caracola-tv/chunks.m3u8"
-    },
-    {
-      id: "chile-26-cartoon-network",
-      name: "Cartoon Network",
-      shortCode: "CN",
-      country: "Chile 🇨🇱",
-      category: "Entretenimiento",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ECN%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Cartoon Network",
-      videoUrl: "http://45.167.1.138:8000/play/a00w"
     },
     {
       id: "chile-27-central-tv",
@@ -1487,16 +1467,6 @@ export default function Home() {
       videoUrl: "https://streaming.onnethn.com/NICK_JR/playlist.m3u8"
     },
     {
-      id: "chile-82-nickelodeon",
-      name: "Nickelodeon",
-      shortCode: "N",
-      country: "Chile 🇨🇱",
-      category: "Entretenimiento",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EN%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Nickelodeon",
-      videoUrl: "http://181.78.79.131:8000/play/a0qm"
-    },
-    {
       id: "chile-83-nina-tv",
       name: "Nina TV",
       shortCode: "NT",
@@ -1887,16 +1857,6 @@ export default function Home() {
       videoUrl: "https://tvturf4.janus.cl/playlist/stream.m3u8?d=w&id="
     },
     {
-      id: "chile-124-turismo-travel-tv",
-      name: "Turismo Travel TV",
-      shortCode: "TTT",
-      country: "Chile 🇨🇱",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETTT%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Turismo Travel TV",
-      videoUrl: "https://stmv3.voxtvhd.com.br/turismotraveltv/turismotraveltv/playlist.m3u8"
-    },
-    {
       id: "chile-125-turno",
       name: "Turno",
       shortCode: "T",
@@ -2025,16 +1985,6 @@ export default function Home() {
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EU%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de UTV",
       videoUrl: "https://v2.tustreaming.cl/utv/index.m3u8"
-    },
-    {
-      id: "chile-138-v-classic-tv",
-      name: "V Classic TV",
-      shortCode: "VCT",
-      country: "Chile 🇨🇱",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EVCT%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de V Classic TV",
-      videoUrl: "http://186.148.196.100:8000/play/a02z"
     },
     {
       id: "chile-139-via-x",
@@ -3237,16 +3187,6 @@ export default function Home() {
       videoUrl: "https://panel.host-live.com:19360/cn247tv/cn247tv.m3u8"
     },
     {
-      id: "argentina-273-a24",
-      name: "A24",
-      shortCode: "A",
-      country: "Argentina 🇦🇷",
-      category: "Noticias",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EA%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de A24",
-      videoUrl: "http://138.59.227.20:8000/play/a05u/index.m3u8"
-    },
-    {
       id: "argentina-274-abtv-bariloche",
       name: "ABTV Bariloche",
       shortCode: "AB",
@@ -3275,16 +3215,6 @@ export default function Home() {
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EAH%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Allegro HD",
       videoUrl: "http://158.172.155.130:8000/play/a0dn/index.m3u8"
-    },
-    {
-      id: "argentina-277-alternatv",
-      name: "AlternaTV",
-      shortCode: "A",
-      country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EA%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de AlternaTV",
-      videoUrl: "https://tv.alterna.ar/stream/hls/live.m3u8"
     },
     {
       id: "argentina-278-amc",
@@ -3607,16 +3537,6 @@ export default function Home() {
       videoUrl: "https://streamconex.com:19360/mardelplata/mardelplata.m3u8"
     },
     {
-      id: "argentina-311-canal-79-puan",
-      name: "Canal 79 Puan",
-      shortCode: "C7P",
-      country: "Argentina 🇦🇷",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EC7P%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Canal 79 Puan",
-      videoUrl: "https://streamconex.com:19360/puan/puan.m3u8"
-    },
-    {
       id: "argentina-312-canal-79-santa-clara-del-mar",
       name: "Canal 79 Santa Clara del Mar",
       shortCode: "C7SC",
@@ -3817,16 +3737,6 @@ export default function Home() {
       videoUrl: "https://livetrx01.vodgc.net/eltrecetv/index.m3u8"
     },
     {
-      id: "argentina-333-encuentro",
-      name: "Encuentro",
-      shortCode: "E",
-      country: "Argentina 🇦🇷",
-      category: "Entretenimiento",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EE%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Encuentro",
-      videoUrl: "http://138.59.227.20:8000/play/a05s/index.m3u8"
-    },
-    {
       id: "argentina-335-espn-premiun",
       name: "ESPN PREMIUN",
       shortCode: "EP",
@@ -3845,16 +3755,6 @@ export default function Home() {
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EF%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de FIFA+",
       videoUrl: "https://6c849fb3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctbXhfRklGQVBsdXNTcGFuaXNoLTFfSExT/playlist.m3u8"
-    },
-    {
-      id: "argentina-337-fox-sports",
-      name: "Fox Sports",
-      shortCode: "FS",
-      country: "Argentina 🇦🇷",
-      category: "Deportes",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EFS%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Fox Sports",
-      videoUrl: "http://138.59.227.20:8000/play/a085/index.m3u8"
     },
     {
       id: "argentina-338-iteltv",
@@ -4177,26 +4077,6 @@ export default function Home() {
       videoUrl: "http://45.184.109.10/live/69393EAE6ADBC65A68F942022362A202/86.m3u8"
     },
     {
-      id: "argentina-371-tnt-sports",
-      name: "TNT Sports 2",
-      shortCode: "TS",
-      country: "Argentina 🇦🇷",
-      category: "Deportes",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETS%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de TNT Sports 2",
-      videoUrl: "http://181.78.79.131:8000/play/a0mo"
-    },
-    {
-      id: "argentina-372-tnt-sports-premium",
-      name: "TNT Sports Premium",
-      shortCode: "TSP",
-      country: "Argentina 🇦🇷",
-      category: "Deportes",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ETSP%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de TNT Sports Premium",
-      videoUrl: "http://181.78.79.131:8000/play/a0q9"
-    },
-    {
       id: "argentina-373-tv-canal-72",
       name: "TV Canal 72",
       shortCode: "TC7",
@@ -4347,16 +4227,6 @@ export default function Home() {
       videoUrl: "http://45.5.118.152:8000/play/a08z/index.m3u8"
     },
     {
-      id: "bolivia-388-ceacom",
-      name: "CEACOM",
-      shortCode: "C",
-      country: "Bolivia 🇧🇴",
-      category: "Señal Abierta",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EC%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de CEACOM",
-      videoUrl: "https://eu1.servers10.com:8081/ceacom/index.m3u8"
-    },
-    {
       id: "bolivia-389-cinecanal-pacific",
       name: "Cinecanal Pacific",
       shortCode: "CP",
@@ -4455,16 +4325,6 @@ export default function Home() {
       logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3ERCT%3C%2Ftext%3E%3C%2Fsvg%3E",
       currentShow: "Señal en vivo de Radio Clasica TV",
       videoUrl: "https://ares.disfrutaenlared.com:1936/clasica/clasica/playlist.m3u8"
-    },
-    {
-      id: "bolivia-399-mega-tv-amazonia",
-      name: "Mega TV Amazonia",
-      shortCode: "MTA",
-      country: "Bolivia 🇧🇴",
-      category: "Regional",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EMTA%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Mega TV Amazonia",
-      videoUrl: "https://ares.disfrutaenlared.com:1936/megatv/megatv/playlist.m3u8"
     },
     {
       id: "bolivia-400-universitaria-san-andres",
@@ -5047,16 +4907,6 @@ export default function Home() {
       videoUrl: "http://102.129.186.182:81/la7d/index.m3u8"
     },
     {
-      id: "italia-459-nickelodeon",
-      name: "Nickelodeon",
-      shortCode: "N",
-      country: "Italia 🇮🇹",
-      category: "Entretenimiento",
-      logo: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20rx%3D%2218%22%20fill%3D%22%23111827%22%2F%3E%3Ctext%20x%3D%2264%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22Arial%2Csans-serif%22%20font-size%3D%2234%22%20font-weight%3D%22700%22%20fill%3D%22%23f9fafb%22%3EN%3C%2Ftext%3E%3C%2Fsvg%3E",
-      currentShow: "Señal en vivo de Nickelodeon",
-      videoUrl: "http://185.227.34.104/stream/117/index.m3u8"
-    },
-    {
       id: "italia-460-nick-jr",
       name: "Nick Jr.",
       shortCode: "NJ",
@@ -5341,7 +5191,7 @@ export default function Home() {
       const messages: Record<number, string> = {
         1: "La reproducción fue interrumpida. Pulsa Reintentar.",
         2: "Problema de conexión con el servidor del canal.",
-        3: "El dispositivo no puede decodificar el formato de este canal.",
+        3: "Este dispositivo no puede reproducir el formato de audio o video de este canal. Prueba en otro dispositivo o navegador.",
         4: "El enlace no es compatible o el servidor no permite reproducirlo aquí.",
       };
       showError((messages[code || 0] || "No se pudo iniciar esta señal. Comprueba el enlace del canal.") + ` [video:${code ?? 0}]`);
@@ -5401,7 +5251,7 @@ export default function Home() {
         }
         showError((data.type === Hls.ErrorTypes.NETWORK_ERROR
           ? "El canal no responde en este momento (puede estar caído o fuera de línea)."
-          : "El formato o códec de esta señal no es compatible con este dispositivo.") + ` [${data.details}]`);
+          : "Este dispositivo no puede reproducir el formato de audio o video de este canal. Prueba en otro dispositivo o navegador.") + ` [${data.details}]`);
         hls.destroy();
         hls = null;
       });
