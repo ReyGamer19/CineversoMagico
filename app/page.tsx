@@ -2181,7 +2181,9 @@ export default function Home() {
         const modals = document.querySelectorAll("[data-tv-modal]");
         const scope = modals.length ? modals[modals.length - 1] : document;
         const el = scope.querySelector("[data-autofocus]") as HTMLElement | null;
-        if (el) el.focus();
+        if (el) { try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
+        const box = document.querySelector("[data-detail-modal]") as HTMLElement | null;
+        if (box && !isPlaying) box.scrollTop = 0;
       }, 80);
       return () => clearTimeout(t);
     } else if (lastFocusRef.current) {
@@ -4981,7 +4983,7 @@ export default function Home() {
 
       {/* MODAL DE INFORMACIÓN DE PELÍCULA */}
       {selectedMovie && !isPlaying && (
-        <div data-tv-modal className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto">
+        <div data-tv-modal data-detail-modal className="fixed inset-0 bg-[#141414] z-50 overflow-y-auto overflow-x-hidden overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
           <div className="bg-[#141414] w-full min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
             {/* Cerrar (siempre visible, respeta la muesca del iPhone) */}
             <button 
@@ -5034,7 +5036,7 @@ export default function Home() {
                 <button
                   onClick={() => setModalMuted((m) => !m)}
                   aria-label={modalMuted ? "Activar sonido del tráiler" : "Silenciar tráiler"}
-                  className="absolute right-3 sm:right-8 bottom-4 z-10 w-10 h-10 rounded-full border border-gray-400 bg-black/50 text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                  style={{ top: "calc(env(safe-area-inset-top, 0px) + 14px)" }} className="absolute right-[64px] sm:right-[92px] z-10 w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-400 bg-black/60 text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
                 >
                   <span className="text-sm">{modalMuted ? "🔇" : "🔊"}</span>
                 </button>
