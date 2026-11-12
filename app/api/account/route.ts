@@ -163,7 +163,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { headers: noStore });
   }
 
-  if (!["login", "register", "verify", "resend"].includes(action)) return fail("Acción inválida", 400);
+  // Cambia la contraseña de una sesión de recuperación
+  const changePassword = async (accessToken: string, newPassword: string): Promise<string> => {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: "PUT",
+      headers: headersFor(ANON_KEY, accessToken),
+      body: JSON.stringify({ password: newPassword }),
+      cache: "no-store",
+    });
+    if (res.ok) return "";
+    const j = await res.json().catch(() => ({}));
+    const t = `${j?.error_code || ""} ${j?.msg || j?.message || ""}`;
+    if (/same|different/i.test(t)) return "Usa una contraseña distinta a la anterior.";
+    if (/weak/i.test(t)) return "La contraseña es muy débil. Usa una más larga o con números.";
+    return "No se pudo cambiar la contraseña. Inténtalo de nuevo.";
+  };
+  const newPassword = typeof body.password === "string" ? body.password : "";
+
+  // Recuperación desde el enlace del correo (el navegador trae el token de recuperación)
+  if (action === "reset_link") {
+    if (newPassword.length < 6 || newPassword.length > 72) return fail("La contraseña debe tener entre 6 y 72 caracteres", 400);
+    const at = typeof body.accessToken === "string" ? body.accessToken : "";
+    const rt = typeof body.refreshToken === "string" ? body.refreshToken : "";
+    try {
+      const u = at ? await getUser(at) : null;
+      if (!u) return fail("El enlace venció. Pide uno nuevo con ¿Olvidaste tu contraseña?", 401);
+      const err = await changePassword(at, newPassword);
+      if (err) return fail(err, 422);
+      setSessionCookies(store, { access_token: at, refresh_token: rt });
+      const data = await loadUserData(u.id);
+      return NextResponse.json({ user: publicUser(u), data }, { headers: noStore });
+    } catch {
+      return fail("Error de conexión", 502);
+    }
+  }
+
+  if (!["login", "register", "verify", "resend", "recover", "reset"].includes(action)) return fail("Acción inválida", 400);
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return fail("Ingresa un correo válido", 400);
@@ -185,6 +220,29 @@ export async function POST(req: Request) {
         return fail("No se pudo reenviar el código. Inténtalo de nuevo.", 502);
       }
       return NextResponse.json({ ok: true }, { headers: noStore });
+    }
+
+    // Olvidé mi contraseña: Supabase envía el correo de recuperación
+    if (action === "recover") {
+      let origin = "";
+      try { origin = new URL(req.url).origin; } catch {}
+      const path = origin ? `recover?redirect_to=${encodeURIComponent(origin + "/")}` : "recover";
+      const { res } = await authCall(path, { email });
+      if (res.status === 429) return fail("Espera un minuto antes de pedir otro correo.", 429);
+      // No revelamos si el correo existe o no
+      return NextResponse.json({ ok: true }, { headers: noStore });
+    }
+
+    // Código de recuperación + contraseña nueva
+    if (action === "reset") {
+      const code = typeof body.code === "string" ? body.code.replace(/\s/g, "") : "";
+      if (!/^\d{6,8}$/.test(code)) return fail("Escribe el código que te llegó al correo", 400);
+      if (newPassword.length < 6 || newPassword.length > 72) return fail("La contraseña debe tener entre 6 y 72 caracteres", 400);
+      const { res, json } = await authCall("verify", { type: "recovery", email, token: code });
+      if (!res.ok || !json?.access_token) return fail("Código incorrecto o vencido. Pide uno nuevo.", 401);
+      const err = await changePassword(json.access_token, newPassword);
+      if (err) return fail(err, 422);
+      return await finish(json as Session);
     }
 
     // Confirmar el código de 6 dígitos que llegó al correo

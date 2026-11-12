@@ -206,7 +206,9 @@ html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
 
 // Los mismos arreglos se activan SOLO con CSS en navegadores sin aspect-ratio
 // (funciona aunque el JavaScript de la TV falle)
-const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}";
+const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}" +
+  // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
+  "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }";
 
 // Se ejecuta antes que todo. Si el navegador es antiguo o la app no arranca,
 // manda a la versión TV ultraligera (/tv.html), que funciona en cualquier Smart TV.
@@ -1364,7 +1366,10 @@ export default function Home() {
   // Autenticación por Gmail
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [registerStep, setRegisterStep] = useState<"form" | "verify" | "success">("form");
+  const [registerStep, setRegisterStep] = useState<"form" | "verify" | "success" | "forgot" | "reset" | "resetlink">("form");
+  const [showPass, setShowPass] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [resetTokens, setResetTokens] = useState<{ at: string; rt: string } | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [inputCode, setInputCode] = useState("");
   const [isGuest, setIsGuest] = useState(true);
@@ -3042,6 +3047,8 @@ export default function Home() {
     applyAccountData(d.data, d.user.email || email);
     setAccountLoaded(true);
     // Sale de la pantalla de cuenta y entra a la web con su perfil (ya no como Invitado)
+    resetMobileZoom();
+    setShowPass(false);
     setSelectedMovie(null);
     setActiveTab("inicio");
     try { window.scrollTo(0, 0); } catch (e) {}
@@ -3115,6 +3122,72 @@ export default function Home() {
         setAuthError("Sin conexión con el servidor.");
       });
   };
+
+  // Quita el zoom que dejó el teclado del celular y vuelve a la vista normal
+  const resetMobileZoom = () => {
+    try { (document.activeElement as HTMLElement | null)?.blur(); } catch (e) {}
+    try {
+      const m = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+      if (!m) return;
+      const orig = m.getAttribute("content") || "width=device-width, initial-scale=1, viewport-fit=cover";
+      m.setAttribute("content", orig.replace(/,?\s*maximum-scale=[^,]*/g, "") + ", maximum-scale=1");
+      setTimeout(() => m.setAttribute("content", orig), 400);
+    } catch (e) {}
+  };
+
+  // ---------- Olvidé mi contraseña ----------
+  const handleForgotSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authBusy) return;
+    setAuthError("");
+    setAuthBusy(true);
+    postAccount({ action: "recover", email })
+      .then(({ ok, d }) => {
+        setAuthBusy(false);
+        if (ok) {
+          setRegisterStep("reset");
+          setInputCode("");
+          setNewPass("");
+          showToast("Si ese correo tiene cuenta, te enviamos un código para cambiar la contraseña.", 7000);
+        } else setAuthError((d && d.error) || "No se pudo enviar el correo.");
+      })
+      .catch(() => { setAuthBusy(false); setAuthError("Sin conexión con el servidor."); });
+  };
+  const handleResetSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authBusy) return;
+    if (newPass.length < 6) { setAuthError("La contraseña debe tener al menos 6 caracteres."); return; }
+    setAuthError("");
+    setAuthBusy(true);
+    const payload = registerStep === "resetlink" && resetTokens
+      ? { action: "reset_link", accessToken: resetTokens.at, refreshToken: resetTokens.rt, password: newPass }
+      : { action: "reset", email, code: inputCode, password: newPass };
+    postAccount(payload)
+      .then(({ ok, d }) => {
+        setAuthBusy(false);
+        if (ok && d.user) {
+          setNewPass("");
+          setResetTokens(null);
+          showToast("¡Contraseña cambiada! Ya iniciaste sesión. 🔐", 5000);
+          onLoggedIn(d);
+        } else setAuthError((d && d.error) || "No se pudo cambiar la contraseña.");
+      })
+      .catch(() => { setAuthBusy(false); setAuthError("Sin conexión con el servidor."); });
+  };
+  // Si llega desde el enlace del correo de recuperación (#access_token=...&type=recovery)
+  useEffect(() => {
+    try {
+      const h = window.location.hash.replace(/^#/, "");
+      if (!/type=recovery/.test(h)) return;
+      const q = new URLSearchParams(h);
+      const at = q.get("access_token") || "";
+      if (!at) return;
+      setResetTokens({ at, rt: q.get("refresh_token") || "" });
+      setRegisterStep("resetlink");
+      setActiveTab("cuenta");
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch (e) {}
+  }, []);
 
   const handleLogout = () => {
     const reset = () => {
@@ -4906,7 +4979,57 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {registerStep === "verify" ? (
+                  {registerStep === "forgot" ? (
+                    <form onSubmit={handleForgotSubmit} className="space-y-3 pt-2">
+                      <h4 className="text-sm font-bold text-white">Recuperar contraseña</h4>
+                      <p className="text-xs text-gray-400">Escribe el correo de tu cuenta y te enviaremos un código para crear una contraseña nueva.</p>
+                      <input type="email" required autoComplete="email" placeholder="tu@correo.com" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white" />
+                      <button type="submit" className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                        {authBusy ? "Enviando..." : "Enviar código"}
+                      </button>
+                      <button type="button" onClick={() => { setRegisterStep("form"); setAuthMode("login"); setAuthError(""); }} className="w-full text-xs text-gray-400 hover:underline cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">← Volver a iniciar sesión</button>
+                    </form>
+                  ) : registerStep === "reset" || registerStep === "resetlink" ? (
+                    <form onSubmit={handleResetSubmit} className="space-y-3 pt-2">
+                      <h4 className="text-sm font-bold text-white">Crea tu contraseña nueva</h4>
+                      {registerStep === "reset" && (
+                        <>
+                          <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300">
+                            Te enviamos un código a <b>{email}</b>. Revisa tu bandeja de entrada (y la carpeta de spam).
+                          </div>
+                          <input type="text" inputMode="numeric" autoComplete="one-time-code" required maxLength={8} placeholder="Código del correo" value={inputCode} onChange={(e) => setInputCode(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest font-mono text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                        </>
+                      )}
+                      <div className="relative">
+                        <input
+                          type={showPass ? "text" : "password"}
+                          required
+                          minLength={6}
+                          autoComplete="new-password"
+                          placeholder="Contraseña nueva (mínimo 6)"
+                          value={newPass}
+                          onChange={(e) => setNewPass(e.target.value)}
+                          className="w-full bg-[#050505] border border-gray-800 rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
+                        />
+                        <button type="button" tabIndex={-1} onClick={() => setShowPass((v) => !v)} aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white cursor-pointer focus:outline-none">
+                          {showPass ? (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          ) : (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          )}
+                        </button>
+                      </div>
+                      <button type="submit" className="w-full bg-green-500 hover:bg-green-600 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                        {authBusy ? "Guardando..." : "Cambiar contraseña y entrar"}
+                      </button>
+                      <div className="flex items-center justify-between text-xs">
+                        {registerStep === "reset" ? (
+                          <button type="button" onClick={() => handleForgotSubmit({ preventDefault() {} } as any)} className="text-emerald-400 hover:underline cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Reenviar código</button>
+                        ) : <span />}
+                        <button type="button" onClick={() => { setRegisterStep("form"); setAuthMode("login"); setAuthError(""); setResetTokens(null); }} className="text-gray-400 hover:underline cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cancelar</button>
+                      </div>
+                    </form>
+                  ) : registerStep === "verify" ? (
                     <form onSubmit={handleVerifyCode} className="space-y-3 pt-2">
                       <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300">
                         Te enviamos un código a <b>{email}</b>. Revisa tu bandeja de entrada (y la carpeta de spam).
@@ -4947,15 +5070,30 @@ export default function Home() {
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
                       />
-                      <input
-                        type="password"
-                        required
-                        minLength={6}
-                        placeholder="Contraseña (mínimo 6)"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showPass ? "text" : "password"}
+                          required
+                          minLength={6}
+                          autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                          placeholder="Contraseña (mínimo 6)"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full bg-[#050505] border border-gray-800 rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-white"
+                        />
+                        <button type="button" tabIndex={-1} onClick={() => setShowPass((v) => !v)} aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white cursor-pointer focus:outline-none">
+                          {showPass ? (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          ) : (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          )}
+                        </button>
+                      </div>
+                      {authMode === "login" && (
+                        <div className="text-right -mt-1">
+                          <button type="button" onClick={() => { setRegisterStep("forgot"); setAuthError(""); }} className="text-xs text-emerald-400 hover:underline cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-1 py-1">¿Olvidaste tu contraseña?</button>
+                        </div>
+                      )}
                       <button type="submit" className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
                         {authBusy ? "Un momento..." : authMode === "login" ? "Iniciar sesión" : "Crear cuenta (te enviaremos un código)"}
                       </button>
