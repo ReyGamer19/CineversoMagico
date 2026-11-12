@@ -2573,6 +2573,20 @@ export default function Home() {
     else setHeroPaused(false);
   }, [heroTrailerOn]);
 
+  // Tráiler dentro de la ficha (como Netflix): empieza solo, sin sonido
+  const [modalTrailerOn, setModalTrailerOn] = useState(false);
+  const [modalTrailerReady, setModalTrailerReady] = useState(false);
+  const [modalMuted, setModalMuted] = useState(true);
+  useEffect(() => {
+    setModalTrailerOn(false);
+    setModalTrailerReady(false);
+    setModalMuted(true);
+    if (!selectedMovie || isPlaying || !selectedMovie.trailerUrl) return;
+    if (document.documentElement.classList.contains("tv-legacy")) return;
+    const t = setTimeout(() => setModalTrailerOn(true), 1200);
+    return () => clearTimeout(t);
+  }, [selectedMovie && selectedMovie.id, isPlaying]);
+
   const handleSaveMovie = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
@@ -4969,38 +4983,90 @@ export default function Home() {
       {selectedMovie && !isPlaying && (
         <div data-tv-modal className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto">
           <div className="bg-[#141414] w-full min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
+            {/* Cerrar (siempre visible, respeta la muesca del iPhone) */}
             <button 
               onClick={() => setSelectedMovie(null)} 
-              className="fixed top-4 left-4 sm:top-6 sm:left-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-500"
+              aria-label="Cerrar"
+              className="fixed right-3 sm:right-6 z-[55] bg-black/70 hover:bg-black text-white p-2.5 sm:p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-500"
+              style={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
             >
-              <ArrowLeft className="w-6 h-6" />
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
-            <button 
-              onClick={() => setSelectedMovie(null)} 
-              className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 bg-black/80 hover:bg-black text-white p-3 rounded-full transition cursor-pointer border border-gray-700 shadow-2xl flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-green-500"
-            >
-              <X className="w-6 h-6" />
-            </button>
+            {/* Imagen / tráiler (16:9 en celular, más alto en PC y TV) */}
+            <div className="relative w-full bg-black overflow-hidden shrink-0" style={{ height: "min(56.25vw, 64vh)", minHeight: 200 }}>
+              <img
+                src={selectedMovie.backdrop || selectedMovie.bgImage}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ opacity: modalTrailerReady ? 0 : 1, transition: "opacity .8s" }}
+              />
+              {modalTrailerOn && selectedMovie.trailerUrl && (
+                youtubeId(selectedMovie.trailerUrl) ? (
+                  <iframe
+                    key={"myt-" + selectedMovie.id + "-" + (modalMuted ? "m" : "s")}
+                    src={"https://www.youtube.com/embed/" + youtubeId(selectedMovie.trailerUrl) + "?autoplay=1&mute=" + (modalMuted ? 1 : 0) + "&controls=0&loop=1&playlist=" + youtubeId(selectedMovie.trailerUrl) + "&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3"}
+                    title={"Tráiler de " + selectedMovie.title}
+                    allow="autoplay; encrypted-media"
+                    tabIndex={-1}
+                    onLoad={() => setTimeout(() => setModalTrailerReady(true), 700)}
+                    style={{ position: "absolute", top: "50%", left: "50%", width: "100%", height: "100%", minWidth: "calc(64vh * 1.7778)", minHeight: "56.25vw", transform: "translate(-50%,-50%) scale(1.2)", border: 0, pointerEvents: "none", opacity: modalTrailerReady ? 1 : 0, transition: "opacity .8s" }}
+                  />
+                ) : (
+                  <video
+                    key={"mtr-" + selectedMovie.id}
+                    src={selectedMovie.trailerUrl}
+                    autoPlay
+                    muted={modalMuted}
+                    playsInline
+                    loop
+                    preload="auto"
+                    tabIndex={-1}
+                    onPlaying={() => setModalTrailerReady(true)}
+                    onError={() => setModalTrailerOn(false)}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    style={{ opacity: modalTrailerReady ? 1 : 0, transition: "opacity .8s" }}
+                  />
+                )
+              )}
+              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#141414] to-transparent" />
+              {modalTrailerOn && modalTrailerReady && (
+                <button
+                  onClick={() => setModalMuted((m) => !m)}
+                  aria-label={modalMuted ? "Activar sonido del tráiler" : "Silenciar tráiler"}
+                  className="absolute right-3 sm:right-8 bottom-4 z-10 w-10 h-10 rounded-full border border-gray-400 bg-black/50 text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+                >
+                  <span className="text-sm">{modalMuted ? "🔇" : "🔊"}</span>
+                </button>
+              )}
+              {selectedMovie.comingSoon && (
+                <span className="absolute left-3 sm:left-8 top-3 sm:top-6 bg-green-500 text-black text-[11px] sm:text-xs font-black px-2.5 py-1 rounded">PRÓXIMO ESTRENO · {fmtRelease(selectedMovie.releaseDate).toUpperCase()}</span>
+              )}
+            </div>
 
-            <div className="relative min-h-[50vh] sm:min-h-[60vh] w-full bg-cover bg-center flex items-end overflow-hidden pb-8" style={{ backgroundImage: `url(${selectedMovie.backdrop || selectedMovie.bgImage})` }}>
-              <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-black/70" />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
-              
-              <div className="relative z-10 p-4 sm:p-14 space-y-4 max-w-4xl w-full pt-16">
-                <h2 className="text-3xl sm:text-6xl font-black tracking-wider uppercase leading-none text-red-600 drop-shadow-2xl">
+            {/* Título y datos: debajo de la imagen, nunca tapados */}
+            <div className="relative z-10 -mt-8 sm:-mt-20">
+              <div className="px-4 sm:px-14 space-y-3 sm:space-y-4 max-w-5xl w-full">
+                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black leading-tight text-white drop-shadow-2xl break-words pr-12 sm:pr-0">
                   {selectedMovie.title}
                   {selectedMovie.subtitle && (
-                    <span className="block text-lg sm:text-3xl text-white tracking-widest mt-2 font-extrabold">{selectedMovie.subtitle}</span>
+                    <span className="block text-base sm:text-2xl text-orange-400 mt-1 font-extrabold">{selectedMovie.subtitle}</span>
                   )}
                 </h2>
 
-                <div className="flex items-center gap-3 text-xs sm:text-sm font-semibold pt-1">
-                  <span className="text-green-400 font-bold">★ {selectedMovie.rating}</span>
-                  <span className="text-gray-300">{selectedMovie.year}</span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs sm:text-sm font-semibold">
+                  {selectedMovie.rating && <span className="text-green-400 font-bold">★ {selectedMovie.rating}</span>}
+                  {selectedMovie.year && <span className="text-gray-300">{selectedMovie.year}</span>}
                   {selectedMovie.ageRating && <span className="border border-gray-400 text-gray-200 px-1.5 rounded text-[11px] font-bold">{selectedMovie.ageRating}</span>}
                   {selectedMovie.duration && <span className="text-gray-300">{selectedMovie.duration}</span>}
-                  <span className="text-gray-300 text-xs bg-gray-800/80 px-2.5 py-0.5 rounded">{selectedMovie.genres ? selectedMovie.genres.join(", ") : selectedMovie.tag}</span>
+                  {selectedMovie.type === "serie" && sortedEpisodes(selectedMovie).length > 0 && (
+                    <span className="text-gray-300">{sortedEpisodes(selectedMovie).map((e) => e.season).filter((v, i, a) => a.indexOf(v) === i).length} temporada(s)</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(selectedMovie.genres && selectedMovie.genres.length ? selectedMovie.genres : [selectedMovie.tag]).filter(Boolean).map((g) => (
+                    <span key={"g-" + g} className="text-[11px] sm:text-xs text-gray-200 bg-white/10 border border-white/10 px-2.5 py-1 rounded-full">{g}</span>
+                  ))}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 pt-2">
