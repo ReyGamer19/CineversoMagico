@@ -112,6 +112,23 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   await connection();
   if (!SUPABASE_URL || !SERVICE_KEY) return NextResponse.json({ error: "Servidor sin configurar" }, { status: 503, headers: noStore });
+  // TOP 10 público: las películas más vistas de los últimos 7 días (solo ids y cuántas veces)
+  if (new URL(req.url).searchParams.get("top")) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog?id=gte.${dayId(6)}&id=lte.${dayId(0)}&select=data`, { headers: headers(), cache: "no-store" });
+      const rows: any[] = res.ok ? await res.json() : [];
+      const score: Record<string, number> = {};
+      for (const r of rows) {
+        const d = r && r.data ? r.data : {};
+        for (const [k, v] of Object.entries(d.plays || {})) score[k] = (score[k] || 0) + (Number(v) || 0) * 2;
+        for (const [k, v] of Object.entries(d.completes || {})) score[k] = (score[k] || 0) + (Number(v) || 0) * 3;
+      }
+      const top = Object.entries(score).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([id, n]) => ({ id, n }));
+      return NextResponse.json({ top }, { headers: { "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1200" } });
+    } catch {
+      return NextResponse.json({ top: [] }, { headers: noStore });
+    }
+  }
   if (!passwordOk(req.headers.get("x-admin-key") || "")) {
     await new Promise((r) => setTimeout(r, 800));
     return NextResponse.json({ error: "Clave incorrecta" }, { status: 401, headers: noStore });

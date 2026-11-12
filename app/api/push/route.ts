@@ -154,9 +154,23 @@ export async function POST(req: Request) {
     if (action === "auto") {
       const d = (await getRow(SUBS_ROW)) || { subs: [] };
       const now = Date.now();
-      if (d.lastAuto && now - d.lastAuto < 10 * 60 * 1000) return NextResponse.json({ ok: true, skipped: true }, { headers: noStore });
+      // Avisos programados que ya llegaron a su hora (se revisa en cada llamada)
+      const sched: any[] = Array.isArray(d.scheduled) ? d.scheduled : [];
+      const dueS = sched.filter((x) => x && typeof x.at === "number" && x.at <= now);
+      let schedSent = 0;
+      if (dueS.length) {
+        const ids = new Set(dueS.map((x) => x.id));
+        // Se quitan primero de la lista para que no se envíen dos veces
+        const fresh0 = (await getRow(SUBS_ROW)) || { subs: [] };
+        await setRow(SUBS_ROW, { ...fresh0, scheduled: (Array.isArray(fresh0.scheduled) ? fresh0.scheduled : []).filter((x: any) => !ids.has(x.id)) });
+        for (const it of dueS.slice(0, 5)) {
+          const r = await sendToAll({ title: str(it.title, 80), body: str(it.body, 200), image: str(it.image, 500), url: str(it.url, 300) || "/", tag: str(it.tag, 60) });
+          schedSent += r.sent;
+        }
+      }
+      if (d.lastAuto && now - d.lastAuto < 3 * 60 * 1000) return NextResponse.json({ ok: true, skipped: true, schedSent }, { headers: noStore });
       const notified: string[] = Array.isArray(d.notified) ? d.notified : [];
-      await setRow(SUBS_ROW, { ...d, lastAuto: now });
+      { const f1 = (await getRow(SUBS_ROW)) || { subs: [] }; await setRow(SUBS_ROW, { ...f1, lastAuto: now }); }
       const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog?id=eq.1&select=data`, { headers: headers(), cache: "no-store" });
       const rows = res.ok ? await res.json() : [];
       const movies: any[] = Array.isArray(rows) && rows[0] && Array.isArray(rows[0].data) ? rows[0].data : [];
@@ -177,6 +191,30 @@ export async function POST(req: Request) {
         await setRow(SUBS_ROW, { ...fresh, lastAuto: now, notified: notified.slice(-2000) });
       }
       return NextResponse.json({ ok: true, released: due.length, sent }, { headers: noStore });
+    }
+
+    // Avisos programados (solo administrador)
+    if (action === "schedule" || action === "unschedule" || action === "schedlist") {
+      if (!passwordOk(b?.password)) {
+        await new Promise((r) => setTimeout(r, 800));
+        return NextResponse.json({ error: "Clave incorrecta" }, { status: 401, headers: noStore });
+      }
+      const d = (await getRow(SUBS_ROW)) || { subs: [] };
+      let items: any[] = Array.isArray(d.scheduled) ? d.scheduled : [];
+      if (action === "schedule") {
+        const it = b?.item || {};
+        const at = Number(it.at);
+        if (!at || at < Date.now() - 60000 || at > Date.now() + 366 * 86400000) return NextResponse.json({ error: "Fecha inválida" }, { status: 400, headers: noStore });
+        const title = str(it.title, 80), body = str(it.body, 200);
+        if (!title || !body) return NextResponse.json({ error: "Falta el título o el mensaje" }, { status: 400, headers: noStore });
+        items = items.concat({ id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at, title, body, url: str(it.url, 300) || "/", image: str(it.image, 500), tag: str(it.tag, 60) }).slice(-100);
+        await setRow(SUBS_ROW, { ...d, scheduled: items });
+      } else if (action === "unschedule") {
+        const id = str(b?.id, 40);
+        items = items.filter((x) => x.id !== id);
+        await setRow(SUBS_ROW, { ...d, scheduled: items });
+      }
+      return NextResponse.json({ ok: true, items }, { headers: noStore });
     }
 
     // Cuántos dispositivos tienen la campanita activada (solo administrador)

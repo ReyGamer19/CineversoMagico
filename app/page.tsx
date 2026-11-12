@@ -55,6 +55,8 @@ interface Movie {
   creditsStart?: number;
   comingSoon?: boolean;
   releaseDate?: string;
+  saga?: string;
+  sagaOrder?: number;
 }
 
 interface ProgressItem {
@@ -1429,6 +1431,42 @@ export default function Home() {
   const [newComingSoon, setNewComingSoon] = useState(false);
   const [newReleaseDate, setNewReleaseDate] = useState("");
   const [notifyAll, setNotifyAll] = useState(true);
+  const [newMovieSaga, setNewMovieSaga] = useState("");
+  const [newMovieSagaOrder, setNewMovieSagaOrder] = useState("");
+  // Top 10 automático (lo más visto de la semana)
+  const [topIds, setTopIds] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/stats?top=1").then((r) => (r.ok ? r.json() : null)).then((d: any) => {
+      if (d && Array.isArray(d.top)) setTopIds(d.top.map((x: any) => String(x.id)));
+    }).catch(() => {});
+  }, []);
+  // Ahorro de datos: sin tráileres automáticos
+  const [dataSaver, setDataSaver] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("cv_datasaver");
+      if (v === "1" || v === "0") { setDataSaver(v === "1"); return; }
+      const c: any = (navigator as any).connection;
+      if (c && (c.saveData || /(^|-)2g$/.test(String(c.effectiveType || "")))) setDataSaver(true);
+    } catch (e) {}
+  }, []);
+  const toggleDataSaver = () => {
+    const v = !dataSaver;
+    setDataSaver(v);
+    try { localStorage.setItem("cv_datasaver", v ? "1" : "0"); } catch (e) {}
+    showToast(v ? "📶 Ahorro de datos activado: no se reproducirán tráileres automáticos." : "Ahorro de datos desactivado.");
+  };
+  // Compartir
+  const [shareTarget, setShareTarget] = useState<Movie | null>(null);
+  // Revisión de enlaces (panel)
+  const [linkIssues, setLinkIssues] = useState<{ id: string; title: string; where: string; reason: string }[]>([]);
+  const [linkCheck, setLinkCheck] = useState<{ running: boolean; done: number; total: number; at: number }>({ running: false, done: 0, total: 0, at: 0 });
+  // Avisos programados (panel)
+  const [schedList, setSchedList] = useState<{ id: string; at: number; title: string; body: string; url?: string; image?: string }[]>([]);
+  const [schedTitle, setSchedTitle] = useState("");
+  const [schedBody, setSchedBody] = useState("");
+  const [schedMovieId, setSchedMovieId] = useState("");
+  const [schedAt, setSchedAt] = useState("");
   const [newIntroStart, setNewIntroStart] = useState("");
   const [newIntroEnd, setNewIntroEnd] = useState("");
   const [newCreditsStart, setNewCreditsStart] = useState("");
@@ -1538,6 +1576,9 @@ export default function Home() {
     return () => clearInterval(t);
   }, []);
   // Un próximo estreno pasa solo a las películas cuando llega su fecha y ya tiene video
+  const isNewMovie = (m: Movie) => !!(m.addedAt && nowTs && nowTs - m.addedAt < 7 * 86400000);
+  const isNewMovie30 = (m: Movie) => !!(m.addedAt && nowTs && nowTs - m.addedAt < 30 * 86400000);
+  const sagaSort = (a: Movie, b: Movie) => (a.sagaOrder || 999) - (b.sagaOrder || 999) || String(a.year).localeCompare(String(b.year));
   const isUpcoming = (m: Movie) =>
     !!m.comingSoon && !(m.releaseDate && todayStr && m.releaseDate <= todayStr && m.videoUrl && !/gtv-videos-bucket/i.test(m.videoUrl));
   // Lo que se puede ver ya (sin próximos estrenos)
@@ -1878,6 +1919,104 @@ export default function Home() {
   useEffect(() => {
     if (activeTab === "admin" && isAdmin) loadStats(statsDays);
   }, [activeTab, isAdmin, statsDays]);
+
+  // ---------- Revisión automática de enlaces de video ----------
+  const runLinkCheck = (force?: boolean) => {
+    if (linkCheck.running) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("cv_linkcheck") || "null");
+      if (!force && saved && Date.now() - saved.at < 6 * 3600 * 1000) {
+        setLinkIssues(saved.issues || []);
+        setLinkCheck({ running: false, done: saved.total || 0, total: saved.total || 0, at: saved.at });
+        return;
+      }
+    } catch (e) {}
+    const jobs: { id: string; title: string; where: string; url: string }[] = [];
+    const skip = (u: string) => !u || !/^https?:\/\//i.test(u) || /gtv-videos-bucket|youtube\.com|youtu\.be|drive\.google|\/embed\//i.test(u);
+    catalogAll.forEach((m) => {
+      if (!skip(m.videoUrl)) jobs.push({ id: String(m.id), title: m.title, where: "Película", url: m.videoUrl });
+      (m.episodes || []).forEach((ep) => { if (!skip(ep.videoUrl)) jobs.push({ id: String(m.id), title: m.title, where: "T" + ep.season + " E" + ep.number, url: ep.videoUrl }); });
+    });
+    const list = jobs.slice(0, 300);
+    const issues: { id: string; title: string; where: string; reason: string }[] = [];
+    let done = 0, next = 0;
+    setLinkCheck({ running: true, done: 0, total: list.length, at: 0 });
+    const finish = () => {
+      const at = Date.now();
+      setLinkIssues(issues.slice());
+      setLinkCheck({ running: false, done: list.length, total: list.length, at });
+      try { sessionStorage.setItem("cv_linkcheck", JSON.stringify({ at, total: list.length, issues })); } catch (e) {}
+    };
+    if (!list.length) { finish(); return; }
+    const worker = (): Promise<void> => {
+      if (next >= list.length) return Promise.resolve();
+      const j = list[next++];
+      return fetch("/api/video-check?u=" + encodeURIComponent(j.url), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: any) => {
+          const ct = String((d && d.contentType) || "");
+          let reason = "";
+          if (!d || (!d.ok && d.status !== 206)) {
+            reason = d && d.status === 403 ? "Bloqueado (403)" : d && d.status === 404 ? "Borrado o no existe (404)" : d && d.reason === "timeout" ? "No responde (muy lento)" : d && d.status ? "Error " + d.status : "No se pudo conectar";
+          } else if (/text\/html/i.test(ct)) reason = "El enlace abre una página, no un video";
+          if (reason) issues.push({ id: j.id, title: j.title, where: j.where, reason });
+        })
+        .catch(() => {})
+        .then(() => { done++; setLinkCheck((c) => ({ ...c, done })); return worker(); });
+    };
+    Promise.all([worker(), worker(), worker(), worker()]).then(finish);
+  };
+  useEffect(() => {
+    if (activeTab !== "admin" || !isAdmin || !catalogAll.length) return;
+    const t = setTimeout(() => runLinkCheck(false), 1500);
+    return () => clearTimeout(t);
+  }, [activeTab, isAdmin, catalogAll.length]);
+
+  // ---------- Avisos programados ----------
+  const adminPassOf = () => { try { return localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) { return ""; } };
+  const loadSched = () => {
+    const pass = adminPassOf();
+    if (!pass) return;
+    fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "schedlist", password: pass }) })
+      .then((r) => r.json()).then((d: any) => { if (d && Array.isArray(d.items)) setSchedList(d.items); }).catch(() => {});
+  };
+  useEffect(() => {
+    if (activeTab !== "admin" || !isAdmin) return;
+    loadSched();
+    // Mientras el panel está abierto, revisa cada minuto si toca enviar algún aviso
+    const iv = setInterval(() => {
+      fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "auto" }) })
+        .then(() => loadSched()).catch(() => {});
+    }, 60000);
+    return () => clearInterval(iv);
+  }, [activeTab, isAdmin]);
+  const addSched = () => {
+    const pass = adminPassOf();
+    if (!pass) { showToast("Para programar avisos vuelve a entrar con ?admin.", 6000); return; }
+    const at = schedAt ? new Date(schedAt).getTime() : NaN;
+    if (!at || isNaN(at)) { showToast("Elige el día y la hora del aviso."); return; }
+    if (at < Date.now() + 60000) { showToast("Elige una hora en el futuro."); return; }
+    const mv = catalogAll.find((x) => String(x.id) === schedMovieId);
+    const title = schedTitle.trim() || (mv ? (mv.comingSoon ? "Próximo estreno 🎬" : "¡Ya disponible! 🍿") : "");
+    const body = schedBody.trim() || (mv ? mv.title + (mv.comingSoon ? " llega pronto a Cineverso Mágico." : " ya se puede ver en Cineverso Mágico.") : "");
+    if (!title || !body) { showToast("Escribe el título y el mensaje del aviso (o elige una película)."); return; }
+    const item = { at, title, body, url: mv ? "/ver/" + mv.id : "/", image: mv ? mv.backdrop || mv.bgImage : "", tag: mv ? "m-" + mv.id : "" };
+    fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "schedule", password: pass, item }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (ok && Array.isArray(d.items)) {
+          setSchedList(d.items);
+          setSchedTitle(""); setSchedBody(""); setSchedMovieId(""); setSchedAt("");
+          showToast("⏰ Aviso programado para el " + new Date(at).toLocaleString("es-PE", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+        } else showToast("No se pudo programar (" + ((d && d.error) || "error") + ").");
+      })
+      .catch(() => showToast("No se pudo programar el aviso."));
+  };
+  const removeSched = (id: string) => {
+    const pass = adminPassOf();
+    fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "unschedule", password: pass, id }) })
+      .then((r) => r.json()).then((d: any) => { if (d && Array.isArray(d.items)) setSchedList(d.items); }).catch(() => {});
+  };
 
   // Estrenar un próximo estreno con un solo clic
   const releaseNow = (m: Movie) => {
@@ -2589,8 +2728,10 @@ export default function Home() {
   }, [isPlaying]);
 
   // Compartir: enlace /ver/ID con portada y título para WhatsApp, Facebook, etc.
-  const shareMovie = (m: Movie) => {
-    const url = window.location.origin + "/ver/" + encodeURIComponent(String(m.id));
+  const shareMovie = (m: Movie) => { setShareTarget(m); };
+  const shareUrlOf = (m: Movie) => window.location.origin + "/ver/" + encodeURIComponent(String(m.id));
+  const shareNative = (m: Movie) => {
+    const url = shareUrlOf(m);
     const nav: any = navigator;
     if (nav.share) {
       nav.share({ title: m.title + " | Cineverso Mágico", text: "Mira " + m.title + " en Cineverso Mágico 🍿", url }).catch(() => {});
@@ -2636,13 +2777,13 @@ export default function Home() {
   useEffect(() => {
     setHeroTrailerOn(false);
     setHeroTrailerReady(false);
-    if (!heroMovie.trailerUrl || activeTab !== "inicio" || selectedMovie) return;
+    if (!heroMovie.trailerUrl || activeTab !== "inicio" || selectedMovie || dataSaver) return;
     if (document.documentElement.classList.contains("tv-legacy")) return;
     const t = setTimeout(() => setHeroTrailerOn(true), 2000);
     // YouTube no avisa cuando termina: pasamos a la siguiente a los 45 s
     const t2 = youtubeId(heroMovie.trailerUrl) ? setTimeout(() => { setHeroTrailerOn(false); setHeroIndex((i) => i + 1); }, 47000) : null;
     return () => { clearTimeout(t); if (t2) clearTimeout(t2); };
-  }, [heroMovie.id, heroMovie.trailerUrl, activeTab, selectedMovie]);
+  }, [heroMovie.id, heroMovie.trailerUrl, activeTab, selectedMovie, dataSaver]);
 
   // Mientras suena el tráiler, la portada no cambia sola
   useEffect(() => {
@@ -2658,11 +2799,11 @@ export default function Home() {
     setModalTrailerOn(false);
     setModalTrailerReady(false);
     setModalMuted(true);
-    if (!selectedMovie || isPlaying || !selectedMovie.trailerUrl) return;
+    if (!selectedMovie || isPlaying || !selectedMovie.trailerUrl || dataSaver) return;
     if (document.documentElement.classList.contains("tv-legacy")) return;
     const t = setTimeout(() => setModalTrailerOn(true), 1200);
     return () => clearTimeout(t);
-  }, [selectedMovie && selectedMovie.id, isPlaying]);
+  }, [selectedMovie && selectedMovie.id, isPlaying, dataSaver]);
 
   const handleSaveMovie = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2707,6 +2848,8 @@ export default function Home() {
         const { backupVideoUrl: _oldBackup, ...rest } = m;
         const updated: Movie = {
           ...rest,
+          saga: newMovieSaga.trim() || undefined,
+          sagaOrder: parseInt(newMovieSagaOrder, 10) || undefined,
           title: newMovieTitle,
           tag: newMovieCategory,
           type: newMovieType,
@@ -2748,6 +2891,8 @@ export default function Home() {
     } else {
       const createdMovie: Movie = {
         id: Date.now(),
+        saga: newMovieSaga.trim() || undefined,
+        sagaOrder: parseInt(newMovieSagaOrder, 10) || undefined,
         title: newMovieTitle,
         rating: "8.5",
         year: newMovieYear.trim() || String(new Date().getFullYear()),
@@ -2786,6 +2931,8 @@ export default function Home() {
   };
 
   const resetMovieForm = () => {
+    setNewMovieSaga("");
+    setNewMovieSagaOrder("");
     setNewMovieTitle("");
     setNewMovieDesc("");
     setNewMovieImage("");
@@ -2926,6 +3073,8 @@ export default function Home() {
     setNewMovieDirector(movie.director || "");
     setNewMovieCast(movie.cast || "");
     setNewMovieTrailer(movie.trailerUrl || "");
+    setNewMovieSaga(movie.saga || "");
+    setNewMovieSagaOrder(movie.sagaOrder ? String(movie.sagaOrder) : "");
     const eps = movie.episodes || [];
     setNewEpisodes(eps);
     setNewComingSoon(!!movie.comingSoon);
@@ -3753,11 +3902,11 @@ export default function Home() {
   const filteredExploreMovies = catalog.filter((movie) => {
     const matchesSearch = exploreSearch === "" || movie.title.toLowerCase().includes(exploreSearch.toLowerCase());
     const matchesType = exploreTypeFilter === "todos" || movie.type === exploreTypeFilter;
-    const matchesGenre = exploreGenreFilter === "Todos" || (movie.tag && movie.tag.toLowerCase() === exploreGenreFilter.toLowerCase());
+    const matchesGenre = exploreGenreFilter === "Todos" || (exploreGenreFilter === "Novedades" ? isNewMovie30(movie) : !!(movie.tag && movie.tag.toLowerCase() === exploreGenreFilter.toLowerCase()));
     const matchesYear = exploreYearFilter === "Cualquier año" || movie.year === exploreYearFilter;
     
     return matchesSearch && matchesType && matchesGenre && matchesYear;
-  });
+  }).sort((a, b) => (exploreGenreFilter === "Novedades" ? (b.addedAt || 0) - (a.addedAt || 0) : 0));
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 lg:pb-0">
@@ -3993,6 +4142,7 @@ export default function Home() {
               <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
               {m.tag && <span className="absolute top-2 left-2 text-[10px] text-green-400 font-bold uppercase bg-black/70 px-2 py-0.5 rounded">{m.tag}</span>}
               {inMyList(m) && <span className="absolute top-2 right-2 bg-green-500 text-black rounded-full p-0.5"><Check className="w-3 h-3" /></span>}
+              {isNewMovie(m) && <span className="absolute bottom-0 left-0 right-0 text-center text-[10px] font-black tracking-wider text-white bg-red-600 py-0.5">NUEVO</span>}
             </div>
             <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{m.title}</h4>
           </div>
@@ -4013,6 +4163,17 @@ export default function Home() {
           if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
           groups[g].push(m);
         });
+        // Top 10: lo más visto de la semana; si aún no hay datos, lo más nuevo
+        const topList: Movie[] = [];
+        topIds.forEach((id) => { const mv = catalog.find((x) => String(x.id) === id); if (mv && topList.length < 10) topList.push(mv); });
+        catalog.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).forEach((mv) => { if (topList.length < 10 && topList.indexOf(mv) === -1) topList.push(mv); });
+        const topIsReal = topIds.some((id) => catalog.some((x) => String(x.id) === id));
+        // Novedades: lo agregado en los últimos 30 días, lo más nuevo primero
+        const novedades = catalog.filter(isNewMovie30).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+        // Sagas con 2 o más títulos
+        const sagas: Record<string, Movie[]> = {};
+        catalog.forEach((mv) => { if (mv.saga) { (sagas[mv.saga] = sagas[mv.saga] || []).push(mv); } });
+        const sagaNames = Object.keys(sagas).filter((k) => sagas[k].length >= 2);
         const continueItems = continueWatchingList
           .map((p) => ({ p, m: catalog.find((x) => String(x.id) === String(p.id)) }))
           .filter((x) => !!x.m) as { p: ProgressItem; m: Movie }[];
@@ -4181,12 +4342,25 @@ export default function Home() {
                 </section>
               )}
 
-              {/* Top 10 de hoy */}
+              {/* Novedades */}
+              {novedades.length > 0 && (
+                <section>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg sm:text-2xl font-bold text-white">🆕 Novedades</h2>
+                    <button onClick={() => { setExploreGenreFilter("Novedades"); setActiveTab("explorar"); try { window.scrollTo(0, 0); } catch (e) {} }} className="text-xs sm:text-sm font-bold text-green-400 hover:underline cursor-pointer rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-500">Ver todo ›</button>
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {novedades.slice(0, 15).map((m) => posterCard(m, "nov-" + m.id))}
+                  </div>
+                </section>
+              )}
+
+              {/* Top 10 de la semana (automático) */}
               {catalog.length >= 3 && (
                 <section>
-                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Top 10 de hoy</h2>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">{topIsReal ? "Top 10 de la semana" : "Top 10 de hoy"}</h2>
                   <div className="flex overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
-                    {catalog.slice(0, 10).map((m, i) => (
+                    {topList.map((m, i) => (
                       <div key={"top-" + m.id} className="shrink-0 flex items-end" style={{ marginRight: 18 }}>
                         <span
                           aria-hidden="true"
@@ -4211,6 +4385,7 @@ export default function Home() {
               )}
 
               {row("Recomendado para ti", recommended, "rec", <Sparkle className="w-5 h-5 text-green-400" />)}
+              {sagaNames.map((sg) => row("Saga: " + sg, sagas[sg].slice().sort(sagaSort), "saga-" + sg, <span>🎞️</span>))}
               {row(isAdmin ? "Tus Películas Subidas" : "Recién agregadas", catalog, "new")}
               {groupOrder.filter((g) => groups[g].length >= 2).map((g) => row(g, groups[g], "g-" + g))}
             </div>
@@ -4280,6 +4455,12 @@ export default function Home() {
             >
               Todos
             </button>
+            <button
+              onClick={() => setExploreGenreFilter("Novedades")}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${exploreGenreFilter === "Novedades" ? "bg-red-600 text-white" : "bg-[#121212] text-red-400 hover:bg-gray-800 border border-red-900/60"}`}
+            >
+              🆕 Novedades
+            </button>
             {genresList.map((genre) => (
               <button
                 key={genre}
@@ -4292,7 +4473,7 @@ export default function Home() {
           </div>
 
           <h2 className="text-xl font-black text-white pt-2 capitalize">
-            {exploreGenreFilter === "Todos" ? "Todas las Películas y Series" : exploreGenreFilter}
+            {exploreGenreFilter === "Todos" ? "Todas las Películas y Series" : exploreGenreFilter === "Novedades" ? "🆕 Novedades (últimos 30 días)" : exploreGenreFilter}
           </h2>
 
           {filteredExploreMovies.length === 0 ? (
@@ -4515,6 +4696,68 @@ export default function Home() {
               </div>
             );
           })()}
+
+          {/* REVISIÓN DE ENLACES */}
+          <div className={"p-4 sm:p-5 rounded-2xl border space-y-3 " + (linkIssues.length ? "bg-red-500/10 border-red-500/40" : "bg-[#0f0f0f] border-gray-800")}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-white">
+                  {linkCheck.running ? "🔎 Revisando enlaces de video… " + linkCheck.done + " de " + linkCheck.total
+                    : linkIssues.length ? "⚠️ " + linkIssues.length + " video" + (linkIssues.length === 1 ? "" : "s") + " no funciona" + (linkIssues.length === 1 ? "" : "n")
+                    : linkCheck.at ? "✅ Todos los videos responden bien (" + linkCheck.total + " revisados)" : "🔎 Revisión de enlaces de video"}
+                </p>
+                {linkCheck.at > 0 && !linkCheck.running && <p className="text-[11px] text-gray-400">Última revisión: {new Date(linkCheck.at).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}. Se revisa sola al abrir el panel.</p>}
+              </div>
+              <button onClick={() => runLinkCheck(true)} disabled={linkCheck.running} className="bg-[#181818] hover:bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-bold border border-gray-700 cursor-pointer disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-green-500">
+                {linkCheck.running ? "Revisando…" : "Revisar ahora"}
+              </button>
+            </div>
+            {linkIssues.length > 0 && (
+              <div className="space-y-2">
+                {linkIssues.map((it, i) => {
+                  const mv = catalogAll.find((x) => String(x.id) === it.id);
+                  return (
+                    <div key={"li-" + i} className="flex items-center gap-2 flex-wrap bg-black/30 rounded-xl px-3 py-2">
+                      <span className="text-xs text-white font-bold flex-1 min-w-[140px]">{it.title} <span className="text-gray-400 font-normal">· {it.where}</span></span>
+                      <span className="text-[11px] text-red-300">{it.reason}</span>
+                      {mv && <button onClick={() => { handleEditClick(mv); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} }} className="text-xs font-bold text-emerald-400 hover:underline cursor-pointer px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500">Corregir</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* AVISOS PROGRAMADOS */}
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">⏰ Avisos programados</h3>
+              <p className="text-xs text-gray-400">Deja listo un aviso para que llegue a todos los que tienen la campanita 🔔 un día y hora exactos.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select value={schedMovieId} onChange={(e) => setSchedMovieId(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="">Película (opcional)</option>
+                {catalogAll.map((x) => <option key={"so-" + x.id} value={String(x.id)}>{x.title}{x.comingSoon ? " (próximo estreno)" : ""}</option>)}
+              </select>
+              <input type="datetime-local" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" style={{ colorScheme: "dark" }} />
+              <input type="text" maxLength={80} placeholder="Título (ej. ¡Hoy se estrena! 🍿)" value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              <input type="text" maxLength={200} placeholder="Mensaje (si eliges película, se escribe solo)" value={schedBody} onChange={(e) => setSchedBody(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+            <button onClick={addSched} className="w-full sm:w-auto bg-white hover:bg-gray-200 text-black px-5 py-3 rounded-xl text-sm font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Programar aviso</button>
+            {schedList.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {schedList.slice().sort((a, b) => a.at - b.at).map((it) => (
+                  <div key={it.id} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{it.title} <span className="text-gray-400 font-normal">— {it.body}</span></p>
+                      <p className="text-[11px] text-green-400">{new Date(it.at).toLocaleString("es-PE", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                    <button onClick={() => removeSched(it.id)} className="text-xs text-red-400 hover:underline cursor-pointer px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500">Quitar</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* ESTADÍSTICAS */}
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-5">
@@ -4822,6 +5065,19 @@ export default function Home() {
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Director</label>
                   <input type="text" placeholder="Nombre del director" value={newMovieDirector} onChange={(e) => setNewMovieDirector(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+                <div className="sm:col-span-2 grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-400 block mb-1">Saga o colección (opcional)</label>
+                    <input type="text" list="cv-sagas" placeholder="Ej. Aventuras del Bosque" value={newMovieSaga} onChange={(e) => setNewMovieSaga(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    <datalist id="cv-sagas">
+                      {Array.from(new Set(catalogAll.map((x) => x.saga).filter(Boolean) as string[])).map((sg) => <option key={sg} value={sg} />)}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">N.º en la saga</label>
+                    <input type="number" min={1} placeholder="1" value={newMovieSagaOrder} onChange={(e) => setNewMovieSagaOrder(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Reparto</label>
@@ -5292,6 +5548,17 @@ export default function Home() {
                 />
               </div>
 
+              <div onClick={toggleDataSaver} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") toggleDataSaver(); }} className="flex items-center justify-between gap-3 p-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-[#181818] rounded-lg text-gray-400 shrink-0 text-sm leading-none">📶</div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Ahorro de datos</h4>
+                    <p className="text-xs text-gray-500">No reproduce tráileres automáticos. Ideal con datos móviles.</p>
+                  </div>
+                </div>
+                <input type="checkbox" checked={dataSaver} readOnly tabIndex={-1} className="w-5 h-5 accent-green-500 cursor-pointer pointer-events-none" />
+              </div>
+
               <div className="flex items-center justify-between pt-2 border-t border-gray-900 p-2">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#181818] rounded-lg text-gray-400"><Trash2 className="w-4 h-4" /></div>
@@ -5511,6 +5778,26 @@ export default function Home() {
                   </div>
                 );
               })()}
+              {selectedMovie.saga && catalog.filter((x) => x.saga === selectedMovie.saga).length >= 2 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-white">🎞️ Saga: {selectedMovie.saga}</p>
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                    {catalog.filter((x) => x.saga === selectedMovie.saga).sort(sagaSort).map((x, i) => (
+                      <button
+                        key={"saga-m-" + x.id}
+                        onClick={() => setSelectedMovie(x)}
+                        className={"shrink-0 w-28 sm:w-32 text-left rounded-xl overflow-hidden border-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (String(x.id) === String(selectedMovie.id) ? "border-green-500" : "border-gray-800 hover:border-white/60")}
+                      >
+                        <div className="relative aspect-[2/3] bg-gray-900">
+                          <img src={x.bgImage} alt={x.title} loading="lazy" className="w-full h-full object-cover" />
+                          <span className="absolute top-1 left-1 bg-black/75 text-white text-[10px] font-black px-1.5 py-0.5 rounded">{x.sagaOrder || i + 1}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 font-semibold truncate px-1.5 py-1">{x.title}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-6 sm:gap-8 border-b border-gray-800 text-sm font-bold overflow-x-auto scrollbar-none">
                 <button 
                   onClick={() => setMovieModalTab("detalles")}
@@ -5949,6 +6236,56 @@ export default function Home() {
           </form>
         </div>
       )}
+
+      {/* COMPARTIR */}
+      {shareTarget && (() => {
+        const url = shareUrlOf(shareTarget);
+        const text = "Mira " + shareTarget.title + " en Cineverso Mágico 🍿";
+        const e = encodeURIComponent;
+        const open = (u: string) => { try { window.open(u, "_blank", "noopener,noreferrer"); } catch (err) { window.location.href = u; } setShareTarget(null); };
+        const copy = () => {
+          const nav: any = navigator;
+          const ok = () => { showToast("¡Enlace copiado! 🔗"); setShareTarget(null); };
+          try { if (nav.clipboard && nav.clipboard.writeText) { nav.clipboard.writeText(url).then(ok).catch(() => showToast(url, 8000)); return; } } catch (err) {}
+          showToast(url, 8000);
+        };
+        const opts: { key: string; label: string; bg: string; icon: any; go: () => void }[] = [
+          { key: "wa", label: "WhatsApp", bg: "#25D366", icon: <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 2a8 8 0 1 1-4.1 14.9l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 0 1 12 4Zm-3.2 4c-.2 0-.5 0-.7.3-.3.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.9 4.5 3.9 2.2.9 2.7.7 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.6 6.6 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5Z"/></svg>, go: () => open("https://wa.me/?text=" + e(text + " " + url)) },
+          { key: "fb", label: "Facebook", bg: "#1877F2", icon: <span className="text-white font-black text-2xl leading-none" style={{ fontFamily: "Arial, sans-serif" }}>f</span>, go: () => open("https://www.facebook.com/sharer/sharer.php?u=" + e(url)) },
+          { key: "tg", label: "Telegram", bg: "#229ED9", icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M21.5 3.6 2.9 10.8c-1.3.5-1.2 1.2-.2 1.5l4.7 1.5 1.8 5.6c.2.6.4.8.8.8s.6-.2.9-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.7c.3-1.3-.5-1.9-1.3-1.5ZM9.4 13.4l8.9-5.6c.4-.3.8-.1.5.2l-7.4 6.7-.3 3.2-1.7-4.5Z"/></svg>, go: () => open("https://t.me/share/url?url=" + e(url) + "&text=" + e(text)) },
+          { key: "x", label: "X (Twitter)", bg: "#000000", icon: <span className="text-white font-black text-xl leading-none" style={{ fontFamily: "Arial, sans-serif" }}>𝕏</span>, go: () => open("https://twitter.com/intent/tweet?text=" + e(text) + "&url=" + e(url)) },
+          { key: "mail", label: "Correo", bg: "#6B7280", icon: <span className="text-white text-xl leading-none">✉️</span>, go: () => open("mailto:?subject=" + e(shareTarget.title + " | Cineverso Mágico") + "&body=" + e(text + "\n" + url)) },
+        ];
+        return (
+          <div data-tv-modal className="fixed inset-0 z-[75] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={(ev) => { if (ev.target === ev.currentTarget) setShareTarget(null); }}>
+            <div className="w-full sm:max-w-md bg-[#141414] border border-gray-800 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)", animation: "cvFade .2s ease-out both" }}>
+              <div className="flex items-center gap-3">
+                <img src={shareTarget.bgImage} alt="" className="w-12 h-16 rounded-lg object-cover bg-gray-900 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-400">Compartir</p>
+                  <p className="text-base font-bold text-white truncate">{shareTarget.title}</p>
+                </div>
+                <button data-close-on-back onClick={() => setShareTarget(null)} aria-label="Cerrar" className="w-10 h-10 rounded-full bg-[#222] text-gray-300 hover:text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="grid grid-cols-3 gap-y-4 gap-x-2">
+                {opts.map((o, i) => (
+                  <button key={o.key} data-autofocus={i === 0 ? true : undefined} onClick={o.go} className="flex flex-col items-center gap-2 rounded-2xl py-2 cursor-pointer hover:bg-white/5 focus:outline-none focus:ring-4 focus:ring-green-500">
+                    <span className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg" style={{ background: o.bg }}>{o.icon}</span>
+                    <span className="text-[11px] sm:text-xs text-gray-300 font-semibold">{o.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 bg-[#0a0a0a] border border-gray-800 rounded-xl p-1.5 pl-3">
+                <span className="flex-1 min-w-0 text-xs text-gray-400 truncate">{url}</span>
+                <button onClick={copy} className="shrink-0 bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-lg text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">🔗 Copiar enlace</button>
+              </div>
+              {typeof navigator !== "undefined" && (navigator as any).share && (
+                <button onClick={() => { shareNative(shareTarget); setShareTarget(null); }} className="w-full text-sm font-bold text-gray-300 hover:text-white py-2 rounded-xl border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Más opciones…</button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* EDITAR PERFIL */}
       {editProfile && (
