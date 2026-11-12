@@ -1451,11 +1451,25 @@ export default function Home() {
   };
   const kidsMode = !!activeProfile.isKid;
   const catalogAll: Movie[] = kidsMode ? customMovies.filter(isKidFriendly) : customMovies;
+  // Fecha de hoy "AAAA-MM-DD" (se lee en el navegador; al compilar queda vacía)
+  const [todayStr, setTodayStr] = useState("");
+  useEffect(() => {
+    const upd = () => {
+      const d = new Date();
+      setTodayStr(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+    };
+    upd();
+    const t = setInterval(upd, 10 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+  // Un próximo estreno pasa solo a las películas cuando llega su fecha y ya tiene video
+  const isUpcoming = (m: Movie) =>
+    !!m.comingSoon && !(m.releaseDate && todayStr && m.releaseDate <= todayStr && m.videoUrl && !/gtv-videos-bucket/i.test(m.videoUrl));
   // Lo que se puede ver ya (sin próximos estrenos)
-  const catalog: Movie[] = catalogAll.filter((m) => !m.comingSoon);
+  const catalog: Movie[] = catalogAll.filter((m) => !isUpcoming(m));
   // Próximos estrenos, ordenados por fecha
   const upcoming: Movie[] = catalogAll
-    .filter((m) => m.comingSoon)
+    .filter((m) => isUpcoming(m))
     .sort((a, b) => String(a.releaseDate || "9999").localeCompare(String(b.releaseDate || "9999")));
   const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
   const fmtRelease = (d?: string) => {
@@ -1789,6 +1803,19 @@ export default function Home() {
   useEffect(() => {
     if (activeTab === "admin" && isAdmin) loadStats(statsDays);
   }, [activeTab, isAdmin, statsDays]);
+
+  // Estrenar un próximo estreno con un solo clic
+  const releaseNow = (m: Movie) => {
+    let url = m.videoUrl || "";
+    if (!url || /gtv-videos-bucket/i.test(url)) {
+      url = (window.prompt("Pega el enlace del video de \"" + m.title + "\":", "") || "").trim();
+      if (!url) return;
+    }
+    const avisar = window.confirm("¿Avisar a todos que \"" + m.title + "\" ya está disponible?");
+    const released: Movie = { ...m, videoUrl: url, comingSoon: undefined, releaseDate: undefined, addedAt: Date.now() };
+    saveChange({ type: "upsert", movie: released }, "¡Estrenada! Ya aparece con las demás películas.");
+    if (avisar) sendPush({ title: "¡Ya disponible! 🍿", body: m.title + " ya se puede ver en Cineverso Mágico.", image: m.backdrop || m.bgImage, url: "/ver/" + m.id, tag: "m-" + m.id });
+  };
 
   // Probar un enlace desde el panel
   const [linkStatus, setLinkStatus] = useState<Record<string, string>>({});
@@ -2565,8 +2592,26 @@ export default function Home() {
       if (!confirm("Ese enlace es un VIDEO DE EJEMPLO de Google, no tu película. ¿Quieres guardarlo igual?")) return;
     }
 
-    if (editingMovieId) {
-      const m = customMovies.find((x) => String(x.id) === String(editingMovieId));
+    // ¿Esta película ya estaba en "Próximos estrenos"? (mismo título) -> se estrena esa ficha, no se duplica
+    const norm = (t: string) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+    let targetId: any = editingMovieId;
+    if (!targetId && !newComingSoon) {
+      const twin = customMovies.find((x) => x.comingSoon && norm(x.title) === norm(newMovieTitle));
+      if (twin && confirm("\"" + twin.title + "\" está en Próximos estrenos.\n\n¿Es su estreno? Se quitará de Próximos estrenos (sin duplicarse) y aparecerá con las demás películas.")) {
+        targetId = twin.id;
+      }
+    }
+    // Si un próximo estreno ya tiene video, preguntar si se estrena ahora
+    let comingFinal = newComingSoon;
+    if (targetId && newComingSoon && mainUrl) {
+      const prev = customMovies.find((x) => String(x.id) === String(targetId));
+      if (prev && prev.comingSoon && confirm("\"" + newMovieTitle + "\" ya tiene video.\n\n¿Se estrena ahora? Pulsa Aceptar para quitarla de Próximos estrenos y avisar a todos, o Cancelar para dejarla como próximo estreno.")) {
+        comingFinal = false;
+      }
+    }
+
+    if (targetId) {
+      const m = customMovies.find((x) => String(x.id) === String(targetId));
       if (m) {
         const { backupVideoUrl: _oldBackup, ...rest } = m;
         const updated: Movie = {
@@ -2585,12 +2630,13 @@ export default function Home() {
           cast: newMovieCast.trim() || undefined,
           trailerUrl: newMovieTrailer.trim() || undefined,
           episodes: newMovieType === "serie" ? newEpisodes : undefined,
-          addedAt: m.addedAt || movieTime(m) || undefined,
+          // al estrenarse cuenta como novedad de hoy (sale primero en la campanita)
+          addedAt: m.comingSoon && !comingFinal ? Date.now() : m.addedAt || movieTime(m) || undefined,
           introStart: parseClock(newIntroStart),
           introEnd: parseClock(newIntroEnd),
           creditsStart: parseClock(newCreditsStart),
-          comingSoon: newComingSoon || undefined,
-          releaseDate: newComingSoon ? newReleaseDate || undefined : undefined,
+          comingSoon: comingFinal || undefined,
+          releaseDate: comingFinal ? newReleaseDate || undefined : undefined,
           ...(tmdbExtra ? {
             rating: tmdbExtra.rating || m.rating,
             production: tmdbExtra.production || m.production,
@@ -2601,10 +2647,10 @@ export default function Home() {
             ? [newMovieCategory].concat(tmdbExtra.genres.filter((g) => g !== newMovieCategory))
             : m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
         };
-        saveChange({ type: "upsert", movie: updated }, "¡Contenido actualizado!");
+        saveChange({ type: "upsert", movie: updated }, m.comingSoon && !comingFinal ? "¡Estrenada! Ya aparece con las demás películas." : "¡Contenido actualizado!");
         if (notifyAll) {
-          if (m.comingSoon && !newComingSoon) sendPush({ title: "¡Ya disponible! 🍿", body: updated.title + " ya se puede ver en Cineverso Mágico.", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
-          else if (!m.comingSoon && newComingSoon) sendPush({ title: "Próximo estreno 🎬", body: updated.title + " llega el " + fmtRelease(updated.releaseDate) + ".", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
+          if (m.comingSoon && !comingFinal) sendPush({ title: "¡Ya disponible! 🍿", body: updated.title + " ya se puede ver en Cineverso Mágico.", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
+          else if (!m.comingSoon && comingFinal) sendPush({ title: "Próximo estreno 🎬", body: updated.title + " llega el " + fmtRelease(updated.releaseDate) + ".", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
         }
       }
       setEditingMovieId(null);
@@ -4169,6 +4215,26 @@ export default function Home() {
       {/* PANEL DE ADMINISTRACIÓN */}
       {activeTab === "admin" && isAdmin && (
         <div className="max-w-4xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-10 overflow-x-hidden">
+          {/* ESTRENOS QUE YA LLEGARON */}
+          {(() => {
+            const due = customMovies.filter((m) => m.comingSoon && m.releaseDate && todayStr && m.releaseDate <= todayStr);
+            if (!due.length) return null;
+            return (
+              <div className="bg-green-500/10 border border-green-500/40 p-4 rounded-2xl space-y-2">
+                <p className="text-sm font-bold text-white">🎬 Ya llegó la fecha de estreno</p>
+                {due.map((m) => (
+                  <div key={"due-" + m.id} className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xs text-gray-200 flex-1 min-w-[160px]">{m.title} · {fmtRelease(m.releaseDate)}{!m.videoUrl ? " (falta el enlace del video)" : ""}</span>
+                    <button onClick={() => releaseNow(m)} className="bg-green-500 hover:bg-green-400 text-black px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                      Estrenar y avisar
+                    </button>
+                  </div>
+                ))}
+                <p className="text-[11px] text-gray-400">Si ya tienen video, en la página ya aparecen con las demás películas; con este botón además se avisa a todos.</p>
+              </div>
+            );
+          })()}
+
           {/* ESTADÍSTICAS */}
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -4624,6 +4690,7 @@ export default function Home() {
                         <span className="bg-gray-900 px-2 py-0.5 rounded text-green-400 font-semibold">{movie.tag}</span>
                         <span>{movie.year}</span>
                         <span className="uppercase text-[10px] text-gray-500 font-bold">({movie.type || 'película'})</span>
+                        {movie.comingSoon && <span className="text-[10px] font-black text-black bg-yellow-400 px-1.5 py-0.5 rounded">PRÓXIMO · {fmtRelease(movie.releaseDate)}</span>}
                       </div>
                       <p className="text-[10px] text-gray-500 mt-1 truncate max-w-[260px] sm:max-w-[420px]" title={movie.videoUrl}>{movie.videoUrl}</p>
                       {linkStatus[String(movie.id)] && (
@@ -4633,6 +4700,14 @@ export default function Home() {
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+                    {movie.comingSoon && (
+                      <button
+                        onClick={() => releaseNow(movie)}
+                        className="flex items-center gap-1 bg-green-500 hover:bg-green-400 text-black px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        🎬 Estrenar ahora
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         if (!confirm("¿Enviar un aviso de \"" + movie.title + "\" a todos los dispositivos suscritos?")) return;
