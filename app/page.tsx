@@ -3767,8 +3767,8 @@ export default function Home() {
                     title={"Tráiler de " + heroMovie.title}
                     allow="autoplay; encrypted-media"
                     tabIndex={-1}
-                    onLoad={() => setTimeout(() => setHeroTrailerReady(true), 800)}
-                    style={{ position: "absolute", top: "50%", left: "50%", width: "177.78vh", minWidth: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.15)", border: 0, pointerEvents: "none", opacity: heroTrailerReady ? 1 : 0, transition: "opacity .8s" }}
+                    onLoad={() => setTimeout(() => setHeroTrailerReady(true), 2600)}
+                    style={{ position: "absolute", top: "50%", left: "50%", width: "177.78vh", minWidth: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.36)", border: 0, pointerEvents: "none", opacity: heroTrailerReady ? 1 : 0, transition: "opacity .8s" }}
                   />
                 ) : (
                   <video
@@ -5011,8 +5011,8 @@ export default function Home() {
                     title={"Tráiler de " + selectedMovie.title}
                     allow="autoplay; encrypted-media"
                     tabIndex={-1}
-                    onLoad={() => setTimeout(() => setModalTrailerReady(true), 700)}
-                    style={{ position: "absolute", top: "50%", left: "50%", width: "100%", height: "100%", minWidth: "calc(64vh * 1.7778)", minHeight: "56.25vw", transform: "translate(-50%,-50%) scale(1.2)", border: 0, pointerEvents: "none", opacity: modalTrailerReady ? 1 : 0, transition: "opacity .8s" }}
+                    onLoad={() => setTimeout(() => setModalTrailerReady(true), 2600)}
+                    style={{ position: "absolute", top: "50%", left: "50%", width: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.36)", border: 0, pointerEvents: "none", opacity: modalTrailerReady ? 1 : 0, transition: "opacity .8s" }}
                   />
                 ) : (
                   <video
