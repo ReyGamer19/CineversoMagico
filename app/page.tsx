@@ -226,6 +226,59 @@ const TV_GUARD_JS = [
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), a[href], input:not([disabled]), select, textarea, video, [tabindex]:not([tabindex="-1"])';
 
+// Tráiler de YouTube de fondo: solo se muestra cuando de verdad se está reproduciendo
+// (si el navegador bloquea la reproducción automática, se queda la imagen de la película)
+function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boolean; title: string; style: { [k: string]: any }; onReady: (r: boolean) => void }) {
+  const ref = useRef<HTMLIFrameElement | null>(null);
+  const cb = useRef(onReady);
+  cb.current = onReady;
+  useEffect(() => {
+    let timer: any = null;
+    let last = -9;
+    const set = (st: number) => {
+      if (st === last) return;
+      last = st;
+      if (st === 1) {
+        if (!timer) timer = setTimeout(() => { timer = null; cb.current(true); }, 2600);
+      } else if (st !== 3) {
+        if (timer) { clearTimeout(timer); timer = null; }
+        cb.current(false);
+      }
+    };
+    const onMsg = (e: MessageEvent) => {
+      const f = ref.current;
+      if (!f || e.source !== f.contentWindow) return;
+      let d: any = e.data;
+      if (typeof d === "string") { try { d = JSON.parse(d); } catch (err) { return; } }
+      if (!d) return;
+      if (d.event === "onStateChange" && typeof d.info === "number") set(d.info);
+      else if (d.event === "infoDelivery" && d.info && typeof d.info.playerState === "number") set(d.info.playerState);
+    };
+    window.addEventListener("message", onMsg);
+    return () => { window.removeEventListener("message", onMsg); if (timer) clearTimeout(timer); cb.current(false); };
+  }, [vid, muted]);
+  const ping = () => {
+    const w = ref.current && ref.current.contentWindow;
+    if (!w) return;
+    try {
+      w.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*");
+      w.postMessage(JSON.stringify({ event: "command", func: "addEventListener", args: ["onStateChange"], id: 1, channel: "widget" }), "*");
+    } catch (err) {}
+  };
+  const origin = typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : "";
+  return (
+    <iframe
+      ref={ref}
+      src={"https://www.youtube.com/embed/" + vid + "?autoplay=1&mute=" + (muted ? 1 : 0) + "&controls=0&disablekb=1&fs=0&loop=1&playlist=" + vid + "&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=" + origin}
+      title={title}
+      allow="autoplay; encrypted-media"
+      tabIndex={-1}
+      onLoad={() => { ping(); setTimeout(ping, 400); setTimeout(ping, 1500); }}
+      style={style}
+    />
+  );
+}
+
 export default function Home() {
   const myAvatars = [
     { name: "Bebé Jefazo 1", file: "/avatares/bebe jefazo1.png" },
@@ -3761,13 +3814,12 @@ export default function Home() {
             >
               {heroTrailerOn && heroMovie.trailerUrl && (
                 youtubeId(heroMovie.trailerUrl) ? (
-                  <iframe
+                  <YtBg
                     key={"yt-" + heroMovie.id}
-                    src={"https://www.youtube.com/embed/" + youtubeId(heroMovie.trailerUrl) + "?autoplay=1&mute=1&controls=0&loop=1&playlist=" + youtubeId(heroMovie.trailerUrl) + "&modestbranding=1&playsinline=1&rel=0&showinfo=0&iv_load_policy=3"}
+                    vid={youtubeId(heroMovie.trailerUrl)}
+                    muted={true}
                     title={"Tráiler de " + heroMovie.title}
-                    allow="autoplay; encrypted-media"
-                    tabIndex={-1}
-                    onLoad={() => setTimeout(() => setHeroTrailerReady(true), 2600)}
+                    onReady={setHeroTrailerReady}
                     style={{ position: "absolute", top: "50%", left: "50%", width: "177.78vh", minWidth: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.36)", border: 0, pointerEvents: "none", opacity: heroTrailerReady ? 1 : 0, transition: "opacity .8s" }}
                   />
                 ) : (
@@ -5005,13 +5057,12 @@ export default function Home() {
               />
               {modalTrailerOn && selectedMovie.trailerUrl && (
                 youtubeId(selectedMovie.trailerUrl) ? (
-                  <iframe
+                  <YtBg
                     key={"myt-" + selectedMovie.id + "-" + (modalMuted ? "m" : "s")}
-                    src={"https://www.youtube.com/embed/" + youtubeId(selectedMovie.trailerUrl) + "?autoplay=1&mute=" + (modalMuted ? 1 : 0) + "&controls=0&loop=1&playlist=" + youtubeId(selectedMovie.trailerUrl) + "&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3"}
+                    vid={youtubeId(selectedMovie.trailerUrl)}
+                    muted={modalMuted}
                     title={"Tráiler de " + selectedMovie.title}
-                    allow="autoplay; encrypted-media"
-                    tabIndex={-1}
-                    onLoad={() => setTimeout(() => setModalTrailerReady(true), 2600)}
+                    onReady={setModalTrailerReady}
                     style={{ position: "absolute", top: "50%", left: "50%", width: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.36)", border: 0, pointerEvents: "none", opacity: modalTrailerReady ? 1 : 0, transition: "opacity .8s" }}
                   />
                 ) : (
