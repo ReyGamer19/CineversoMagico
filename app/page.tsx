@@ -210,7 +210,8 @@ html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
 // (funciona aunque el JavaScript de la TV falle)
 const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}" +
   // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
-  "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }";
+  "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
+  ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
 // Se ejecuta antes que todo. Si el navegador es antiguo o la app no arranca,
 // manda a la versión TV ultraligera (/tv.html), que funciona en cualquier Smart TV.
@@ -280,6 +281,59 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
       onLoad={() => { ping(); setTimeout(ping, 400); setTimeout(ping, 1500); }}
       style={style}
     />
+  );
+}
+
+// Fila horizontal con flechas ‹ › a los lados (como en las plataformas de streaming).
+// Las flechas aparecen en PC y TV con puntero; en celular se desliza con el dedo.
+function Rail({ className, style, children }: { className: string; style?: { [k: string]: any }; children?: any }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [canL, setCanL] = useState(false);
+  const [canR, setCanR] = useState(false);
+  const update = () => {
+    const el = ref.current;
+    if (!el) return;
+    setCanL(el.scrollLeft > 8);
+    setCanR(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  };
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    let ro: any = null;
+    try {
+      const RO = (window as any).ResizeObserver;
+      if (RO && el) { ro = new RO(update); ro.observe(el); }
+    } catch (e) {}
+    window.addEventListener("resize", update);
+    const t = setTimeout(update, 600);
+    return () => { window.removeEventListener("resize", update); clearTimeout(t); if (ro) ro.disconnect(); };
+  }, []);
+  useEffect(() => { update(); });
+  const go = (dir: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const d = dir * Math.max(200, el.clientWidth * 0.85);
+    try { el.scrollBy({ left: d, behavior: "smooth" }); } catch (e) { el.scrollLeft += d; }
+  };
+  const arrow = (dir: number) => (
+    <button
+      type="button"
+      tabIndex={-1}
+      aria-label={dir < 0 ? "Anteriores" : "Siguientes"}
+      onClick={() => go(dir)}
+      className={"cv-rail-btn " + (dir < 0 ? "cv-rail-l" : "cv-rail-r")}
+    >
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        {dir < 0 ? <path d="M15 18l-6-6 6-6" /> : <path d="M9 18l6-6-6-6" />}
+      </svg>
+    </button>
+  );
+  return (
+    <div className="cv-rail">
+      <div ref={ref} className={className} style={style} onScroll={update}>{children}</div>
+      {canL && arrow(-1)}
+      {canR && arrow(1)}
+    </div>
   );
 }
 
@@ -4151,9 +4205,9 @@ export default function Home() {
           items.length ? (
             <section key={keyPrefix}>
               <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white flex items-center gap-2">{icon}{title}</h2>
-              <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+              <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
                 {items.map((m) => posterCard(m, keyPrefix + "-" + m.id))}
-              </div>
+              </Rail>
             </section>
           ) : null;
         const groups: Record<string, Movie[]> = {};
@@ -4285,7 +4339,7 @@ export default function Home() {
               {continueItems.length > 0 && (
                 <section>
                   <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Continuar viendo</h2>
-                  <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
                     {continueItems.map(({ p, m }) => {
                       const pct = Math.min(100, Math.round((p.time / p.duration) * 100));
                       return (
@@ -4308,7 +4362,7 @@ export default function Home() {
                         </div>
                       );
                     })}
-                  </div>
+                  </Rail>
                 </section>
               )}
 
@@ -4316,7 +4370,7 @@ export default function Home() {
               {upcoming.length > 0 && (
                 <section>
                   <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">Próximos estrenos</h2>
-                  <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
                     {upcoming.map((m) => (
                       <div key={"up-" + m.id} className="shrink-0" style={{ width: 300 }}>
                         <div
@@ -4338,7 +4392,7 @@ export default function Home() {
                         </button>
                       </div>
                     ))}
-                  </div>
+                  </Rail>
                 </section>
               )}
 
@@ -4349,9 +4403,9 @@ export default function Home() {
                     <h2 className="text-lg sm:text-2xl font-bold text-white">🆕 Novedades</h2>
                     <button onClick={() => { setExploreGenreFilter("Novedades"); setActiveTab("explorar"); try { window.scrollTo(0, 0); } catch (e) {} }} className="text-xs sm:text-sm font-bold text-green-400 hover:underline cursor-pointer rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-500">Ver todo ›</button>
                   </div>
-                  <div className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
                     {novedades.slice(0, 15).map((m) => posterCard(m, "nov-" + m.id))}
-                  </div>
+                  </Rail>
                 </section>
               )}
 
@@ -4359,7 +4413,7 @@ export default function Home() {
               {catalog.length >= 3 && (
                 <section>
                   <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">{topIsReal ? "Top 10 de la semana" : "Top 10 de hoy"}</h2>
-                  <div className="flex overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                  <Rail className="flex overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
                     {topList.map((m, i) => (
                       <div key={"top-" + m.id} className="shrink-0 flex items-end" style={{ marginRight: 18 }}>
                         <span
@@ -4380,7 +4434,7 @@ export default function Home() {
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </Rail>
                 </section>
               )}
 
