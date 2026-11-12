@@ -57,6 +57,45 @@ function passwordOk(p: unknown) {
 }
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
 
+// Envía un aviso a todos los dispositivos suscritos y limpia los que ya no existen
+async function sendToAll(msg: { title: string; body: string; image?: string; url?: string; tag?: string }) {
+  const payload = JSON.stringify({
+    title: msg.title || "Cineverso Mágico",
+    body: msg.body || "",
+    image: msg.image || undefined,
+    url: msg.url || "/",
+    tag: msg.tag || undefined,
+  });
+  const k = await vapidKeys();
+  setVapidDetails("mailto:" + CONTACT, k.publicKey, k.privateKey);
+  const data = (await getRow(SUBS_ROW)) || { subs: [] };
+  const subs: Sub[] = Array.isArray(data.subs) ? data.subs : [];
+  const dead = new Set<string>();
+  let sent = 0, failed = 0;
+  for (let i = 0; i < subs.length; i += 50) {
+    const batch = subs.slice(i, i + 50);
+    const results = await Promise.allSettled(batch.map((s) => sendNotification(s, payload, { TTL: 86400, urgency: "high" })));
+    results.forEach((r, j) => {
+      if (r.status === "fulfilled") sent++;
+      else {
+        failed++;
+        const code = (r.reason && (r.reason as any).statusCode) || 0;
+        // 404/410: el dispositivo ya no existe. 401/403: suscrito con claves viejas (se volverá a suscribir solo)
+        if (code === 404 || code === 410 || code === 401 || code === 403) dead.add(batch[j].endpoint);
+      }
+    });
+  }
+  if (dead.size) {
+    const fresh = (await getRow(SUBS_ROW)) || { subs: [] };
+    const list: Sub[] = Array.isArray(fresh.subs) ? fresh.subs : [];
+    await setRow(SUBS_ROW, { ...fresh, subs: list.filter((s) => !dead.has(s.endpoint)) });
+  }
+  return { sent, failed, removed: dead.size, total: subs.length };
+}
+
+// Fecha de hoy en Perú (AAAA-MM-DD)
+const todayLima = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+
 // Clave pública para que el navegador se suscriba
 export async function GET() {
   await connection();
@@ -90,7 +129,7 @@ export async function POST(req: Request) {
         subs.push({ endpoint, keys: { p256dh, auth }, created: Date.now() });
         if (subs.length > 5000) subs = subs.slice(subs.length - 5000);
       }
-      await setRow(SUBS_ROW, { subs });
+      await setRow(SUBS_ROW, { ...data, subs });
       return NextResponse.json({ ok: true, total: subs.length }, { headers: noStore });
     }
 
@@ -99,33 +138,52 @@ export async function POST(req: Request) {
         await new Promise((r) => setTimeout(r, 800));
         return NextResponse.json({ error: "Clave incorrecta" }, { status: 401, headers: noStore });
       }
-      const payload = JSON.stringify({
-        title: str(b.title, 80) || "Cineverso Mágico",
-        body: str(b.body, 200),
-        image: str(b.image, 500) || undefined,
-        url: str(b.url, 300) || "/",
-        tag: str(b.tag, 60) || undefined,
-      });
-      const k = await vapidKeys();
-      setVapidDetails("mailto:" + CONTACT, k.publicKey, k.privateKey);
-      const data = (await getRow(SUBS_ROW)) || { subs: [] };
-      const subs: Sub[] = Array.isArray(data.subs) ? data.subs : [];
-      const dead = new Set<string>();
-      let sent = 0, failed = 0;
-      for (let i = 0; i < subs.length; i += 50) {
-        const batch = subs.slice(i, i + 50);
-        const results = await Promise.allSettled(batch.map((s) => sendNotification(s, payload, { TTL: 86400 })));
-        results.forEach((r, j) => {
-          if (r.status === "fulfilled") sent++;
-          else {
-            failed++;
-            const code = (r.reason && (r.reason as any).statusCode) || 0;
-            if (code === 404 || code === 410) dead.add(batch[j].endpoint);
-          }
-        });
+      const r = await sendToAll({ title: str(b.title, 80), body: str(b.body, 200), image: str(b.image, 500), url: str(b.url, 300), tag: str(b.tag, 60) });
+      // Recuerda que ya se avisó de esta película (para no repetir el aviso automático)
+      const m = /^m-(\d+)$/.exec(str(b.tag, 60));
+      if (m && /Ya disponible|Nueva (película|serie)/.test(str(b.title, 80))) {
+        const d = (await getRow(SUBS_ROW)) || { subs: [] };
+        const notified: string[] = Array.isArray(d.notified) ? d.notified : [];
+        if (notified.indexOf(m[1]) === -1) await setRow(SUBS_ROW, { ...d, notified: notified.concat(m[1]).slice(-2000) });
       }
-      if (dead.size) await setRow(SUBS_ROW, { subs: subs.filter((s) => !dead.has(s.endpoint)) });
-      return NextResponse.json({ ok: true, sent, failed, removed: dead.size, total: subs.length }, { headers: noStore });
+      return NextResponse.json({ ok: true, ...r }, { headers: noStore });
+    }
+
+    // Revisión automática (la hace cualquier visita, como mucho cada 10 minutos):
+    // si a un próximo estreno ya le llegó su fecha y tiene video, avisa a todos "¡Ya disponible!" una sola vez.
+    if (action === "auto") {
+      const d = (await getRow(SUBS_ROW)) || { subs: [] };
+      const now = Date.now();
+      if (d.lastAuto && now - d.lastAuto < 10 * 60 * 1000) return NextResponse.json({ ok: true, skipped: true }, { headers: noStore });
+      const notified: string[] = Array.isArray(d.notified) ? d.notified : [];
+      await setRow(SUBS_ROW, { ...d, lastAuto: now });
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog?id=eq.1&select=data`, { headers: headers(), cache: "no-store" });
+      const rows = res.ok ? await res.json() : [];
+      const movies: any[] = Array.isArray(rows) && rows[0] && Array.isArray(rows[0].data) ? rows[0].data : [];
+      const today = todayLima();
+      const due = movies.filter((mv) =>
+        mv && mv.comingSoon && typeof mv.releaseDate === "string" && mv.releaseDate <= today &&
+        typeof mv.videoUrl === "string" && /^https?:\/\//.test(mv.videoUrl) && !/gtv-videos-bucket/i.test(mv.videoUrl) &&
+        notified.indexOf(String(mv.id)) === -1
+      ).slice(0, 3);
+      let sent = 0;
+      for (const mv of due) {
+        const r = await sendToAll({ title: "¡Ya disponible! 🍿", body: String(mv.title || "") + " ya se puede ver en Cineverso Mágico.", image: mv.backdrop || mv.bgImage, url: "/ver/" + mv.id, tag: "m-" + mv.id });
+        sent += r.sent;
+        notified.push(String(mv.id));
+      }
+      if (due.length) {
+        const fresh = (await getRow(SUBS_ROW)) || { subs: [] };
+        await setRow(SUBS_ROW, { ...fresh, lastAuto: now, notified: notified.slice(-2000) });
+      }
+      return NextResponse.json({ ok: true, released: due.length, sent }, { headers: noStore });
+    }
+
+    // Cuántos dispositivos tienen la campanita activada (solo administrador)
+    if (action === "count") {
+      if (!passwordOk(b?.password)) return NextResponse.json({ error: "Clave incorrecta" }, { status: 401, headers: noStore });
+      const d = (await getRow(SUBS_ROW)) || { subs: [] };
+      return NextResponse.json({ ok: true, total: Array.isArray(d.subs) ? d.subs.length : 0 }, { headers: noStore });
     }
 
     return NextResponse.json({ error: "Acción inválida" }, { status: 400, headers: noStore });

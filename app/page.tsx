@@ -3315,10 +3315,41 @@ export default function Home() {
       }
       if (Notification.permission === "denied") { setPushState("denied"); return; }
       navigator.serviceWorker.ready
-        .then((reg) => reg.pushManager.getSubscription())
-        .then((sub) => { if (sub) setPushState("subscribed"); })
+        .then((reg) => reg.pushManager.getSubscription().then((sub) => ({ reg, sub })))
+        .then(({ reg, sub }) => {
+          if (!sub) return;
+          setPushState("subscribed");
+          // Vuelve a registrar este dispositivo en el servidor en cada visita (por si se perdió),
+          // y si las claves del servidor cambiaron, se suscribe de nuevo solo.
+          return fetch("/api/push", { cache: "no-store" })
+            .then((r) => r.json())
+            .then((d: any) => {
+              if (!d || !d.publicKey) return;
+              let same = true;
+              try {
+                const cur = sub.options && sub.options.applicationServerKey;
+                if (cur) {
+                  const a = new Uint8Array(cur as ArrayBuffer), bk = b64ToBytes(d.publicKey);
+                  same = a.length === bk.length && a.every((v, i) => v === bk[i]);
+                }
+              } catch (e) {}
+              const ready = same
+                ? Promise.resolve(sub)
+                : sub.unsubscribe().then(() => reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(d.publicKey) }));
+              return ready.then((s2: any) =>
+                fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "subscribe", sub: s2.toJSON ? s2.toJSON() : s2 }) })
+              );
+            });
+        })
         .catch(() => {});
     } catch (e) { setPushState("unsupported"); }
+  }, []);
+  // Revisa (en el servidor) si algún próximo estreno ya llegó a su fecha para avisar a todos
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "auto" }), keepalive: true }).catch(() => {}); } catch (e) {}
+    }, 6000);
+    return () => clearTimeout(t);
   }, []);
   const b64ToBytes = (b64: string) => {
     const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -3360,7 +3391,11 @@ export default function Home() {
     fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", password: pass, ...msg }) })
       .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
-        if (ok) showToast("📣 Aviso enviado a " + (d.sent || 0) + " dispositivo" + (d.sent === 1 ? "" : "s") + ".", 5000);
+        if (ok) {
+          const total = d.total || 0, sent = d.sent || 0;
+          if (!total) showToast("📣 Todavía nadie activó la campanita 🔔. Cuando alguien la active, le llegarán los avisos.", 7000);
+          else showToast("📣 Aviso enviado a " + sent + " de " + total + " dispositivo" + (total === 1 ? "" : "s") + (d.removed ? " (se limpiaron " + d.removed + " que ya no existen)" : "") + ".", 6000);
+        }
         else showToast("No se pudo enviar el aviso (" + ((d && d.error) || "error") + ").", 6000);
       })
       .catch(() => showToast("No se pudo enviar el aviso."));
