@@ -282,7 +282,24 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
 }
 
 export default function Home() {
-  const myAvatars = [
+  const myAvatars: { name: string; file: string; cv?: boolean }[] = [
+    // Avatares originales de Cineverso
+    { name: "Palomitas", file: "/avatares/cv/palomitas.svg", cv: true },
+    { name: "Claqueta", file: "/avatares/cv/claqueta.svg", cv: true },
+    { name: "Robot", file: "/avatares/cv/robot.svg", cv: true },
+    { name: "Gato 3D", file: "/avatares/cv/gato3d.svg", cv: true },
+    { name: "Dragoncito", file: "/avatares/cv/dragoncito.svg", cv: true },
+    { name: "Estrella", file: "/avatares/cv/estrella.svg", cv: true },
+    { name: "Fantasma", file: "/avatares/cv/fantasma.svg", cv: true },
+    { name: "Astronauta", file: "/avatares/cv/astronauta.svg", cv: true },
+    { name: "Búho", file: "/avatares/cv/buho.svg", cv: true },
+    { name: "Zorro", file: "/avatares/cv/zorro.svg", cv: true },
+    { name: "Pulpo", file: "/avatares/cv/pulpo.svg", cv: true },
+    { name: "Pingüino", file: "/avatares/cv/pinguino.svg", cv: true },
+    { name: "Unicornio", file: "/avatares/cv/unicornio.svg", cv: true },
+    { name: "Perrito", file: "/avatares/cv/perrito.svg", cv: true },
+    { name: "Cactus", file: "/avatares/cv/cactus.svg", cv: true },
+    { name: "Cohete", file: "/avatares/cv/cohete.svg", cv: true },
     { name: "Bebé Jefazo 1", file: "/avatares/bebe jefazo1.png" },
     { name: "Bebé Jefazo 2", file: "/avatares/bebe jefazo2.png" },
     { name: "Bebé Jefazo 3", file: "/avatares/bebe jefazo3.png" },
@@ -2979,7 +2996,7 @@ export default function Home() {
       const base = (userEmail.split("@")[0] || "Perfil").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
       let name = base ? base.charAt(0).toUpperCase() + base.slice(1, 20) : "Perfil 1";
       if (name.trim().toLowerCase() === "rey") name = "Perfil 1";
-      loaded = [{ id: "p-" + Date.now(), name, avatar: myAvatars[7].file, isKid: false, auto: true } as any];
+      loaded = [{ id: "p-" + Date.now(), name, avatar: myAvatars[0].file, isKid: false, auto: true } as any];
     }
     const active = loaded.find((p) => data && p.id === data.activeProfileId) || loaded[0];
     if (isAdminRef.current) {
@@ -3628,6 +3645,70 @@ export default function Home() {
     setNewProfilePin("");
     setNewProfileIsKid(false);
     setUsernameError("");
+  };
+
+  // ---------- Editar perfil (lápiz) ----------
+  const [editProfile, setEditProfile] = useState<Profile | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAvatar, setEditAvatar] = useState("");
+  const [editIsKid, setEditIsKid] = useState(false);
+  const [editPin, setEditPin] = useState("");
+  const [editError, setEditError] = useState("");
+  const [editConfirmDelete, setEditConfirmDelete] = useState(false);
+  const [editSearch, setEditSearch] = useState("");
+  const [whoManage, setWhoManage] = useState(false);
+  useEffect(() => {
+    if (!editProfile) return;
+    const t = setTimeout(() => {
+      const modals = document.querySelectorAll("[data-tv-modal]");
+      const scope = modals.length ? modals[modals.length - 1] : document;
+      const el = scope.querySelector("[data-autofocus]") as HTMLElement | null;
+      if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [editProfile && editProfile.id]);
+  const canEditProfile = (p: Profile) => p.id !== "invitado" && p.id !== "admin-rey";
+  const openEditProfile = (p: Profile) => {
+    if (!canEditProfile(p)) return;
+    // Un perfil Niños con PIN no puede editar perfiles sin el PIN
+    if (activeProfile.isKid && activeProfile.pinHash) { openAccountSafe(); return; }
+    setEditProfile(p);
+    setEditName(p.name);
+    setEditAvatar(p.avatar);
+    setEditIsKid(!!p.isKid);
+    setEditPin("");
+    setEditError("");
+    setEditConfirmDelete(false);
+    setEditSearch("");
+  };
+  const saveEditProfile = () => {
+    if (!editProfile) return;
+    const name = editName.trim().replace(/\s+/g, " ");
+    if (!name) { setEditError("Escribe un nombre para el perfil."); return; }
+    if (name.toLowerCase() === "rey") { setEditError("Ese nombre no está disponible."); return; }
+    if (profiles.some((x) => x.id !== editProfile.id && x.name.trim().toLowerCase() === name.toLowerCase())) { setEditError("Ya tienes un perfil con ese nombre."); return; }
+    let pinHash = editProfile.pinHash;
+    if (editIsKid) {
+      if (editPin) {
+        if (!/^\d{4}$/.test(editPin)) { setEditError("El PIN debe tener 4 números."); return; }
+        pinHash = pinHashOf(editPin);
+      } else if (!pinHash) { setEditError("El perfil Niños necesita un PIN de 4 números."); return; }
+    } else pinHash = undefined;
+    const upd: Profile = { ...editProfile, name, avatar: editAvatar || editProfile.avatar, isKid: editIsKid, pinHash };
+    delete (upd as any).auto;
+    setProfiles((list) => list.map((x) => (x.id === upd.id ? upd : x)));
+    if (activeProfile.id === upd.id) setActiveProfile(upd);
+    setEditProfile(null);
+    showToast("Perfil actualizado ✓");
+  };
+  const deleteEditProfile = () => {
+    if (!editProfile) return;
+    if (editProfile.id === activeProfile.id) { setEditError("No puedes borrar el perfil que estás usando. Cambia a otro primero."); return; }
+    if (!editConfirmDelete) { setEditConfirmDelete(true); return; }
+    const id = editProfile.id;
+    setProfiles((list) => list.filter((x) => x.id !== id));
+    setEditProfile(null);
+    showToast("Perfil eliminado");
   };
 
   const handleSelectProfile = (p: Profile) => {
@@ -4915,14 +4996,19 @@ export default function Home() {
         <div className="max-w-3xl mx-auto pt-24 px-4 sm:px-6 pb-24 space-y-8 overflow-x-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#0f0f0f] p-6 rounded-2xl border border-gray-900 gap-4">
             <div className="flex items-center gap-4">
-              <img src={activeProfile.avatar} alt={activeProfile.name} className="w-16 h-16 rounded-2xl object-cover bg-gray-900 border-2 border-green-500 shrink-0" />
+              <div className="relative shrink-0">
+                <img src={activeProfile.avatar} alt={activeProfile.name} className="w-16 h-16 rounded-2xl object-cover bg-gray-900 border-2 border-green-500" />
+                {canEditProfile(activeProfile) && (
+                  <button onClick={() => openEditProfile(activeProfile)} aria-label="Editar perfil" className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shadow-lg border-2 border-[#0f0f0f] hover:scale-110 transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                )}
+              </div>
               <div>
                 <span className="text-xs text-gray-500 uppercase font-semibold">PERFIL ACTIVO</span>
                 <h2 className="text-2xl font-bold text-white truncate max-w-[200px] sm:max-w-none">{activeProfile.name}</h2>
               </div>
             </div>
-            <button onClick={() => setShowAddProfileModal(true)} className="flex items-center justify-center gap-2 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
-              <User className="w-4 h-4" /> Cambiar perfil
+            <button onClick={() => (accountUser ? (setWhoManage(false), setShowWho(true)) : setShowAddProfileModal(true))} className="flex items-center justify-center gap-2 bg-[#181818] hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+              <User className="w-4 h-4" /> {accountUser ? "Cambiar perfil" : "Agregar perfil"}
             </button>
           </div>
 
@@ -4942,12 +5028,17 @@ export default function Home() {
                         <span className="text-sm font-bold text-white truncate">{p.name}</span>
                         {p.id === activeProfile.id && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-bold shrink-0">En uso</span>}
                       </div>
-                      <span className="text-xs text-gray-600">Estándar</span>
+                      <span className="text-xs text-gray-600">{p.isKid ? "Niños" : "Estándar"}</span>
                     </div>
                   </div>
-                  {p.id !== activeProfile.id && (
-                    <button onClick={() => handleSelectProfile(p)} className="text-xs text-emerald-400 hover:underline cursor-pointer font-bold shrink-0 ml-2 focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cambiar</button>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    {p.id !== activeProfile.id && (
+                      <button onClick={() => handleSelectProfile(p)} className="text-xs text-emerald-400 hover:underline cursor-pointer font-bold focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-2 py-1">Cambiar</button>
+                    )}
+                    {canEditProfile(p) && (
+                      <button onClick={() => openEditProfile(p)} aria-label={"Editar " + p.name} className="w-9 h-9 rounded-full bg-[#181818] hover:bg-white hover:text-black text-gray-300 border border-gray-800 flex items-center justify-center transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                    )}
+                  </div>
                 </div>
               ))}
 
@@ -5824,15 +5915,108 @@ export default function Home() {
         </div>
       )}
 
+      {/* EDITAR PERFIL */}
+      {editProfile && (
+        <div data-tv-modal className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" onClick={(e) => { if (e.target === e.currentTarget) setEditProfile(null); }}>
+          <div className="bg-[#0c0c0c] border border-gray-800 w-full max-w-2xl rounded-2xl p-5 sm:p-8 my-4 space-y-6 shadow-2xl" style={{ animation: "cvFade .25s ease-out both" }}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl sm:text-3xl font-black text-white">Editar perfil</h3>
+              <button data-close-on-back onClick={() => setEditProfile(null)} aria-label="Cerrar" className="w-10 h-10 rounded-full bg-[#181818] text-gray-300 hover:text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+              <div className="relative shrink-0">
+                <img src={editAvatar} alt="" className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl object-cover bg-gray-900 border-4 border-white/10" />
+                {editIsKid && <span className="absolute bottom-1 left-1 right-1 text-center text-[10px] font-black text-black bg-yellow-400 rounded">NIÑOS</span>}
+              </div>
+              <div className="flex-1 w-full space-y-4">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1.5">Nombre del perfil</label>
+                  <input
+                    type="text"
+                    maxLength={20}
+                    value={editName}
+                    onChange={(e) => { setEditName(e.target.value); setEditError(""); }}
+                    className="w-full bg-[#121212] border border-gray-800 rounded-xl px-4 py-3 text-base font-bold text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <span className="block text-right text-[10px] text-gray-600 mt-1">{editName.length}/20</span>
+                </div>
+                <div className="bg-[#121212] border border-gray-800 rounded-xl p-3 space-y-3">
+                  <label className="flex items-center justify-between cursor-pointer gap-3">
+                    <span>
+                      <span className="block text-sm font-bold text-white">Perfil Niños</span>
+                      <span className="block text-[11px] text-gray-400">Solo muestra la categoría Animación.</span>
+                    </span>
+                    <input type="checkbox" checked={editIsKid} onChange={(e) => { setEditIsKid(e.target.checked); setEditError(""); }} className="w-5 h-5 accent-green-500 cursor-pointer shrink-0" />
+                  </label>
+                  {editIsKid && (
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">{editProfile.pinHash ? "PIN nuevo (déjalo vacío para no cambiarlo)" : "PIN de 4 números (se pedirá para salir del perfil Niños)"}</label>
+                      <input type="password" inputMode="numeric" maxLength={4} placeholder="••••" value={editPin} onChange={(e) => { setEditPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 4)); setEditError(""); }} className="w-40 bg-[#050505] border border-gray-800 rounded-xl px-4 py-2.5 text-lg tracking-[0.5em] text-center text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-bold text-white">Elige una imagen</label>
+                <input type="text" placeholder="Buscar..." value={editSearch} onChange={(e) => setEditSearch(e.target.value)} className="w-36 sm:w-48 bg-[#121212] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              {[
+                { title: "Cineverso", items: myAvatars.filter((a) => a.cv) },
+                { title: "Más avatares", items: myAvatars.filter((a) => !a.cv) },
+              ].map((sec) => {
+                const items = sec.items.filter((a) => a.name.toLowerCase().includes(editSearch.toLowerCase()));
+                if (!items.length) return null;
+                return (
+                  <div key={sec.title}>
+                    <p className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mb-2">{sec.title}</p>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-3">
+                      {items.map((a) => (
+                        <button
+                          key={a.file}
+                          type="button"
+                          onClick={() => setEditAvatar(a.file)}
+                          aria-label={a.name}
+                          title={a.name}
+                          className={"relative aspect-square rounded-xl overflow-hidden border-4 transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (editAvatar === a.file ? "border-green-500 scale-105" : "border-transparent hover:border-white/60")}
+                        >
+                          <img src={a.file} alt="" loading="lazy" className="w-full h-full object-cover bg-gray-900" />
+                          {editAvatar === a.file && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 text-black text-[11px] font-black flex items-center justify-center">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {editError && <p className="text-xs text-red-400 font-bold">{editError}</p>}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+              {editProfile.id !== activeProfile.id && (
+                <button onClick={deleteEditProfile} className={"sm:mr-auto px-5 py-3 rounded-xl text-sm font-bold border transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (editConfirmDelete ? "bg-red-600 border-red-600 text-white" : "border-red-900 text-red-400 hover:bg-red-950/40")}>
+                  {editConfirmDelete ? "¿Seguro? Toca otra vez para borrar" : "Borrar perfil"}
+                </button>
+              )}
+              <button onClick={() => setEditProfile(null)} className="px-6 py-3 rounded-xl text-sm font-bold border border-gray-700 text-gray-300 hover:text-white cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Cancelar</button>
+              <button data-autofocus onClick={saveEditProfile} className="px-8 py-3 rounded-xl text-sm font-black bg-white text-black hover:bg-gray-200 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ¿QUIÉN ESTÁ VIENDO? */}
       {showWho && accountUser && (
         <div data-tv-modal className="fixed inset-0 z-[65] bg-[#050505] flex flex-col items-center justify-center p-6 overflow-y-auto">
-          <h2 className="text-3xl sm:text-5xl font-black text-white mb-10 text-center">¿Quién está viendo?</h2>
+          <h2 className="text-3xl sm:text-5xl font-black text-white mb-10 text-center">{whoManage ? "Administrar perfiles" : "¿Quién está viendo?"}</h2>
           <div className="flex flex-wrap justify-center gap-6 sm:gap-10 max-w-4xl">
             {profiles.filter((p) => p.id !== "invitado").map((p) => (
               <div
                 key={"who-" + p.id}
-                onClick={() => requestProfileSwitch(p)}
+                onClick={() => (whoManage ? openEditProfile(p) : requestProfileSwitch(p))}
                 tabIndex={0}
                 data-autofocus={p.id === activeProfile.id ? true : undefined}
                 className="group flex flex-col items-center cursor-pointer rounded-2xl p-2 focus:outline-none focus:ring-4 focus:ring-green-500"
@@ -5841,6 +6025,11 @@ export default function Home() {
                 <div className="relative rounded-2xl overflow-hidden border-4 border-transparent group-hover:border-white bg-gray-900" style={{ width: 120, height: 120 }}>
                   <img src={p.avatar} alt={p.name} className="w-full h-full object-cover object-top" />
                   {p.isKid && <span className="absolute bottom-1 left-1 right-1 text-center text-[10px] font-black text-black bg-yellow-400 rounded">NIÑOS</span>}
+                  {whoManage && canEditProfile(p) && (
+                    <div className="absolute inset-0 bg-black/55 flex items-center justify-center">
+                      <span className="w-12 h-12 rounded-full border-2 border-white text-white flex items-center justify-center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                    </div>
+                  )}
                 </div>
                 <span className="mt-3 text-sm sm:text-base text-gray-300 group-hover:text-white font-semibold truncate max-w-full">{p.name}</span>
                 {p.isKid && p.pinHash && <Lock className="w-3.5 h-3.5 text-gray-500 mt-1" />}
@@ -5860,12 +6049,25 @@ export default function Home() {
               </div>
             )}
           </div>
-          <button
-            onClick={openAccountSafe}
-            className="mt-12 px-6 py-2.5 border border-gray-600 text-gray-300 hover:text-white hover:border-white text-sm font-bold tracking-wider uppercase rounded-lg cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
-          >
-            Administrar perfiles
-          </button>
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => {
+                if (!whoManage && activeProfile.isKid && activeProfile.pinHash) { openAccountSafe(); return; }
+                setWhoManage(!whoManage);
+              }}
+              className={"px-6 py-2.5 border text-sm font-bold tracking-wider uppercase rounded-lg cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (whoManage ? "bg-white text-black border-white" : "border-gray-600 text-gray-300 hover:text-white hover:border-white")}
+            >
+              {whoManage ? "Listo" : "✏️ Administrar perfiles"}
+            </button>
+            {!whoManage && (
+              <button
+                onClick={openAccountSafe}
+                className="px-6 py-2.5 text-gray-400 hover:text-white text-sm font-bold rounded-lg cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
+              >
+                Cuenta y ajustes
+              </button>
+            )}
+          </div>
         </div>
       )}
 
