@@ -2967,11 +2967,19 @@ export default function Home() {
               p.id !== "admin-rey" && p.id !== "invitado" && p.name.trim().toLowerCase() !== "rey"
           )
         : [];
-    if (!loaded.length) {
+    // Administrador: su perfil es "Rey"; no se crea (ni se muestra) el perfil automático con el nombre del correo
+    const autoName = (() => {
+      const b0 = (userEmail.split("@")[0] || "").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
+      return b0 ? b0.charAt(0).toUpperCase() + b0.slice(1, 20) : "";
+    })();
+    if (isAdminRef.current) {
+      loaded = loaded.filter((p) => !(p as any).auto && !(loaded.length === 1 && p.name === autoName));
+    }
+    if (!loaded.length && !isAdminRef.current) {
       const base = (userEmail.split("@")[0] || "Perfil").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
       let name = base ? base.charAt(0).toUpperCase() + base.slice(1, 20) : "Perfil 1";
       if (name.trim().toLowerCase() === "rey") name = "Perfil 1";
-      loaded = [{ id: "p-" + Date.now(), name, avatar: myAvatars[7].file, isKid: false }];
+      loaded = [{ id: "p-" + Date.now(), name, avatar: myAvatars[7].file, isKid: false, auto: true } as any];
     }
     const active = loaded.find((p) => data && p.id === data.activeProfileId) || loaded[0];
     if (isAdminRef.current) {
@@ -3037,7 +3045,7 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [profiles, activeProfile, myList, continueWatchingList, ratings, notifSeen, accountUser, accountLoaded]);
 
-  const onLoggedIn = (d: any, isNew?: boolean) => {
+  const onLoggedIn = (d: any, isNew?: boolean, isReset?: boolean) => {
     setAccountUser(d.user);
     setIsGuest(false);
     setRegisterStep("form");
@@ -3052,7 +3060,11 @@ export default function Home() {
     setSelectedMovie(null);
     setActiveTab("inicio");
     try { window.scrollTo(0, 0); } catch (e) {}
-    if (isNew) {
+    if (isReset) {
+      // Solo cambió la contraseña: sigue con la misma cuenta y el mismo perfil de antes
+      try { sessionStorage.setItem("cv_who", "1"); } catch (e) {}
+      showToast("¡Contraseña cambiada! Entraste con tu misma cuenta. 🔐", 5000);
+    } else if (isNew) {
       // Cuenta recién creada: entra directo con su perfil
       try { sessionStorage.setItem("cv_who", "1"); } catch (e) {}
       const base = ((d.user.email || email).split("@")[0] || "").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
@@ -3168,8 +3180,7 @@ export default function Home() {
         if (ok && d.user) {
           setNewPass("");
           setResetTokens(null);
-          showToast("¡Contraseña cambiada! Ya iniciaste sesión. 🔐", 5000);
-          onLoggedIn(d);
+          onLoggedIn(d, false, true);
         } else setAuthError((d && d.error) || "No se pudo cambiar la contraseña.");
       })
       .catch(() => { setAuthBusy(false); setAuthError("Sin conexión con el servidor."); });
