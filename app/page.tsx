@@ -3032,7 +3032,7 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [profiles, activeProfile, myList, continueWatchingList, ratings, notifSeen, accountUser, accountLoaded]);
 
-  const onLoggedIn = (d: any) => {
+  const onLoggedIn = (d: any, isNew?: boolean) => {
     setAccountUser(d.user);
     setIsGuest(false);
     setRegisterStep("form");
@@ -3041,7 +3041,20 @@ export default function Home() {
     setAuthError("");
     applyAccountData(d.data, d.user.email || email);
     setAccountLoaded(true);
-    showToast("¡Sesión iniciada! Tus datos se guardarán en todos tus dispositivos.");
+    // Sale de la pantalla de cuenta y entra a la web con su perfil (ya no como Invitado)
+    setSelectedMovie(null);
+    setActiveTab("inicio");
+    try { window.scrollTo(0, 0); } catch (e) {}
+    if (isNew) {
+      // Cuenta recién creada: entra directo con su perfil
+      try { sessionStorage.setItem("cv_who", "1"); } catch (e) {}
+      const base = ((d.user.email || email).split("@")[0] || "").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
+      showToast("¡Bienvenido" + (base ? ", " + base.charAt(0).toUpperCase() + base.slice(1, 20) : "") + "! Tu cuenta está lista. 🍿", 5000);
+    } else {
+      // Cuenta existente: pregunta "¿Quién está viendo?"
+      try { sessionStorage.removeItem("cv_who"); } catch (e) {}
+      showToast("¡Sesión iniciada! Tus datos se guardarán en todos tus dispositivos.");
+    }
   };
 
   const handleAuthSubmit = (e: React.FormEvent) => {
@@ -3079,7 +3092,7 @@ export default function Home() {
     postAccount({ action: "verify", email, code: inputCode })
       .then(({ ok, d }) => {
         setAuthBusy(false);
-        if (ok && d.user) onLoggedIn(d);
+        if (ok && d.user) onLoggedIn(d, !(d.data && Array.isArray(d.data.profiles) && d.data.profiles.length));
         else setAuthError((d && d.error) || "Código incorrecto.");
       })
       .catch(() => {
