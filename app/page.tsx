@@ -237,6 +237,18 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
   const ref = useRef<HTMLIFrameElement | null>(null);
   const cb = useRef(onReady);
   cb.current = onReady;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const cmd = (func: string, args: any[] = []) => {
+    const w = ref.current && ref.current.contentWindow;
+    if (!w) return;
+    try { w.postMessage(JSON.stringify({ event: "command", func, args, id: 1, channel: "widget" }), "*"); } catch (err) {}
+  };
+  // Activar o quitar el sonido SIN recargar el video (así sigue reproduciéndose)
+  useEffect(() => {
+    if (muted) cmd("mute");
+    else { cmd("unMute"); cmd("setVolume", [100]); cmd("playVideo"); }
+  }, [muted]);
   useEffect(() => {
     let timer: any = null;
     let last = -9;
@@ -244,7 +256,11 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
       if (st === last) return;
       last = st;
       if (st === 1) {
+        if (!mutedRef.current) { cmd("unMute"); cmd("setVolume", [100]); }
         if (!timer) timer = setTimeout(() => { timer = null; cb.current(true); }, 2600);
+      } else if (st === 2 && !mutedRef.current) {
+        // El navegador pausó al activar el sonido: vuelve a darle play
+        cmd("playVideo");
       } else if (st !== 3) {
         if (timer) { clearTimeout(timer); timer = null; }
         cb.current(false);
@@ -261,7 +277,7 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
     };
     window.addEventListener("message", onMsg);
     return () => { window.removeEventListener("message", onMsg); if (timer) clearTimeout(timer); cb.current(false); };
-  }, [vid, muted]);
+  }, [vid]);
   const ping = () => {
     const w = ref.current && ref.current.contentWindow;
     if (!w) return;
@@ -274,7 +290,7 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
   return (
     <iframe
       ref={ref}
-      src={"https://www.youtube.com/embed/" + vid + "?autoplay=1&mute=" + (muted ? 1 : 0) + "&controls=0&disablekb=1&fs=0&loop=1&playlist=" + vid + "&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=" + origin}
+      src={"https://www.youtube.com/embed/" + vid + "?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&loop=1&playlist=" + vid + "&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3&enablejsapi=1&origin=" + origin}
       title={title}
       allow="autoplay; encrypted-media"
       tabIndex={-1}
@@ -2150,6 +2166,8 @@ export default function Home() {
   const [heroTrailerOn, setHeroTrailerOn] = useState(false);
   const [heroTrailerReady, setHeroTrailerReady] = useState(false);
   const [heroMuted, setHeroMuted] = useState(true);
+  const heroMutedRef = useRef(true);
+  heroMutedRef.current = heroMuted;
   const heroMovie: Movie = heroList[heroIndex % Math.max(1, heroList.length)] || catalog[0] || customMovies[0] || {
     id: 101,
     title: "APOCALYPSE Z",
@@ -2835,7 +2853,7 @@ export default function Home() {
     if (document.documentElement.classList.contains("tv-legacy")) return;
     const t = setTimeout(() => setHeroTrailerOn(true), 2000);
     // YouTube no avisa cuando termina: pasamos a la siguiente a los 45 s
-    const t2 = youtubeId(heroMovie.trailerUrl) ? setTimeout(() => { setHeroTrailerOn(false); setHeroIndex((i) => i + 1); }, 47000) : null;
+    const t2 = youtubeId(heroMovie.trailerUrl) ? setTimeout(() => { if (!heroMutedRef.current) return; setHeroTrailerOn(false); setHeroIndex((i) => i + 1); }, 47000) : null;
     return () => { clearTimeout(t); if (t2) clearTimeout(t2); };
   }, [heroMovie.id, heroMovie.trailerUrl, activeTab, selectedMovie, dataSaver]);
 
@@ -4245,7 +4263,7 @@ export default function Home() {
                   <YtBg
                     key={"yt-" + heroMovie.id}
                     vid={youtubeId(heroMovie.trailerUrl)}
-                    muted={true}
+                    muted={heroMuted}
                     title={"Tráiler de " + heroMovie.title}
                     onReady={setHeroTrailerReady}
                     style={{ position: "absolute", top: "50%", left: "50%", width: "177.78vh", minWidth: "100%", height: "56.25vw", minHeight: "100%", transform: "translate(-50%,-50%) scale(1.36)", border: 0, pointerEvents: "none", opacity: heroTrailerReady ? 1 : 0, transition: "opacity .8s" }}
@@ -4256,6 +4274,7 @@ export default function Home() {
                     src={heroMovie.trailerUrl}
                     autoPlay
                     muted={heroMuted}
+                    ref={(v) => { if (v && v.muted !== heroMuted) { v.muted = heroMuted; if (!heroMuted) { v.volume = 1; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); } } }}
                     playsInline
                     preload="auto"
                     tabIndex={-1}
@@ -4310,7 +4329,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              {heroTrailerOn && heroTrailerReady && heroMovie.trailerUrl && !youtubeId(heroMovie.trailerUrl) && (
+              {heroTrailerOn && heroTrailerReady && heroMovie.trailerUrl && (
                 <button
                   onClick={() => setHeroMuted((m) => !m)}
                   aria-label={heroMuted ? "Activar sonido del tráiler" : "Silenciar tráiler"}
@@ -5667,7 +5686,7 @@ export default function Home() {
               {modalTrailerOn && selectedMovie.trailerUrl && (
                 youtubeId(selectedMovie.trailerUrl) ? (
                   <YtBg
-                    key={"myt-" + selectedMovie.id + "-" + (modalMuted ? "m" : "s")}
+                    key={"myt-" + selectedMovie.id}
                     vid={youtubeId(selectedMovie.trailerUrl)}
                     muted={modalMuted}
                     title={"Tráiler de " + selectedMovie.title}
@@ -5680,6 +5699,7 @@ export default function Home() {
                     src={selectedMovie.trailerUrl}
                     autoPlay
                     muted={modalMuted}
+                    ref={(v) => { if (v && v.muted !== modalMuted) { v.muted = modalMuted; if (!modalMuted) { v.volume = 1; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); } } }}
                     playsInline
                     loop
                     preload="auto"
