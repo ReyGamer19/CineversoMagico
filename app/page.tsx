@@ -2956,6 +2956,7 @@ export default function Home() {
             : m.genres && m.genres.length ? (m.genres.indexOf(newMovieCategory) === -1 ? [newMovieCategory].concat(m.genres.filter((g) => g !== m.tag)) : m.genres) : [newMovieCategory]
         };
         saveChange({ type: "upsert", movie: updated }, m.comingSoon && !comingFinal ? "¡Estrenada! Ya aparece con las demás películas." : "¡Contenido actualizado!");
+        if (!updated.comingSoon) fulfillRequestsFor(updated);
         if (notifyAll) {
           if (m.comingSoon && !comingFinal) sendPush({ title: "¡Ya disponible! 🍿", body: updated.title + " ya se puede ver en Cineverso Mágico.", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
           else if (!m.comingSoon && comingFinal) sendPush({ title: "Próximo estreno 🎬", body: updated.title + " llega el " + fmtRelease(updated.releaseDate) + ".", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
@@ -2994,6 +2995,7 @@ export default function Home() {
       };
 
       saveChange({ type: "upsert", movie: createdMovie }, "¡Película agregada!");
+      if (!createdMovie.comingSoon) fulfillRequestsFor(createdMovie);
       if (notifyAll) {
         const img = createdMovie.backdrop || createdMovie.bgImage;
         if (createdMovie.comingSoon) sendPush({ title: "Próximo estreno 🎬", body: createdMovie.title + " llega el " + fmtRelease(createdMovie.releaseDate) + ".", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id });
@@ -3760,6 +3762,43 @@ export default function Home() {
       .then((r) => r.json()).then((d: any) => { if (d && Array.isArray(d.items)) setAdminReqs(d.items); }).catch(() => {});
   };
   useEffect(() => { if (activeTab === "admin" && isAdmin) adminReqCall("list"); }, [activeTab, isAdmin]);
+  const [showDoneReqs, setShowDoneReqs] = useState(false);
+  const normT = (t: string) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const titleMatches = (a: string, b: string) => {
+    const x = normT(a), y = normT(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    return Math.min(x.length, y.length) >= 4 && (x.indexOf(y) !== -1 || y.indexOf(x) !== -1);
+  };
+  // Mensaje del administrador en el chat
+  const chatAdminPost = (text: string) => {
+    let password = "";
+    try { password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!password) return;
+    fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", password, text, name: "Cineverso", avatar: "/avatares/cv/palomitas.svg" }) })
+      .then((r) => r.json()).then((d: any) => { if (d && d.last) setChatMsgs((prev) => (prev.some((m) => m.id === d.last.id) ? prev : prev.concat(d.last))); }).catch(() => {});
+  };
+  const announceRequests = (reqs: { profile: string; title: string }[], mv?: Movie) => {
+    if (!reqs.length) return;
+    const names = Array.from(new Set(reqs.map((r) => r.profile).filter(Boolean))).slice(0, 4);
+    const title = mv ? mv.title : reqs[0].title;
+    const link = mv ? " Míralo aquí: " + window.location.origin + "/ver/" + mv.id : "";
+    chatAdminPost("🍿 ¡Ya está disponible «" + title + "»!" + (names.length ? " Gracias " + names.join(", ") + " por pedirla." : "") + link);
+  };
+  // Marca como atendidos los pedidos que coinciden con una película recién subida y lo anuncia en el chat
+  const fulfillRequestsFor = (mv: Movie) => {
+    const hits = adminReqs.filter((r) => r.status === "nueva" && titleMatches(r.title, mv.title));
+    if (!hits.length) return;
+    hits.forEach((r) => adminReqCall("status", { id: r.id, status: "agregada", reply: "¡Ya está disponible! 🍿" }));
+    announceRequests(hits, mv);
+    showToast("📬 " + hits.length + " pedido" + (hits.length === 1 ? "" : "s") + " atendido" + (hits.length === 1 ? "" : "s") + " y anunciado" + (hits.length === 1 ? "" : "s") + " en el chat.", 6000);
+  };
+  const markReqDone = (r: { id: string; profile: string; title: string }) => {
+    adminReqCall("status", { id: r.id, status: "agregada", reply: "¡Ya está disponible! 🍿" });
+    const mv = catalogAll.find((x) => !x.comingSoon && titleMatches(x.title, r.title));
+    announceRequests([r], mv);
+    showToast("✔ Pedido atendido y anunciado en el chat.");
+  };
 
   // ---------- Agregar varias películas a la vez ----------
   type BulkItem = { line: string; title: string; url: string; status: "pendiente" | "buscando" | "listo" | "sin-datos"; include: boolean; movie?: Movie };
@@ -3823,6 +3862,7 @@ export default function Home() {
   const saveBulk = () => {
     const movies = bulkItems.filter((x) => x.include && x.movie).map((x) => x.movie as Movie);
     if (!movies.length) { showToast("No hay películas marcadas para agregar."); return; }
+    movies.forEach((mv) => fulfillRequestsFor(mv));
     saveChange({ type: "upsertMany", movies }, "¡" + movies.length + " película" + (movies.length === 1 ? "" : "s") + " agregada" + (movies.length === 1 ? "" : "s") + "!");
     if (bulkNotify) {
       const first = movies[0];
@@ -5069,13 +5109,20 @@ export default function Home() {
           <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="text-lg font-bold text-white">📬 Pedidos de usuarios {adminReqs.filter((r) => r.status === "nueva").length > 0 && <span className="ml-1 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full align-middle">{adminReqs.filter((r) => r.status === "nueva").length} nuevos</span>}</h3>
+              <div className="flex gap-2">
+              {adminReqs.some((r) => r.status !== "nueva") && (
+                <button onClick={() => setShowDoneReqs(!showDoneReqs)} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">{showDoneReqs ? "Ocultar atendidos" : "Ver atendidos (" + adminReqs.filter((r) => r.status !== "nueva").length + ")"}</button>
+              )}
               <button onClick={() => adminReqCall("list")} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
+              </div>
             </div>
-            {adminReqs.length === 0 ? (
+            {adminReqs.filter((r) => showDoneReqs || r.status === "nueva").length === 0 ? (
+              <p className="text-xs text-gray-500">{adminReqs.length ? "✅ No hay pedidos pendientes." : ""} Cuando subas una película que alguien pidió, el pedido se marca solo como atendido y se anuncia en el chat.</p>
+            ) : false ? (
               <p className="text-xs text-gray-500">Todavía no hay pedidos. Los usuarios pueden pedir desde Cuenta → Pedir una película.</p>
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {adminReqs.map((r) => (
+                {adminReqs.filter((r) => showDoneReqs || r.status === "nueva").map((r) => (
                   <div key={r.id} className={"rounded-xl border px-3 py-2.5 " + (r.status === "nueva" ? "bg-yellow-500/5 border-yellow-700/40" : "bg-[#050505] border-gray-900")}>
                     <div className="flex items-start gap-3 flex-wrap">
                       <div className="flex-1 min-w-[180px]">
@@ -5084,7 +5131,7 @@ export default function Home() {
                         <p className="text-[10px] text-gray-500 mt-0.5">{r.profile || "—"} · {r.email} · {fmtChatTime(r.at)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <button onClick={() => adminReqCall("status", { id: r.id, status: "agregada", reply: "¡Ya está disponible! 🍿" })} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "agregada" ? "bg-green-500 text-black" : "bg-[#181818] text-green-400 border border-gray-800")}>✔ Agregada</button>
+                        <button onClick={() => markReqDone(r)} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "agregada" ? "bg-green-500 text-black" : "bg-[#181818] text-green-400 border border-gray-800")}>✔ Agregada</button>
                         <button onClick={() => adminReqCall("status", { id: r.id, status: "rechazada", reply: "Por ahora no está disponible." })} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "rechazada" ? "bg-red-600 text-white" : "bg-[#181818] text-red-400 border border-gray-800")}>✖ No disponible</button>
                         <button onClick={() => adminReqCall("delete", { id: r.id })} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer bg-[#181818] text-gray-400 border border-gray-800">Borrar</button>
                       </div>
@@ -6692,7 +6739,21 @@ export default function Home() {
                     {m.admin && <span className="text-[9px] font-black bg-green-500 text-black px-1.5 rounded">ADMIN</span>}
                     <span className="ml-auto text-[10px] text-gray-500 shrink-0">{fmtChatTime(m.at)}</span>
                   </div>
-                  <p className="text-[13px] text-gray-200 leading-snug break-words whitespace-pre-wrap">{m.text}</p>
+                  {(() => {
+                    const mm = /https?:\/\/\S+\/ver\/(\d+)/.exec(m.text);
+                    const mv = mm ? catalogAll.find((x) => String(x.id) === mm[1]) : undefined;
+                    return (
+                      <>
+                        <p className="text-[13px] text-gray-200 leading-snug break-words whitespace-pre-wrap">{mm ? m.text.replace(mm[0], "").replace(/Míralo aquí:\s*$/, "").trim() : m.text}</p>
+                        {mv && (
+                          <button onClick={() => { setChatOpen(false); setSelectedMovie(mv); }} className="mt-1.5 flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-gray-800 rounded-xl p-1.5 pr-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                            <img src={mv.bgImage} alt="" className="w-8 h-11 rounded object-cover bg-gray-900" />
+                            <span className="text-xs font-bold text-white">▶ Ver ahora</span>
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                   {isAdmin && (
                     <div className="flex gap-3 mt-1 opacity-60 group-hover:opacity-100">
                       <button onClick={() => chatAdmin("delete", { id: m.id })} className="text-[10px] text-red-400 hover:underline cursor-pointer">Borrar</button>
