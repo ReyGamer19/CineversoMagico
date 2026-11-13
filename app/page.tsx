@@ -211,6 +211,7 @@ html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
 const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}" +
   // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
+  "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
@@ -3184,6 +3185,7 @@ export default function Home() {
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [accountLoaded, setAccountLoaded] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [accountChecked, setAccountChecked] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [ratings, setRatings] = useState<Record<string, number>>({});
@@ -3253,6 +3255,7 @@ export default function Home() {
           applyAccountData(d.data, d.user.email || "");
           setAccountLoaded(true);
         }
+        setAccountChecked(true);
       });
   }, []);
 
@@ -3608,6 +3611,38 @@ export default function Home() {
       })
       .catch((e: any) => { if (!e || e.message !== "no") showToast("No se pudieron activar los avisos en este dispositivo."); });
   };
+  // ---------- Bienvenida (solo la primera vez, para quien no tiene sesión) ----------
+  const [onboard, setOnboard] = useState(false);
+  const [onboardStep, setOnboardStep] = useState(0);
+  const onboardTouch = useRef(0);
+  useEffect(() => {
+    if (!accountChecked || showSplash || accountUser || isAdmin) return;
+    try {
+      if (localStorage.getItem("cv_onboard_done")) return;
+      const q = window.location.search;
+      if (/[?&](ver|admin|sala)\b/.test(q)) return;
+    } catch (e) { return; }
+    setOnboardStep(0);
+    setOnboard(true);
+  }, [accountChecked, showSplash, accountUser, isAdmin]);
+  const closeOnboard = (goLogin: boolean) => {
+    try { localStorage.setItem("cv_onboard_done", "1"); } catch (e) {}
+    setOnboard(false);
+    if (goLogin) {
+      setActiveTab("cuenta");
+      setAuthMode("register");
+      try { window.scrollTo(0, 0); } catch (e) {}
+    }
+  };
+  useEffect(() => {
+    if (!onboard) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector("[data-onboard] [data-autofocus]") as HTMLElement | null;
+      if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [onboard, onboardStep]);
+
   // ---------- Chat de la comunidad ----------
   type ChatMsg = { id: string; at: number; uid: string; name: string; avatar: string; text: string; admin?: boolean };
   const [chatOpen, setChatOpen] = useState(false);
@@ -6702,6 +6737,129 @@ export default function Home() {
           </form>
         </div>
       )}
+
+      {/* BIENVENIDA */}
+      {onboard && (() => {
+        const slides = [
+          {
+            kicker: "Bienvenido", accent: "#22c55e", glow: "rgba(34,197,94,.35)",
+            title: <>Tu cine, en <span className="cv-ob-grad">todas tus pantallas</span></>,
+            text: "Películas, series y TV en vivo, listas para ver donde estés.",
+            bullets: ["Estrenos y clásicos en un solo lugar", "Celular, computadora y Smart TV", "Sin instalar nada: entra y mira"],
+            badge: <div className="cv-ob-card"><span className="text-2xl">🎬</span><div><p className="text-[11px] text-gray-400 leading-none mb-1">Cineverso</p><p className="text-sm font-bold text-white leading-none">Nuevos títulos cada semana</p></div></div>,
+          },
+          {
+            kicker: "Tu cuenta", accent: "#38bdf8", glow: "rgba(56,189,248,.32)",
+            title: <>Tu progreso, <span className="cv-ob-grad">siempre a salvo</span></>,
+            text: "Crea tu cuenta gratis y todo se guarda solo, en todos tus dispositivos.",
+            bullets: ["Mi Lista siempre contigo", "Sigue justo donde te quedaste", "Como invitado no se guarda nada al cerrar"],
+            badge: <div className="cv-ob-card"><span className="text-2xl">☁️</span><div className="min-w-[150px]"><p className="text-[11px] text-gray-400 leading-none mb-1.5">Seguir viendo · 1:12:30</p><div className="h-1.5 rounded-full bg-white/15 overflow-hidden"><div className="h-full w-2/3 rounded-full" style={{ background: "#38bdf8" }} /></div></div></div>,
+          },
+          {
+            kicker: "Perfiles", accent: "#f472b6", glow: "rgba(244,114,182,.30)",
+            title: <>Un perfil para <span className="cv-ob-grad">cada quien</span></>,
+            text: "Cada persona con su lista, sus recomendaciones y su avatar.",
+            bullets: ["Hasta 5 perfiles por cuenta", "Avatares originales de Cineverso", "Perfil Niños protegido con PIN"],
+            badge: <div className="cv-ob-card"><div className="flex -space-x-3">{["zorro", "gato3d", "robot", "unicornio"].map((a) => <img key={a} src={"/avatares/cv/" + a + ".svg"} alt="" className="w-9 h-9 rounded-xl border-2 border-[#111]" />)}</div><p className="text-sm font-bold text-white">¿Quién está viendo?</p></div>,
+          },
+          {
+            kicker: "Comunidad", accent: "#facc15", glow: "rgba(250,204,21,.28)",
+            title: <>Que no se te <span className="cv-ob-grad">escape nada</span></>,
+            text: "Activa la campanita y entérate primero de cada estreno.",
+            bullets: ["Avisos de estrenos con la 🔔", "Pide la película que falta", "Conversa en el chat de la comunidad"],
+            badge: <div className="cv-ob-card"><span className="w-9 h-9 rounded-xl bg-green-500 flex items-center justify-center text-black font-black text-sm">CV</span><div><p className="text-[11px] text-gray-400 leading-none mb-1">ahora · Cineverso Mágico</p><p className="text-sm font-bold text-white leading-none">¡Ya disponible! 🍿</p></div></div>,
+          },
+        ];
+        const last = slides.length - 1;
+        const sl = slides[onboardStep];
+        const next = () => setOnboardStep((n) => Math.min(last, n + 1));
+        const prev = () => setOnboardStep((n) => Math.max(0, n - 1));
+        const pics = catalogAll.filter((m) => m.bgImage && !/unsplash/.test(m.bgImage)).map((m) => m.bgImage);
+        const pool = pics.length >= 6 ? pics : pics.concat(myAvatars.filter((a) => a.cv).map((a) => a.file));
+        const cols = [0, 1, 2, 3].map((c) => {
+          const col = pool.filter((_, k) => k % 4 === c);
+          const base = col.length ? col : pool;
+          const list = base.concat(base, base).slice(0, 8);
+          return list.concat(list);
+        });
+        return (
+          <div
+            data-tv-modal
+            data-onboard
+            className="fixed inset-0 z-[90] bg-[#050505] flex flex-col lg:flex-row overflow-hidden select-none"
+            style={{ ["--ob" as any]: sl.accent, ["--obg" as any]: sl.glow, paddingTop: "env(safe-area-inset-top, 0px)" }}
+            onTouchStart={(e) => { onboardTouch.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => { const dx = e.changedTouches[0].clientX - onboardTouch.current; if (dx < -50) next(); else if (dx > 50) prev(); }}
+            onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); next(); } else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); } }}
+          >
+            {/* Muro de pósters del catálogo */}
+            <div className="relative h-[38vh] sm:h-[44vh] lg:h-full lg:w-[54%] overflow-hidden shrink-0">
+              <div className="absolute inset-[-20%] flex gap-3 sm:gap-4 justify-center" style={{ transform: "rotate(-9deg)" }}>
+                {cols.map((col, c) => (
+                  <div key={"obc-" + c} className="flex flex-col gap-3 sm:gap-4 w-[26%] lg:w-[22%]" style={{ animation: "cvWall " + (38 + c * 7) + "s linear infinite", animationDirection: c % 2 ? "reverse" : "normal" }}>
+                    {col.map((src, k) => <img key={"obp-" + c + "-" + k} src={src} alt="" loading="lazy" className="w-full aspect-[2/3] object-cover rounded-xl sm:rounded-2xl bg-gray-900 opacity-80" />)}
+                  </div>
+                ))}
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-b lg:bg-gradient-to-r from-transparent via-[#050505]/40 to-[#050505]" />
+              <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-b from-[#050505]/0 via-transparent to-[#050505]/70" />
+              <div className="absolute inset-0 transition-all duration-700" style={{ background: "radial-gradient(circle at 50% 60%, var(--obg) 0%, transparent 55%)", mixBlendMode: "screen" }} />
+              <div key={"obb-" + onboardStep} className="absolute left-1/2 bottom-6 lg:bottom-auto lg:top-1/2 -translate-x-1/2 lg:-translate-y-1/2" style={{ animation: "cvObPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>{sl.badge}</div>
+            </div>
+
+            {/* Texto */}
+            <div className="relative flex-1 flex flex-col px-6 sm:px-12 lg:px-16 xl:px-24 pb-6 lg:py-10 min-h-0" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
+              <div className="hidden lg:flex items-center justify-between">
+                <div className="flex items-center gap-2"><span className="w-9 h-9 rounded-xl bg-green-500 text-black font-black text-sm flex items-center justify-center">CV</span><span className="font-black text-white tracking-tight">Cineverso Mágico</span></div>
+                {onboardStep < last && <button onClick={() => closeOnboard(false)} className="text-sm font-bold text-gray-400 hover:text-white px-3 py-2 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Saltar</button>}
+              </div>
+              {onboardStep < last && <button onClick={() => closeOnboard(false)} className="lg:hidden absolute right-4 -top-[calc(38vh-14px)] sm:-top-[calc(44vh-14px)] text-xs font-bold text-white bg-black/50 backdrop-blur px-3 py-1.5 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Saltar</button>}
+
+              <div key={"obt-" + onboardStep} className="flex-1 flex flex-col justify-center max-w-xl py-4" style={{ animation: "cvFade .45s ease-out both" }}>
+                <p className="text-xs sm:text-sm font-black tracking-[0.25em] uppercase mb-3" style={{ color: "var(--ob)" }}>
+                  <span className="font-mono">{String(onboardStep + 1).padStart(2, "0")}</span><span className="text-gray-600"> / {String(slides.length).padStart(2, "0")}</span> · {sl.kicker}
+                </p>
+                <h2 className="text-[2rem] leading-[1.05] sm:text-5xl xl:text-6xl font-black text-white tracking-tight mb-4">{sl.title}</h2>
+                <p className="text-sm sm:text-lg text-gray-400 mb-5 sm:mb-7">{sl.text}</p>
+                <ul className="space-y-2.5 sm:space-y-3">
+                  {sl.bullets.map((t, k) => (
+                    <li key={k} className="flex items-center gap-3 text-sm sm:text-base text-gray-200" style={{ animation: "cvFade .4s ease-out both", animationDelay: 0.12 + k * 0.08 + "s" }}>
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ background: "color-mix(in srgb, var(--ob) 18%, transparent)", color: "var(--ob)" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                      </span>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="max-w-xl w-full space-y-4">
+                <div className="flex gap-1.5">
+                  {slides.map((_, k) => (
+                    <button key={"seg-" + k} tabIndex={-1} aria-label={"Paso " + (k + 1)} onClick={() => setOnboardStep(k)} className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden cursor-pointer">
+                      <span className="block h-full rounded-full transition-all duration-500" style={{ width: k <= onboardStep ? "100%" : "0%", background: "var(--ob)" }} />
+                    </button>
+                  ))}
+                </div>
+                {onboardStep < last ? (
+                  <div className="flex gap-3">
+                    {onboardStep > 0 && <button onClick={prev} aria-label="Atrás" className="w-14 shrink-0 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] text-white text-xl font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">‹</button>}
+                    <button data-autofocus onClick={next} className="flex-1 py-4 rounded-2xl text-black font-black text-base cursor-pointer transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-white/70" style={{ background: "var(--ob)", boxShadow: "0 10px 40px -10px var(--obg)" }}>Continuar</button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <button data-autofocus onClick={() => closeOnboard(true)} className="w-full py-4 rounded-2xl text-black font-black text-base cursor-pointer transition hover:brightness-110 focus:outline-none focus:ring-4 focus:ring-white/70" style={{ background: "linear-gradient(90deg,#22c55e,#a3e635)", boxShadow: "0 10px 40px -10px rgba(34,197,94,.6)" }}>Crear mi cuenta gratis</button>
+                    <div className="flex gap-3">
+                      <button onClick={() => { closeOnboard(true); setAuthMode("login"); }} className="flex-1 py-3.5 rounded-2xl bg-white/[0.07] hover:bg-white/[0.12] text-white font-bold text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Ya tengo cuenta</button>
+                      <button onClick={() => closeOnboard(false)} className="flex-1 py-3.5 rounded-2xl border border-white/10 hover:border-white/30 text-gray-300 font-bold text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Solo mirar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* CHAT DE LA COMUNIDAD */}
       {!tvMode && !isPlaying && !selectedMovie && !chatOpen && (
