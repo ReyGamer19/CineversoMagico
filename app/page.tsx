@@ -1637,6 +1637,8 @@ export default function Home() {
   ];
 
   const [customMovies, setCustomMovies] = useState<Movie[]>(defaultMovies);
+  // ¿Ya está el catálogo real (del servidor o de la copia guardada)? Hasta entonces se ve la pantalla de carga
+  const [catalogReady, setCatalogReady] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
   // Perfil Niños: solo contenido infantil (ATP / +7, o Animación y Familia sin clasificación)
@@ -1713,11 +1715,26 @@ export default function Home() {
       console.error("Error cargando localStorage:", e);
     }
 
+    // Copia del último catálogo: la próxima visita lo muestra al instante (luego se actualiza solo)
+    try {
+      const cached = JSON.parse(localStorage.getItem("cv_catalog_cache") || "null");
+      if (cached && Array.isArray(cached.list) && cached.list.length > 0 && !adminLocal) {
+        setCustomMovies(cached.list);
+        setCatalogReady(true);
+      }
+    } catch (e) {}
+
     const finish = (list: Movie[] | null, fromServer: boolean) => {
       if (cancelled) return;
-      if (list && list.length > 0) setCustomMovies(list);
+      if (list && list.length > 0) {
+        setCustomMovies(list);
+        if (fromServer) {
+          try { localStorage.setItem("cv_catalog_cache", JSON.stringify({ at: Date.now(), list })); } catch (e) {}
+        }
+      }
       setServerCatalog(fromServer);
       setIsMounted(true);
+      setCatalogReady(true);
     };
 
     const loadStaticFile = (serverWorks: boolean) =>
@@ -2220,14 +2237,22 @@ export default function Home() {
   // Pantalla de carga con el logo CV (una vez por sesión)
   const [showSplash, setShowSplash] = useState(true);
   const [splashFade, setSplashFade] = useState(false);
+  const [splashMinDone, setSplashMinDone] = useState(false);
   useEffect(() => {
     let seen = false;
     try { seen = sessionStorage.getItem("cv_splash") === "1"; sessionStorage.setItem("cv_splash", "1"); } catch (e) {}
-    const wait = seen ? 0 : 1300;
-    const t1 = setTimeout(() => setSplashFade(true), wait);
-    const t2 = setTimeout(() => setShowSplash(false), wait + 450);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const t = setTimeout(() => setSplashMinDone(true), seen ? 0 : 1300);
+    // Por seguridad: si el servidor tarda demasiado, se muestra la web igual
+    const safety = setTimeout(() => setCatalogReady(true), 9000);
+    return () => { clearTimeout(t); clearTimeout(safety); };
   }, []);
+  // La pantalla de carga se quita solo cuando ya está el catálogo real (sin mostrar películas de ejemplo)
+  useEffect(() => {
+    if (!splashMinDone || !catalogReady) return;
+    setSplashFade(true);
+    const t2 = setTimeout(() => setShowSplash(false), 450);
+    return () => clearTimeout(t2);
+  }, [splashMinDone, catalogReady]);
 
   // Avisa al guardián de TV que la app arrancó bien
   useEffect(() => {
