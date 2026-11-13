@@ -1468,6 +1468,18 @@ export default function Home() {
   // Perfiles
   const guestProfile: Profile = { id: "invitado", name: "Invitado", avatar: "/avatares/bojack1.png", isKid: false };
   const reyProfile: Profile = { id: "admin-rey", name: "Rey", avatar: "/avatares/bojack1.png", isKid: false };
+  // ¿Hay una cuenta con sesión iniciada? (se actualiza más abajo)
+  const loggedInRef = useRef(false);
+  // En el dispositivo del administrador, el perfil automático de su cuenta pasa a llamarse "Rey" (se guarda en la cuenta y se ve igual en todos sus dispositivos)
+  const adminNameProfiles = (list: Profile[]): Profile[] => {
+    const real = list.filter((p) => p.id !== "invitado" && p.id !== "admin-rey");
+    if (real.length === 1 && (real[0] as any).auto && real[0].name !== "Rey") {
+      const r = { ...real[0], name: "Rey" } as any;
+      delete r.auto;
+      return [r];
+    }
+    return real;
+  };
   const [profiles, setProfiles] = useState<Profile[]>([guestProfile]);
   const [activeProfile, setActiveProfile] = useState<Profile>(profiles[0]);
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
@@ -1839,7 +1851,14 @@ export default function Home() {
   // Cuando el admin inicia sesión aparece su perfil "Rey" (no se guarda para visitantes)
   useEffect(() => {
     const adminProfile = reyProfile;
-    if (isAdmin) {
+    if (isAdmin && loggedInRef.current) {
+      // Con cuenta: el admin ve exactamente los mismos perfiles que en sus otros dispositivos
+      setProfiles((prev) => {
+        const next = adminNameProfiles(prev);
+        setActiveProfile((cur) => next.find((p) => p.id === cur.id) || next[0]);
+        return next.length ? next : prev;
+      });
+    } else if (isAdmin) {
       setProfiles((prev) => (prev.some((p) => p.id === "admin-rey") ? prev : [adminProfile].concat(prev.filter((p) => p.id !== "invitado"))));
       setActiveProfile(adminProfile);
     } else {
@@ -3208,7 +3227,7 @@ export default function Home() {
       data && Array.isArray(data.profiles)
         ? data.profiles.filter(
             (p: any) => p && typeof p.id === "string" && typeof p.name === "string" &&
-              p.id !== "admin-rey" && p.id !== "invitado" && p.name.trim().toLowerCase() !== "rey"
+              p.id !== "admin-rey" && p.id !== "invitado"
           )
         : [];
     // Administrador: su perfil es "Rey"; no se crea (ni se muestra) el perfil automático con el nombre del correo
@@ -3216,22 +3235,19 @@ export default function Home() {
       const b0 = (userEmail.split("@")[0] || "").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
       return b0 ? b0.charAt(0).toUpperCase() + b0.slice(1, 20) : "";
     })();
-    if (isAdminRef.current) {
-      loaded = loaded.filter((p) => !(p as any).auto && !(loaded.length === 1 && p.name === autoName));
-    }
-    if (!loaded.length && !isAdminRef.current) {
+    if (!loaded.length) {
       const base = (userEmail.split("@")[0] || "Perfil").replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, "");
-      let name = base ? base.charAt(0).toUpperCase() + base.slice(1, 20) : "Perfil 1";
-      if (name.trim().toLowerCase() === "rey") name = "Perfil 1";
+      const name = base ? base.charAt(0).toUpperCase() + base.slice(1, 20) : "Perfil 1";
       loaded = [{ id: "p-" + Date.now(), name, avatar: myAvatars[0].file, isKid: false, auto: true } as any];
     }
+    // Perfil automático que quedó con el nombre del correo: se marca como tal para poder renombrarlo
+    if (loaded.length === 1 && autoName && loaded[0].name === autoName) loaded = [{ ...(loaded[0] as any), auto: true }];
+    // Misma cuenta = mismos perfiles en TODOS los dispositivos (también en el del administrador)
+    if (isAdminRef.current) loaded = adminNameProfiles(loaded);
     const active = loaded.find((p) => data && p.id === data.activeProfileId) || loaded[0];
-    if (isAdminRef.current) {
-      setProfiles([reyProfile].concat(loaded));
-    } else {
-      setProfiles(loaded);
-      setActiveProfile(active);
-    }
+    loggedInRef.current = true;
+    setProfiles(loaded);
+    setActiveProfile(active);
     setMyList(data && Array.isArray(data.myList) ? data.myList : []);
     setRatings(data && data.ratings && typeof data.ratings === "object" ? data.ratings : {});
     setNotifSeen(data && typeof data.notifSeen === "number" ? data.notifSeen : 0);
@@ -3279,6 +3295,7 @@ export default function Home() {
       })
         .then((r) => {
           if (r.status === 401) {
+            loggedInRef.current = false;
             setAccountUser(null);
             setIsGuest(true);
             setAccountLoaded(false);
@@ -3447,6 +3464,7 @@ export default function Home() {
 
   const handleLogout = () => {
     const reset = () => {
+      loggedInRef.current = false;
       setAccountUser(null);
       setAccountLoaded(false);
       setIsGuest(true);
@@ -4005,7 +4023,7 @@ export default function Home() {
     if (!accountUser || !accountLoaded) return;
     let seen = false;
     try { seen = sessionStorage.getItem("cv_who") === "1"; } catch (e) {}
-    if (!seen && profiles.filter((p) => p.id !== "admin-rey").length >= 1 && !isAdminRef.current) setShowWho(true);
+    if (!seen && profiles.filter((p) => p.id !== "admin-rey").length >= 1 && (!isAdminRef.current || loggedInRef.current)) setShowWho(true);
   }, [accountUser, accountLoaded]);
   useEffect(() => {
     if (!showWho && !pinTarget) return;
@@ -4179,7 +4197,7 @@ export default function Home() {
       return;
     }
 
-    if (newProfileName.trim().toLowerCase() === "rey") {
+    if (newProfileName.trim().toLowerCase() === "rey" && !isAdmin) {
       setUsernameError("Nombre de Usuario no disponible");
       return;
     }
@@ -4249,7 +4267,7 @@ export default function Home() {
     if (!editProfile) return;
     const name = editName.trim().replace(/\s+/g, " ");
     if (!name) { setEditError("Escribe un nombre para el perfil."); return; }
-    if (name.toLowerCase() === "rey") { setEditError("Ese nombre no está disponible."); return; }
+    if (name.toLowerCase() === "rey" && !isAdmin) { setEditError("Ese nombre no está disponible."); return; }
     if (profiles.some((x) => x.id !== editProfile.id && x.name.trim().toLowerCase() === name.toLowerCase())) { setEditError("Ya tienes un perfil con ese nombre."); return; }
     let pinHash = editProfile.pinHash;
     if (editIsKid) {
