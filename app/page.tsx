@@ -211,6 +211,7 @@ html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
 const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}" +
   // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
+  ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
 // Se ejecuta antes que todo. Si el navegador es antiguo o la app no arranca,
@@ -1893,9 +1894,10 @@ export default function Home() {
       });
   };
 
-  type CatalogOp = { type: "upsert"; movie: Movie } | { type: "delete"; id: number | string };
+  type CatalogOp = { type: "upsert"; movie: Movie } | { type: "delete"; id: number | string } | { type: "upsertMany"; movies: Movie[] };
   const applyOp = (list: Movie[], op: CatalogOp): Movie[] => {
     if (op.type === "delete") return list.filter((m) => String(m.id) !== String(op.id));
+    if (op.type === "upsertMany") return op.movies.reduce((acc, mv) => applyOp(acc, { type: "upsert", movie: mv }), list);
     const exists = list.some((m) => String(m.id) === String(op.movie.id));
     return exists ? list.map((m) => (String(m.id) === String(op.movie.id) ? op.movie : m)) : [op.movie].concat(list);
   };
@@ -3604,6 +3606,237 @@ export default function Home() {
       })
       .catch((e: any) => { if (!e || e.message !== "no") showToast("No se pudieron activar los avisos en este dispositivo."); });
   };
+  // ---------- Chat de la comunidad ----------
+  type ChatMsg = { id: string; at: number; uid: string; name: string; avatar: string; text: string; admin?: boolean };
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([]);
+  const [chatPinned, setChatPinned] = useState("");
+  const [chatOnline, setChatOnline] = useState(0);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatErr, setChatErr] = useState("");
+  const [chatUnread, setChatUnread] = useState(0);
+  const [chatPinEdit, setChatPinEdit] = useState("");
+  const chatSinceRef = useRef(0);
+  const chatListRef = useRef<HTMLDivElement | null>(null);
+  const chatOpenRef = useRef(false);
+  chatOpenRef.current = chatOpen;
+  const pollChat = () => {
+    if (typeof document !== "undefined" && document.hidden) return Promise.resolve();
+    return fetch("/api/chat?since=" + chatSinceRef.current, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: any) => {
+        if (!d || !Array.isArray(d.msgs)) return;
+        setChatPinned(d.pinned || "");
+        setChatOnline(d.online || 0);
+        const ids: string[] | null = Array.isArray(d.ids) ? d.ids : null;
+        setChatMsgs((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          let next = prev.concat((d.msgs as ChatMsg[]).filter((m) => !seen.has(m.id)));
+          if (ids) { const keep = new Set(ids); next = next.filter((m) => keep.has(m.id)); }
+          return next.slice(-200);
+        });
+        if (d.msgs.length) {
+          const lastAt = d.msgs[d.msgs.length - 1].at;
+          let lastRead = 0;
+          try { lastRead = Number(localStorage.getItem("cv_chat_read") || 0); } catch (e) {}
+          if (chatOpenRef.current) { try { localStorage.setItem("cv_chat_read", String(lastAt)); } catch (e) {} setChatUnread(0); }
+          else if (chatSinceRef.current) setChatUnread((n) => n + (d.msgs as ChatMsg[]).filter((m) => m.at > lastRead).length);
+          else setChatUnread((d.msgs as ChatMsg[]).filter((m) => m.at > lastRead).length > 0 ? Math.min(9, (d.msgs as ChatMsg[]).filter((m) => m.at > lastRead).length) : 0);
+          chatSinceRef.current = Math.max(chatSinceRef.current, lastAt);
+        }
+      })
+      .catch(() => {});
+  };
+  useEffect(() => {
+    if (tvMode) return;
+    pollChat();
+    const iv = setInterval(pollChat, chatOpen ? 3000 : 30000);
+    return () => clearInterval(iv);
+  }, [chatOpen, tvMode]);
+  useEffect(() => {
+    if (!chatOpen) return;
+    setChatUnread(0);
+    try { if (chatSinceRef.current) localStorage.setItem("cv_chat_read", String(chatSinceRef.current)); } catch (e) {}
+    const ping = () => {
+      let vid = "";
+      try { vid = localStorage.getItem("cv_vid") || ""; } catch (e) {}
+      fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ping", vid }) })
+        .then((r) => r.json()).then((d: any) => { if (d && d.online) setChatOnline(d.online); }).catch(() => {});
+    };
+    ping();
+    const iv = setInterval(ping, 40000);
+    return () => clearInterval(iv);
+  }, [chatOpen]);
+  // Baja al último mensaje cuando llegan nuevos
+  useEffect(() => {
+    const el = chatListRef.current;
+    if (!el || !chatOpen) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160 || chatMsgs.length < 3) el.scrollTop = el.scrollHeight;
+  }, [chatMsgs.length, chatOpen]);
+  useEffect(() => {
+    if (!chatOpen) return;
+    const t = setTimeout(() => { const el = chatListRef.current; if (el) el.scrollTop = el.scrollHeight; }, 60);
+    return () => clearTimeout(t);
+  }, [chatOpen]);
+  const sendChat = (retried?: boolean) => {
+    const text = chatInput.trim();
+    if (!text || chatBusy) return;
+    if (!accountUser && !isAdmin) { setChatErr("Inicia sesión para escribir."); return; }
+    setChatBusy(true);
+    setChatErr("");
+    const body: any = { action: "send", text, name: activeProfile.name, avatar: activeProfile.avatar };
+    if (isAdmin) { try { body.password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {} }
+    fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, status: r.status, d })))
+      .then(({ ok, status, d }) => {
+        if (status === 401 && !retried && accountUser) {
+          // La sesión se renueva sola y se vuelve a intentar
+          return fetch("/api/account", { cache: "no-store", credentials: "same-origin" }).then(() => { setChatBusy(false); sendChat(true); });
+        }
+        setChatBusy(false);
+        if (ok && d.last) {
+          setChatInput("");
+          setChatMsgs((prev) => (prev.some((m) => m.id === d.last.id) ? prev : prev.concat(d.last)));
+          chatSinceRef.current = Math.max(chatSinceRef.current, d.last.at);
+          setTimeout(() => { const el = chatListRef.current; if (el) el.scrollTop = el.scrollHeight; }, 50);
+        } else setChatErr((d && d.error) || "No se pudo enviar.");
+      })
+      .catch(() => { setChatBusy(false); setChatErr("Sin conexión."); });
+  };
+  const chatAdmin = (action: string, extra: any) => {
+    let password = "";
+    try { password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    return fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, password, ...extra }) })
+      .then((r) => r.json())
+      .then((d: any) => {
+        if (d && Array.isArray(d.ids)) { const keep = new Set(d.ids); setChatMsgs((prev) => prev.filter((m) => keep.has(m.id))); }
+        if (d && typeof d.pinned === "string") setChatPinned(d.pinned);
+        return d;
+      })
+      .catch(() => null);
+  };
+  const nameColor = (s2: string) => {
+    let h = 0;
+    for (let i = 0; i < s2.length; i++) h = (h * 31 + s2.charCodeAt(i)) % 360;
+    return "hsl(" + h + ",70%,62%)";
+  };
+  const fmtChatTime = (t: number) => {
+    const d = new Date(t);
+    const today = new Date();
+    const hm = d.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+    return d.toDateString() === today.toDateString() ? hm : d.toLocaleDateString("es-PE", { day: "numeric", month: "short" }) + " · " + hm;
+  };
+
+  // ---------- Pedidos de películas ----------
+  const [reqTitle, setReqTitle] = useState("");
+  const [reqNote, setReqNote] = useState("");
+  const [reqBusy, setReqBusy] = useState(false);
+  const [myReqs, setMyReqs] = useState<{ id: string; at: number; title: string; status: string; reply: string }[]>([]);
+  const [adminReqs, setAdminReqs] = useState<{ id: string; at: number; email: string; profile: string; title: string; note: string; status: string }[]>([]);
+  const loadMyReqs = () => {
+    fetch("/api/requests", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "mine" }) })
+      .then((r) => r.json()).then((d: any) => { if (d && Array.isArray(d.items)) setMyReqs(d.items); }).catch(() => {});
+  };
+  useEffect(() => { if (activeTab === "cuenta" && accountUser) loadMyReqs(); }, [activeTab, accountUser]);
+  const sendRequest = () => {
+    if (reqBusy) return;
+    if (reqTitle.trim().length < 2) { showToast("Escribe el nombre de la película o serie."); return; }
+    setReqBusy(true);
+    fetch("/api/requests", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "add", title: reqTitle, note: reqNote, profile: activeProfile.name }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        setReqBusy(false);
+        if (ok) { setReqTitle(""); setReqNote(""); showToast("📬 ¡Pedido enviado! Te avisaremos cuando esté disponible."); loadMyReqs(); }
+        else showToast((d && d.error) || "No se pudo enviar el pedido.", 6000);
+      })
+      .catch(() => { setReqBusy(false); showToast("Sin conexión."); });
+  };
+  const adminReqCall = (action: string, extra?: any) => {
+    let password = "";
+    try { password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!password) return;
+    fetch("/api/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, password, ...(extra || {}) }) })
+      .then((r) => r.json()).then((d: any) => { if (d && Array.isArray(d.items)) setAdminReqs(d.items); }).catch(() => {});
+  };
+  useEffect(() => { if (activeTab === "admin" && isAdmin) adminReqCall("list"); }, [activeTab, isAdmin]);
+
+  // ---------- Agregar varias películas a la vez ----------
+  type BulkItem = { line: string; title: string; url: string; status: "pendiente" | "buscando" | "listo" | "sin-datos"; include: boolean; movie?: Movie };
+  const [bulkText, setBulkText] = useState("");
+  const [bulkType, setBulkType] = useState<"pelicula" | "serie">("pelicula");
+  const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkNotify, setBulkNotify] = useState(true);
+  const runBulk = () => {
+    const lines = bulkText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 40);
+    if (!lines.length) { showToast("Pega una película por línea: Título | enlace del video"); return; }
+    const items: BulkItem[] = lines.map((line) => {
+      const um = line.match(/https?:\/\/\S+/);
+      const url = um ? um[0] : "";
+      const title = line.replace(url, "").replace(/[|;\t]+/g, " ").replace(/\s+-\s*$/, "").replace(/\s+/g, " ").trim();
+      return { line, title, url, status: "pendiente", include: !!(title && url) };
+    });
+    setBulkItems(items);
+    setBulkBusy(true);
+    const kind = bulkType === "serie" ? "tv" : "movie";
+    let i = 0;
+    const step = (): Promise<void> => {
+      if (i >= items.length) return Promise.resolve();
+      const idx = i++;
+      const it = items[idx];
+      if (!it.title || !it.url) { items[idx] = { ...it, status: "sin-datos", include: false }; setBulkItems(items.slice()); return step(); }
+      items[idx] = { ...it, status: "buscando" };
+      setBulkItems(items.slice());
+      const base: Movie = {
+        id: Date.now() + idx, title: it.title, rating: "8.0", year: String(new Date().getFullYear()), tag: "Acción", type: bulkType,
+        desc: "Contenido añadido desde el panel de administración.",
+        bgImage: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
+        img: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
+        videoUrl: it.url, addedAt: Date.now(), originalLanguage: "ES",
+      };
+      return fetch("/api/tmdb?type=" + kind + "&q=" + encodeURIComponent(it.title), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: any) => {
+          const first = d && Array.isArray(d.results) && d.results[0];
+          if (!first) throw new Error("none");
+          return fetch("/api/tmdb?type=" + kind + "&id=" + first.id, { cache: "no-store" }).then((r) => r.json());
+        })
+        .then((d: any) => {
+          const gs: string[] = Array.isArray(d.genres) ? d.genres : [];
+          const main = gs.find((g) => genresList.indexOf(g) !== -1) || "Acción";
+          const mv: Movie = {
+            ...base,
+            title: d.title || base.title, year: d.year || base.year, desc: d.desc || base.desc, duration: d.duration || undefined,
+            ageRating: d.ageRating || undefined, director: d.director || undefined, cast: d.cast || undefined, trailerUrl: d.trailerUrl || undefined,
+            bgImage: d.poster || base.bgImage, img: d.poster || base.img, backdrop: d.backdrop || undefined, rating: d.rating || "8.0",
+            production: d.production || undefined, originalLanguage: d.originalLanguage || "ES", tag: main,
+            genres: [main].concat(gs.filter((g) => g !== main)),
+          };
+          items[idx] = { ...it, status: "listo", include: true, movie: mv };
+        })
+        .catch(() => { items[idx] = { ...it, status: "sin-datos", include: true, movie: { ...base, genres: ["Acción"] } }; })
+        .then(() => { setBulkItems(items.slice()); return step(); });
+    };
+    step().then(() => setBulkBusy(false));
+  };
+  const saveBulk = () => {
+    const movies = bulkItems.filter((x) => x.include && x.movie).map((x) => x.movie as Movie);
+    if (!movies.length) { showToast("No hay películas marcadas para agregar."); return; }
+    saveChange({ type: "upsertMany", movies }, "¡" + movies.length + " película" + (movies.length === 1 ? "" : "s") + " agregada" + (movies.length === 1 ? "" : "s") + "!");
+    if (bulkNotify) {
+      const first = movies[0];
+      sendPush({
+        title: movies.length === 1 ? (first.type === "serie" ? "Nueva serie 🍿" : "Nueva película 🍿") : movies.length + " estrenos nuevos 🍿",
+        body: movies.length === 1 ? first.title + " ya está disponible en Cineverso Mágico." : movies.slice(0, 3).map((m) => m.title).join(", ") + (movies.length > 3 ? " y más" : "") + " ya están en Cineverso Mágico.",
+        image: first.backdrop || first.bgImage, url: movies.length === 1 ? "/ver/" + first.id : "/", tag: movies.length === 1 ? "m-" + first.id : "lote-" + Date.now(),
+      });
+    }
+    setBulkItems([]);
+    setBulkText("");
+  };
+
+
   // Administrador: enviar un aviso a todos los dispositivos suscritos
   const sendPush = (msg: { title: string; body: string; image?: string; url?: string; tag?: string }) => {
     let pass = "";
@@ -4832,6 +5065,87 @@ export default function Home() {
             )}
           </div>
 
+          {/* PEDIDOS DE USUARIOS */}
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="text-lg font-bold text-white">📬 Pedidos de usuarios {adminReqs.filter((r) => r.status === "nueva").length > 0 && <span className="ml-1 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full align-middle">{adminReqs.filter((r) => r.status === "nueva").length} nuevos</span>}</h3>
+              <button onClick={() => adminReqCall("list")} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
+            </div>
+            {adminReqs.length === 0 ? (
+              <p className="text-xs text-gray-500">Todavía no hay pedidos. Los usuarios pueden pedir desde Cuenta → Pedir una película.</p>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {adminReqs.map((r) => (
+                  <div key={r.id} className={"rounded-xl border px-3 py-2.5 " + (r.status === "nueva" ? "bg-yellow-500/5 border-yellow-700/40" : "bg-[#050505] border-gray-900")}>
+                    <div className="flex items-start gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[180px]">
+                        <p className="text-sm font-bold text-white">{r.title}</p>
+                        {r.note && <p className="text-xs text-gray-400">“{r.note}”</p>}
+                        <p className="text-[10px] text-gray-500 mt-0.5">{r.profile || "—"} · {r.email} · {fmtChatTime(r.at)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button onClick={() => adminReqCall("status", { id: r.id, status: "agregada", reply: "¡Ya está disponible! 🍿" })} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "agregada" ? "bg-green-500 text-black" : "bg-[#181818] text-green-400 border border-gray-800")}>✔ Agregada</button>
+                        <button onClick={() => adminReqCall("status", { id: r.id, status: "rechazada", reply: "Por ahora no está disponible." })} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "rechazada" ? "bg-red-600 text-white" : "bg-[#181818] text-red-400 border border-gray-800")}>✖ No disponible</button>
+                        <button onClick={() => adminReqCall("delete", { id: r.id })} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer bg-[#181818] text-gray-400 border border-gray-800">Borrar</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* CHAT: MODERACIÓN */}
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-3">
+            <h3 className="text-lg font-bold text-white">💬 Chat de la comunidad</h3>
+            <p className="text-xs text-gray-400">Mensaje fijado (aparece arriba del chat). En el chat puedes borrar mensajes o bloquear usuarios con los botones que aparecen debajo de cada mensaje.</p>
+            <textarea maxLength={300} rows={2} placeholder={chatPinned || "Ej. Bienvenidos, pidan sus películas aquí 🍿"} value={chatPinEdit} onChange={(e) => setChatPinEdit(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => chatAdmin("pin", { text: chatPinEdit.trim() }).then((d: any) => { if (d && d.ok) { showToast("📌 Mensaje fijado actualizado."); setChatPinEdit(""); } })} className="bg-white hover:bg-gray-200 text-black px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Guardar mensaje fijado</button>
+              <button onClick={() => setChatOpen(true)} className="bg-[#181818] text-white border border-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Abrir el chat</button>
+            </div>
+          </div>
+
+          {/* AGREGAR VARIAS A LA VEZ */}
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">⚡ Agregar varias a la vez</h3>
+              <p className="text-xs text-gray-400">Pega una por línea: <b className="text-gray-200">Título | enlace del video</b>. Se completan solas con Autocompletar (póster, sinopsis, reparto, tráiler…). Máximo 40 por vez.</p>
+            </div>
+            <textarea rows={5} value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"Mi Película | https://servidor.com/mi-pelicula.mp4\nOtra Película | https://servidor.com/otra.mp4"} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex bg-[#050505] border border-gray-800 rounded-xl p-1">
+                {(["pelicula", "serie"] as const).map((t) => (
+                  <button key={t} onClick={() => setBulkType(t)} className={"px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer " + (bulkType === t ? "bg-white text-black" : "text-gray-400")}>{t === "pelicula" ? "Películas" : "Series"}</button>
+                ))}
+              </div>
+              <button onClick={runBulk} disabled={bulkBusy} className="bg-white hover:bg-gray-200 disabled:opacity-50 text-black px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">{bulkBusy ? "Buscando datos…" : "1. Buscar datos"}</button>
+            </div>
+            {bulkItems.length > 0 && (
+              <div className="space-y-2">
+                {bulkItems.map((it, i) => (
+                  <label key={"bk-" + i} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2 cursor-pointer">
+                    <input type="checkbox" checked={it.include} disabled={!it.movie} onChange={(e) => setBulkItems((list) => list.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} className="w-4 h-4 accent-green-500 shrink-0" />
+                    {it.movie ? <img src={it.movie.bgImage} alt="" className="w-9 h-12 rounded object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-12 rounded bg-gray-900 shrink-0" />}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-white font-bold truncate">{it.movie ? it.movie.title + " (" + it.movie.year + ")" : it.title || it.line}</span>
+                      <span className="block text-[11px] text-gray-500 truncate">{it.url || "Falta el enlace del video"}</span>
+                    </span>
+                    <span className={"text-[10px] font-black px-2 py-1 rounded-full shrink-0 " + (it.status === "listo" ? "bg-green-500/20 text-green-400" : it.status === "buscando" ? "bg-blue-500/20 text-blue-300" : it.status === "pendiente" ? "bg-gray-700 text-gray-300" : "bg-yellow-500/15 text-yellow-400")}>
+                      {it.status === "listo" ? "✔ Datos listos" : it.status === "buscando" ? "Buscando…" : it.status === "pendiente" ? "En cola" : it.url ? "Sin datos de TMDB" : "Incompleta"}
+                    </span>
+                  </label>
+                ))}
+                <label className="flex items-center gap-2 text-xs text-gray-300 pt-1 cursor-pointer"><input type="checkbox" checked={bulkNotify} onChange={(e) => setBulkNotify(e.target.checked)} className="w-4 h-4 accent-green-500" /> Avisar a todos con la campanita 🔔 (un solo aviso)</label>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={saveBulk} disabled={bulkBusy || !bulkItems.some((x) => x.include && x.movie)} className="bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black px-5 py-3 rounded-xl text-sm font-black cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">2. Agregar {bulkItems.filter((x) => x.include && x.movie).length} al catálogo</button>
+                  <button onClick={() => setBulkItems([])} className="text-xs text-gray-400 hover:text-white px-3 py-2 cursor-pointer">Cancelar</button>
+                </div>
+                <p className="text-[11px] text-gray-500">Las que digan “Sin datos de TMDB” se agregan solo con el título; luego puedes completarlas con Editar → Autocompletar.</p>
+              </div>
+            )}
+          </div>
+
           {/* ESTADÍSTICAS */}
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -5573,6 +5887,37 @@ export default function Home() {
 
           <div className="space-y-4">
             <div>
+              <h3 className="text-lg font-bold text-white">🎬 Pedir una película o serie</h3>
+              <p className="text-xs text-gray-500">¿No encuentras algo? Pídelo y le llega directo al administrador.</p>
+            </div>
+            <div className="bg-[#0f0f0f] p-5 rounded-2xl border border-gray-900 space-y-3">
+              {accountUser ? (
+                <>
+                  <input type="text" maxLength={120} placeholder="Nombre de la película o serie" value={reqTitle} onChange={(e) => setReqTitle(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <input type="text" maxLength={300} placeholder="Comentario (opcional): año, idioma, temporada…" value={reqNote} onChange={(e) => setReqNote(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <button onClick={sendRequest} disabled={reqBusy} className="w-full sm:w-auto bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-bold px-6 py-3 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">{reqBusy ? "Enviando…" : "📬 Enviar pedido"}</button>
+                  {myReqs.length > 0 && (
+                    <div className="pt-2 space-y-2">
+                      <p className="text-xs font-bold text-gray-400">Mis pedidos</p>
+                      {myReqs.map((r) => (
+                        <div key={r.id} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2">
+                          <span className="flex-1 min-w-0 text-sm text-white truncate">{r.title}{r.reply ? <span className="block text-[11px] text-gray-400">{r.reply}</span> : null}</span>
+                          <span className={"text-[10px] font-black px-2 py-1 rounded-full shrink-0 " + (r.status === "agregada" ? "bg-green-500/20 text-green-400" : r.status === "rechazada" ? "bg-red-500/15 text-red-400" : "bg-yellow-500/15 text-yellow-400")}>
+                            {r.status === "agregada" ? "✔ Ya está" : r.status === "rechazada" ? "No disponible" : "En revisión"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-400">Inicia sesión arriba para pedir películas y ver el estado de tus pedidos.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
               <h3 className="text-lg font-bold text-white">Este dispositivo</h3>
               <p className="text-xs text-gray-500">Se guarda solo aquí; no afecta a tus otros dispositivos.</p>
             </div>
@@ -6308,6 +6653,79 @@ export default function Home() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* CHAT DE LA COMUNIDAD */}
+      {!tvMode && !isPlaying && !selectedMovie && !chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          aria-label="Abrir chat"
+          className="fixed z-40 right-4 lg:right-6 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:bottom-6 flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-black pl-4 pr-5 py-3 rounded-full shadow-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60"
+        >
+          <span className="text-lg leading-none">💬</span>
+          <span className="text-sm hidden sm:inline">Chat</span>
+          {chatUnread > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 text-white text-[11px] font-black flex items-center justify-center border-2 border-[#050505]">{chatUnread > 9 ? "9+" : chatUnread}</span>}
+        </button>
+      )}
+      {chatOpen && !tvMode && (
+        <div data-tv-modal className="cv-chat z-[80] bg-[#0e0e0e] lg:rounded-2xl border border-gray-800 shadow-2xl flex flex-col overflow-hidden" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-500 text-black shrink-0">
+            <span className="text-xl leading-none">💬</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-black text-sm leading-tight">Chat Cineverso</p>
+              <p className="text-[11px] font-bold opacity-80 leading-tight">● {chatOnline || 1} en línea</p>
+            </div>
+            <button data-close-on-back onClick={() => setChatOpen(false)} aria-label="Cerrar chat" className="w-9 h-9 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/70"><X className="w-5 h-5" /></button>
+          </div>
+          {chatPinned && (
+            <div className="px-4 py-2.5 bg-[#16251b] border-b border-green-900/60 text-[12px] text-green-100 leading-snug shrink-0">📌 {chatPinned}</div>
+          )}
+          <div ref={chatListRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-1 overscroll-contain">
+            {chatMsgs.length === 0 && <p className="text-center text-xs text-gray-500 py-10">Todavía no hay mensajes. ¡Sé el primero en saludar! 👋</p>}
+            {chatMsgs.map((m) => (
+              <div key={m.id} className="group flex gap-2.5 px-1.5 py-2 rounded-xl hover:bg-white/[0.03]">
+                {m.avatar ? <img src={m.avatar} alt="" className="w-8 h-8 rounded-lg object-cover bg-gray-900 shrink-0 mt-0.5" /> : <span className="w-8 h-8 rounded-lg shrink-0 mt-0.5 flex items-center justify-center text-sm font-black text-black" style={{ background: nameColor(m.name) }}>{(m.name || "?").charAt(0).toUpperCase()}</span>}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[13px] font-bold truncate" style={{ color: m.admin ? "#22c55e" : nameColor(m.name) }}>{m.name}</span>
+                    {m.admin && <span className="text-[9px] font-black bg-green-500 text-black px-1.5 rounded">ADMIN</span>}
+                    <span className="ml-auto text-[10px] text-gray-500 shrink-0">{fmtChatTime(m.at)}</span>
+                  </div>
+                  <p className="text-[13px] text-gray-200 leading-snug break-words whitespace-pre-wrap">{m.text}</p>
+                  {isAdmin && (
+                    <div className="flex gap-3 mt-1 opacity-60 group-hover:opacity-100">
+                      <button onClick={() => chatAdmin("delete", { id: m.id })} className="text-[10px] text-red-400 hover:underline cursor-pointer">Borrar</button>
+                      {!m.admin && <button onClick={() => { if (window.confirm("¿Bloquear a " + m.name + "? Se borrarán sus mensajes y ya no podrá escribir.")) chatAdmin("ban", { uid: m.uid }); }} className="text-[10px] text-red-400 hover:underline cursor-pointer">Bloquear</button>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-gray-800 p-3 shrink-0 bg-[#111]" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
+            {accountUser || isAdmin ? (
+              <>
+                {chatErr && <p className="text-[11px] text-red-400 font-bold mb-2">{chatErr}</p>}
+                <form onSubmit={(e) => { e.preventDefault(); sendChat(); }} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    maxLength={300}
+                    value={chatInput}
+                    onChange={(e) => { setChatInput(e.target.value); if (chatErr) setChatErr(""); }}
+                    placeholder={"Escribe como " + activeProfile.name + "…"}
+                    className="flex-1 min-w-0 bg-[#050505] border border-gray-800 rounded-full px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <button type="submit" disabled={chatBusy || !chatInput.trim()} aria-label="Enviar" className="w-11 h-11 rounded-full bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black flex items-center justify-center cursor-pointer shrink-0 focus:outline-none focus:ring-4 focus:ring-white/60">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6l-.1 6.5L15 12 3.3 13.9z" /></svg>
+                  </button>
+                </form>
+                <p className="text-[10px] text-gray-500 mt-1.5 px-1">No se permiten enlaces. Para pedir películas usa también Cuenta → Pedir una película.</p>
+              </>
+            ) : (
+              <button onClick={() => { setChatOpen(false); setActiveTab("cuenta"); try { window.scrollTo(0, 0); } catch (e) {} }} className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Inicia sesión para escribir</button>
+            )}
+          </div>
         </div>
       )}
 
