@@ -212,6 +212,7 @@ const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGA
   // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
   "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
+  "@media (orientation:portrait) and (max-width:900px){.cv-pstage{flex:0 0 auto!important;padding:0!important}.cv-pstage>div{height:56.25vw!important;max-height:70vh;border-radius:0!important}}" + "@media (max-height:520px){.cv-ppanel{padding-top:6px!important;column-gap:12px!important}.cv-ppanel>button{font-size:14px!important}.cv-pstage{padding:0!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
@@ -6798,25 +6799,14 @@ export default function Home() {
       {selectedMovie && isPlaying && (
         <div
           data-tv-modal
-          className="fixed inset-0 bg-black z-50 overflow-hidden"
-          style={{ cursor: playerUi ? "default" : "none" }}
+          className="fixed inset-0 bg-[#070707] z-50 overflow-hidden flex flex-col justify-center"
+          style={{ cursor: playerUi ? "default" : "none", paddingTop: "env(safe-area-inset-top, 0px)" }}
           onMouseMove={wakePlayerUi}
           onTouchStart={wakePlayerUi}
           onKeyDown={wakePlayerUi}
         >
-          <div
-            className="p-4 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent"
-            style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi && !playerError ? 1 : 0, visibility: playerUi && !playerError ? "visible" : "hidden" }}
-          >
-            <button 
-              onClick={() => setIsPlaying(false)}
-              className="flex items-center gap-2 text-white font-bold hover:text-green-400 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1"
-            >
-              <ArrowLeft className="w-5 h-5" /> <span className="truncate max-w-[250px] sm:max-w-none">{selectedMovie.title}{currentEpisode ? " · T" + currentEpisode.season + ":E" + currentEpisode.number + " " + currentEpisode.title : ""}</span>
-            </button>
-          </div>
-
-          <div className="bg-black overflow-hidden" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div className="flex-1 min-h-0 flex items-center justify-center sm:px-4 sm:pt-4 lg:px-6 lg:pt-6 cv-pstage">
+          <div className="relative w-full h-full bg-black overflow-hidden sm:rounded-2xl sm:border sm:border-white/5 shadow-2xl">
             <video 
               ref={playerRef}
               x-webkit-airplay="allow"
@@ -6878,7 +6868,7 @@ export default function Home() {
                   setContinueWatchingList((prev) => prev.filter((p) => String(p.id) !== String(selectedMovie.id)));
                   setIsPlaying(false);
                 }}
-                style={{ position: "absolute", right: 24, bottom: playerUi ? 110 : 40, zIndex: 34 }}
+                style={{ position: "absolute", right: 20, bottom: 70, zIndex: 34 }}
                 className="flex items-center gap-2 bg-white/95 hover:bg-white text-black font-bold text-sm px-5 py-3 rounded-lg shadow-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
               >
                 <SkipForward className="w-4 h-4" />
@@ -6886,7 +6876,7 @@ export default function Home() {
               </button>
             )}
             {nextUp && (
-              <div style={{ position: "absolute", right: 24, bottom: 96, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-4 shadow-2xl" data-tv-modal>
+              <div style={{ position: "absolute", right: 20, bottom: 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-4 shadow-2xl" data-tv-modal>
                 <p className="text-[11px] text-gray-400 uppercase font-bold">Siguiente episodio en {nextUp.secs} s</p>
                 <p className="text-sm font-bold text-white mt-1 max-w-[260px] truncate">T{nextUp.ep.season}:E{nextUp.ep.number} · {nextUp.ep.title}</p>
                 <div className="flex gap-2 mt-3">
@@ -6935,21 +6925,20 @@ export default function Home() {
               </div>
             )}
           </div>
+          </div>
 
-          <div
-            className="p-3 sm:p-4 bg-gradient-to-t from-black/95 to-transparent flex flex-col sm:flex-row items-center justify-between gap-4"
-            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 20, transition: "opacity .4s", opacity: playerUi && !playerError ? 1 : 0, visibility: playerUi && !playerError ? "visible" : "hidden" }}
-          >
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full sm:w-auto">
-              <button 
-                onClick={() => setIsPlaying(false)}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                <ArrowLeft className="w-4 h-4 text-green-400" /> Anterior
-              </button>
+          {/* Barra inferior: título y botones (no tapa la película) */}
+          <div className="cv-ppanel shrink-0 px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 flex flex-wrap items-center gap-x-5 gap-y-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
+            <button 
+              onClick={() => setIsPlaying(false)}
+              className="flex items-center gap-2 text-white font-black text-base sm:text-xl hover:text-green-400 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-1 min-w-0 max-w-full"
+            >
+              <ArrowLeft className="w-5 h-5" /> <span className="truncate">{selectedMovie.title}{currentEpisode ? " · T" + currentEpisode.season + ":E" + currentEpisode.number + " " + currentEpisode.title : ""}</span>
+            </button>
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none max-w-full pb-0.5" style={{ scrollbarWidth: "none" }}>
               <button 
                 onClick={requestFullscreenSafe}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
@@ -6957,7 +6946,7 @@ export default function Home() {
                 <button
                   onClick={() => setRateOpen((o) => !o)}
                   aria-label="Velocidad de reproducción"
-                  className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <span className="text-green-400">⏩</span> {playRate === 1 ? "Velocidad" : playRate + "x"}
                 </button>
@@ -6974,7 +6963,7 @@ export default function Home() {
               {pipSupported && (
                 <button
                   onClick={togglePip}
-                  className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><rect x="12" y="11" width="8" height="6" rx="1" fill="#4ade80" /></svg> Imagen flotante
                 </button>
@@ -6982,39 +6971,32 @@ export default function Home() {
               {nextEpisodeOf(selectedMovie, currentEpisode) && (
                 <button
                   onClick={() => { const nx = nextEpisodeOf(selectedMovie, currentEpisode); if (nx) playEpisode(selectedMovie, nx); }}
-                  className="flex items-center gap-1.5 bg-white text-black px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="flex items-center gap-1.5 bg-white text-black px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <SkipForward className="w-4 h-4" /> Siguiente episodio
                 </button>
               )}
               <button 
                 onClick={toggleVideoFit}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Tv className="w-4 h-4 text-green-400" /> {videoFit === "cover" ? "Ver completa" : "Llenar pantalla"}
               </button>
               <button 
                 onClick={handleCast}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Cast className="w-4 h-4 text-green-400" /> Transmitir
               </button>
               <button 
                 onClick={() => toggleMyList(selectedMovie)}
-                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 {inMyList(selectedMovie) ? <><Check className="w-4 h-4 text-green-400" /> En Mi Lista</> : <><Plus className="w-4 h-4 text-green-400" /> Mi Lista</>}
               </button>
             </div>
-
-            <div className="flex items-center gap-3 bg-[#121212] px-4 py-2 rounded-xl border border-gray-800 shrink-0">
-              <div className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center text-xs font-bold">ES</div>
-              <div>
-                <h5 className="text-xs font-bold text-white">Servidor Sol</h5>
-                <span className="text-[10px] text-gray-400">Español · Sin anuncios</span>
-              </div>
-            </div>
           </div>
+
         </div>
       )}
 
