@@ -211,7 +211,7 @@ html.tv-legacy :focus{outline:4px solid #22c55e !important;outline-offset:3px}
 const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGACY_RULES.replace(/html\.tv-legacy/g, "html") + "}" +
   // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
-  "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
+  "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
@@ -3676,6 +3676,22 @@ export default function Home() {
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const chatOpenRef = useRef(false);
   chatOpenRef.current = chatOpen;
+  useEffect(() => {
+    const lock = onboard || (chatOpen && typeof window !== "undefined" && window.innerWidth < 1024);
+    if (!lock) return;
+    const html = document.documentElement, body = document.body;
+    const prev = [html.style.overflow, body.style.overflow, body.style.position, body.style.top, body.style.width];
+    const y = window.scrollY;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = -y + "px";
+    body.style.width = "100%";
+    return () => {
+      html.style.overflow = prev[0]; body.style.overflow = prev[1]; body.style.position = prev[2]; body.style.top = prev[3]; body.style.width = prev[4];
+      window.scrollTo(0, y);
+    };
+  }, [onboard, chatOpen]);
   const pollChat = () => {
     if (typeof document !== "undefined" && document.hidden) return Promise.resolve();
     return fetch("/api/chat?since=" + chatSinceRef.current, { cache: "no-store" })
@@ -6804,8 +6820,8 @@ export default function Home() {
           <div
             data-tv-modal
             data-onboard
-            className="fixed inset-0 z-[90] bg-[#050505] flex flex-col lg:flex-row overflow-hidden select-none"
-            style={{ ["--ob" as any]: sl.accent, ["--obg" as any]: sl.glow, paddingTop: "env(safe-area-inset-top, 0px)" }}
+            className="fixed inset-0 z-[90] bg-[#050505] flex flex-col lg:flex-row overflow-hidden select-none overscroll-none"
+            style={{ ["--ob" as any]: sl.accent, ["--obg" as any]: sl.glow, paddingTop: "env(safe-area-inset-top, 0px)", height: "100dvh", minHeight: "100%", touchAction: "pan-x" }}
             onTouchStart={(e) => { onboardTouch.current = e.touches[0].clientX; }}
             onTouchEnd={(e) => { const dx = e.changedTouches[0].clientX - onboardTouch.current; if (dx < -50) next(); else if (dx > 50) prev(); }}
             onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); next(); } else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); } }}
@@ -6822,11 +6838,13 @@ export default function Home() {
               <div className="absolute inset-0 bg-gradient-to-b lg:bg-gradient-to-r from-transparent via-[#050505]/40 to-[#050505]" />
               <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-b from-[#050505]/0 via-transparent to-[#050505]/70" />
               <div className="absolute inset-0 transition-all duration-700" style={{ background: "radial-gradient(circle at 50% 60%, var(--obg) 0%, transparent 55%)", mixBlendMode: "screen" }} />
-              <div key={"obb-" + onboardStep} className="absolute left-1/2 bottom-6 lg:bottom-auto lg:top-1/2 -translate-x-1/2 lg:-translate-y-1/2" style={{ animation: "cvObPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>{sl.badge}</div>
+              <div className="absolute inset-x-0 bottom-5 lg:bottom-0 lg:top-0 flex justify-center items-end lg:items-center px-4 pointer-events-none">
+                <div key={"obb-" + onboardStep} className="max-w-full" style={{ animation: "cvObPop .5s cubic-bezier(.2,1.4,.4,1) both" }}>{sl.badge}</div>
+              </div>
             </div>
 
             {/* Texto */}
-            <div className="relative flex-1 flex flex-col px-6 sm:px-12 lg:px-16 xl:px-24 pb-6 lg:py-10 min-h-0" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
+            <div className="relative flex-1 flex flex-col px-6 sm:px-12 lg:px-16 xl:px-24 pb-6 lg:py-10 min-h-0 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
               <div className="hidden lg:flex items-center justify-between">
                 <div className="flex items-center gap-2"><span className="w-9 h-9 rounded-xl bg-green-500 text-black font-black text-sm flex items-center justify-center">CV</span><span className="font-black text-white tracking-tight">Cineverso Mágico</span></div>
                 {onboardStep < last && <button onClick={() => closeOnboard(false)} className="text-sm font-bold text-gray-400 hover:text-white px-3 py-2 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Saltar</button>}
