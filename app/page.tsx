@@ -3663,7 +3663,7 @@ export default function Home() {
     try {
       if (localStorage.getItem("cv_onboard_done")) return;
       const q = window.location.search;
-      if (/[?&](ver|admin|sala)\b/.test(q)) return;
+      if (/[?&](ver|admin|sala|lista)\b/.test(q)) return;
     } catch (e) { return; }
     setOnboardStep(0);
     setOnboard(true);
@@ -3685,6 +3685,202 @@ export default function Home() {
     }, 120);
     return () => clearTimeout(t);
   }, [onboard, onboardStep]);
+
+  // ---------- Comunidad: reseñas con estrellas ----------
+  const [commStars, setCommStars] = useState<Record<string, { avg: number; count: number }>>({});
+  const [commTop, setCommTop] = useState<string[]>([]);
+  const loadCommTop = () => {
+    fetch("/api/community?top=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => {
+      if (!d) return;
+      if (d.stars) setCommStars(d.stars);
+      if (Array.isArray(d.top)) setCommTop(d.top.map((x: any) => String(x.id)));
+    }).catch(() => {});
+  };
+  useEffect(() => { loadCommTop(); }, []);
+  const [revData, setRevData] = useState<{ avg: number; count: number; reviews: { name: string; avatar: string; badge: string; stars: number; text: string; at: number; mine: boolean }[] } | null>(null);
+  const [revStars, setRevStars] = useState(0);
+  const [revHover, setRevHover] = useState(0);
+  const [revText, setRevText] = useState("");
+  const [revBusy, setRevBusy] = useState(false);
+  const loadReviews = (id: string) => {
+    fetch("/api/community?movie=" + encodeURIComponent(id), { cache: "no-store", credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: any) => {
+        if (!d) return;
+        setRevData(d);
+        const mine = (d.reviews || []).find((x: any) => x.mine);
+        if (mine) { setRevStars(mine.stars); setRevText(mine.text); }
+      })
+      .catch(() => {});
+  };
+  useEffect(() => {
+    setRevData(null); setRevStars(0); setRevHover(0); setRevText("");
+    if (selectedMovie && !selectedMovie.comingSoon) loadReviews(String(selectedMovie.id));
+  }, [selectedMovie && selectedMovie.id]);
+  const commPost = (body: any) =>
+    fetch("/api/community", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, status: r.status, d })))
+      .then((res) => {
+        if (res.status === 401 && accountUser) {
+          // La sesión se renueva sola y se vuelve a intentar una vez
+          return fetch("/api/account", { cache: "no-store", credentials: "same-origin" }).then(() =>
+            fetch("/api/community", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) })
+              .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, status: r.status, d })))
+          );
+        }
+        return res;
+      });
+  const submitReview = () => {
+    if (!selectedMovie || revBusy) return;
+    if (!accountUser) { showToast("Inicia sesión para dejar tu reseña."); return; }
+    if (!revStars) { showToast("Elige de 1 a 5 estrellas ⭐"); return; }
+    setRevBusy(true);
+    const id = String(selectedMovie.id);
+    commPost({ action: "review", movieId: id, stars: revStars, text: revText, name: activeProfile.name, avatar: activeProfile.avatar, badge: topBadge ? topBadge.icon : "" })
+      .then(({ ok, d }) => {
+        setRevBusy(false);
+        if (ok) {
+          showToast("⭐ ¡Gracias por tu reseña!");
+          setCommStars((cs) => ({ ...cs, [id]: { avg: d.avg, count: d.count } }));
+          loadReviews(id);
+          setMeCounts((c) => ({ ...c, reviews: Math.max(c.reviews, 1) }));
+          loadMeCounts();
+        } else showToast((d && d.error) || "No se pudo publicar.", 6000);
+      })
+      .catch(() => { setRevBusy(false); showToast("Sin conexión."); });
+  };
+  const deleteMyReview = () => {
+    if (!selectedMovie) return;
+    const id = String(selectedMovie.id);
+    commPost({ action: "deleteReview", movieId: id }).then(() => { setRevStars(0); setRevText(""); loadReviews(id); loadCommTop(); loadMeCounts(); });
+  };
+  const starRow = (val: number, size: number) => (
+    <span className="inline-flex items-center gap-0.5" aria-label={val + " de 5 estrellas"}>
+      {[1, 2, 3, 4, 5].map((k) => (
+        <svg key={k} width={size} height={size} viewBox="0 0 24 24" fill={val >= k - 0.25 ? "#facc15" : val >= k - 0.75 ? "url(#cvHalf)" : "none"} stroke="#facc15" strokeWidth="1.6" strokeLinejoin="round">
+          <defs><linearGradient id="cvHalf"><stop offset="50%" stopColor="#facc15" /><stop offset="50%" stopColor="transparent" /></linearGradient></defs>
+          <path d="m12 2.6 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.5l-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z" />
+        </svg>
+      ))}
+    </span>
+  );
+
+  // ---------- Comunidad: listas ----------
+  type CommList = { id: string; owner: string; avatar: string; name: string; desc: string; movieIds: string[]; followers: number; mine: boolean; following: boolean; updated: number };
+  const [commLists, setCommLists] = useState<CommList[]>([]);
+  const [myLists, setMyLists] = useState<CommList[]>([]);
+  const [viewList, setViewList] = useState<CommList | null>(null);
+  const [listPickFor, setListPickFor] = useState<Movie | null>(null);
+  const [listEdit, setListEdit] = useState<{ id?: string; name: string; desc: string; movieIds: string[] } | null>(null);
+  const loadLists = () => {
+    fetch("/api/community?lists=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => {
+      if (!d) return;
+      setCommLists(d.lists || []);
+      setMyLists(d.mine || []);
+    }).catch(() => {});
+  };
+  useEffect(() => { loadLists(); }, [accountUser && accountUser.email]);
+  // Enlace compartido de una lista: /?lista=ID
+  useEffect(() => {
+    if (!commLists.length && !myLists.length) return;
+    let id = "";
+    try { id = new URLSearchParams(window.location.search).get("lista") || ""; } catch (e) {}
+    if (!id) return;
+    const l = commLists.concat(myLists).find((x) => x.id === id);
+    if (l) setViewList(l);
+    try { history.replaceState(null, "", window.location.pathname); } catch (e) {}
+  }, [commLists.length, myLists.length]);
+  const saveList = (data: { id?: string; name: string; desc: string; movieIds: string[] }, msg?: string) =>
+    commPost({ action: "listSave", ...data, owner: activeProfile.name, avatar: activeProfile.avatar }).then(({ ok, d }) => {
+      if (ok) { if (msg) showToast(msg); loadLists(); loadMeCounts(); return d.list as CommList; }
+      showToast((d && d.error) || "No se pudo guardar la lista.", 6000);
+      return null;
+    });
+  const toggleFollow = (l: CommList) => {
+    if (!accountUser) { showToast("Inicia sesión para seguir listas."); return; }
+    commPost({ action: "listFollow", id: l.id }).then(({ ok, d }) => {
+      if (!ok) { showToast((d && d.error) || "No se pudo."); return; }
+      showToast(d.following ? "📂 Ahora sigues esta lista. La verás en Mi Lista." : "Dejaste de seguir la lista.");
+      setViewList((v) => (v && v.id === l.id ? { ...v, following: d.following, followers: d.followers } : v));
+      loadLists();
+    });
+  };
+  const addMovieToList = (l: CommList, mv: Movie) => {
+    const id = String(mv.id);
+    if (l.movieIds.indexOf(id) !== -1) { showToast("Ya está en «" + l.name + "»"); return; }
+    saveList({ id: l.id, name: l.name, desc: l.desc, movieIds: l.movieIds.concat(id) }, "📂 Agregada a «" + l.name + "»");
+    setListPickFor(null);
+  };
+  const listCover = (l: CommList) => l.movieIds.map((id) => catalogAll.find((x) => String(x.id) === id)).filter(Boolean).slice(0, 4) as Movie[];
+
+  // ---------- Logros e insignias ----------
+  const [meCounts, setMeCounts] = useState({ reviews: 0, lists: 0, follows: 0 });
+  const loadMeCounts = () => {
+    if (!accountUser) return;
+    fetch("/api/community?me=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => { if (d) setMeCounts({ reviews: d.reviews || 0, lists: d.lists || 0, follows: d.follows || 0 }); }).catch(() => {});
+  };
+  useEffect(() => { loadMeCounts(); }, [accountUser && accountUser.email]);
+  const watched = continueWatchingList.filter((p) => p.duration > 0 && p.time / p.duration > 0.15);
+  const watchedMovies = watched.map((p) => catalogAll.find((x) => String(x.id) === String(p.id))).filter(Boolean) as Movie[];
+  const genresSeen = new Set(watchedMovies.map((m) => m.tag).filter(Boolean));
+  const episodesSeen = watched.filter((p) => p.episodeId).length;
+  const finished = continueWatchingList.filter((p) => p.duration > 0 && p.time / p.duration > 0.9).length;
+  const ratingsCount = Object.keys(ratings).length;
+  const BADGES: { id: string; icon: string; name: string; desc: string; have: number; need: number }[] = [
+    { id: "estreno", icon: "🎬", name: "Primera función", desc: "Mira tu primer título", have: watched.length, need: 1 },
+    { id: "cinefilo", icon: "🍿", name: "Cinéfilo", desc: "Mira 10 títulos", have: watched.length, need: 10 },
+    { id: "maraton", icon: "🏃", name: "Maratonista", desc: "Mira 5 episodios de series", have: episodesSeen, need: 5 },
+    { id: "final", icon: "🏁", name: "Hasta el final", desc: "Termina 3 títulos completos", have: finished, need: 3 },
+    { id: "explorador", icon: "🧭", name: "Explorador", desc: "Mira títulos de 5 géneros distintos", have: genresSeen.size, need: 5 },
+    { id: "coleccion", icon: "❤️", name: "Coleccionista", desc: "Guarda 10 títulos en Mi Lista", have: myList.length, need: 10 },
+    { id: "critico", icon: "👍", name: "Crítico", desc: "Califica 5 títulos con 👍 o 👎", have: ratingsCount, need: 5 },
+    { id: "resenista", icon: "✍️", name: "Reseñista", desc: "Publica 3 reseñas con estrellas", have: meCounts.reviews, need: 3 },
+    { id: "curador", icon: "📂", name: "Curador", desc: "Crea una lista para la comunidad", have: meCounts.lists, need: 1 },
+    { id: "aldia", icon: "🔔", name: "Siempre al día", desc: "Activa la campanita de estrenos", have: pushState === "subscribed" ? 1 : 0, need: 1 },
+    { id: "fundador", icon: "⭐", name: "Fundador", desc: "Únete a Cineverso en su primer año", have: accountUser && new Date().getFullYear() <= 2027 ? 1 : 0, need: 1 },
+  ];
+  const unlocked = accountUser ? BADGES.filter((b) => b.have >= b.need) : [];
+  const BADGE_RANK = ["cinefilo", "resenista", "maraton", "curador", "explorador", "final", "critico", "coleccion", "aldia", "estreno", "fundador"];
+  const topBadge = unlocked.slice().sort((a, b) => BADGE_RANK.indexOf(a.id) - BADGE_RANK.indexOf(b.id))[0];
+  // Aviso cuando se desbloquea un logro nuevo
+  const unlockedKey = unlocked.map((b) => b.id).join(",");
+  // Durante los primeros segundos (mientras cargan los datos) solo se anota, sin avisar
+  const badgesSettled = useRef(false);
+  useEffect(() => {
+    badgesSettled.current = false;
+    if (!accountLoaded) return;
+    const t = setTimeout(() => { badgesSettled.current = true; }, 6000);
+    return () => clearTimeout(t);
+  }, [accountLoaded, activeProfile.id]);
+  useEffect(() => {
+    if (!accountUser || !accountLoaded) return;
+    const key = "cv_badges_" + activeProfile.id;
+    let seen: string[] | null = null;
+    try { seen = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {}
+    const now = unlocked.map((b) => b.id);
+    if (seen && badgesSettled.current) {
+      const fresh = unlocked.filter((b) => (seen as string[]).indexOf(b.id) === -1);
+      if (fresh.length) showToast("🏅 ¡Logro desbloqueado! " + fresh[0].icon + " " + fresh[0].name, 6000);
+    }
+    const merged = Array.from(new Set((seen || []).concat(now)));
+    try { localStorage.setItem(key, JSON.stringify(merged)); } catch (e) {}
+  }, [unlockedKey, activeProfile.id, accountLoaded]);
+
+  // ---------- Reproductor: velocidad e imagen flotante ----------
+  const [playRate, setPlayRate] = useState(1);
+  const [rateOpen, setRateOpen] = useState(false);
+  useEffect(() => { const v = playerRef.current; if (v) { try { v.playbackRate = playRate; } catch (e) {} } }, [playRate, isPlaying]);
+  useEffect(() => { if (!isPlaying) { setPlayRate(1); setRateOpen(false); } }, [isPlaying]);
+  const pipSupported = typeof document !== "undefined" && !!(document as any).pictureInPictureEnabled;
+  const togglePip = () => {
+    const v: any = playerRef.current;
+    if (!v) return;
+    try {
+      if ((document as any).pictureInPictureElement) (document as any).exitPictureInPicture();
+      else if (v.requestPictureInPicture) v.requestPictureInPicture().catch(() => showToast("Tu navegador no permite la imagen flotante con este video."));
+      else if (v.webkitSetPresentationMode) v.webkitSetPresentationMode("picture-in-picture");
+    } catch (e) { showToast("Tu navegador no permite la imagen flotante."); }
+  };
 
   // ---------- Chat de la comunidad ----------
   type ChatMsg = { id: string; at: number; uid: string; name: string; avatar: string; text: string; admin?: boolean };
@@ -4581,6 +4777,7 @@ export default function Home() {
               <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
               {m.tag && <span className="absolute top-2 left-2 text-[10px] text-green-400 font-bold uppercase bg-black/70 px-2 py-0.5 rounded">{m.tag}</span>}
               {inMyList(m) && <span className="absolute top-2 right-2 bg-green-500 text-black rounded-full p-0.5"><Check className="w-3 h-3" /></span>}
+              {commStars[String(m.id)] && commStars[String(m.id)].count > 0 && <span className={"absolute right-2 bg-black/80 " + (inMyList(m) ? "top-8" : "top-2") + " text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded"}>★ {commStars[String(m.id)].avg.toFixed(1)}</span>}
               {isNewMovie(m) && <span className="absolute bottom-0 left-0 right-0 text-center text-[10px] font-black tracking-wider text-white bg-red-600 py-0.5">NUEVO</span>}
             </div>
             <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{m.title}</h4>
@@ -4824,6 +5021,34 @@ export default function Home() {
                 </section>
               )}
 
+              {/* Lo mejor valorado por la comunidad */}
+              {commTop.map((id) => catalog.find((x) => String(x.id) === id)).filter(Boolean).length > 0 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">🏆 Lo mejor valorado por la comunidad</h2>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {(commTop.map((id) => catalog.find((x) => String(x.id) === id)).filter(Boolean) as Movie[]).slice(0, 15).map((m) => posterCard(m, "best-" + m.id))}
+                  </Rail>
+                </section>
+              )}
+              {/* Listas de la comunidad */}
+              {commLists.length > 0 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">📂 Listas de la comunidad</h2>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {commLists.slice(0, 20).map((l) => (
+                      <div key={"cl-" + l.id} onClick={() => setViewList(l)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setViewList(l); }} className="shrink-0 w-[240px] cursor-pointer rounded-2xl bg-[#111] border border-gray-800 hover:border-green-500 overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500">
+                        <div className="grid grid-cols-4 h-[96px] bg-gray-900">
+                          {listCover(l).map((m) => <img key={"lc-" + l.id + m.id} src={m.bgImage} alt="" loading="lazy" className="w-full h-full object-cover" />)}
+                        </div>
+                        <div className="p-3">
+                          <p className="text-sm font-bold text-white truncate">{l.name}</p>
+                          <p className="text-[11px] text-gray-400 truncate">de {l.owner} · {l.movieIds.length} títulos · {l.followers} seguidor{l.followers === 1 ? "" : "es"}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </Rail>
+                </section>
+              )}
               {row("Recomendado para ti", recommended, "rec", <Sparkle className="w-5 h-5 text-green-400" />)}
               {sagaNames.map((sg) => row("Saga: " + sg, sagas[sg].slice().sort(sagaSort), "saga-" + sg, <span>🎞️</span>))}
               {row(isAdmin ? "Tus Películas Subidas" : "Recién agregadas", catalog, "new")}
@@ -5072,6 +5297,29 @@ export default function Home() {
       {activeTab === "milista" && (
         <div className="max-w-6xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-6 overflow-x-hidden">
           <h2 className="text-3xl font-black text-white">Mi Lista {accountUser ? "(" + myList.length + ")" : ""}</h2>
+          {accountUser && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-bold text-white">📂 Mis listas y las que sigo</h3>
+                <button onClick={() => setListEdit({ name: "", desc: "", movieIds: [] })} className="text-xs font-bold bg-white text-black px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">+ Nueva lista</button>
+              </div>
+              {myLists.length === 0 ? (
+                <p className="text-xs text-gray-500">Crea listas temáticas (ej. “Para llorar”, “Terror de los 80”) y compártelas con la comunidad, o sigue las de otros desde Inicio.</p>
+              ) : (
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                  {myLists.map((l) => (
+                    <div key={"myl-" + l.id} onClick={() => setViewList(l)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setViewList(l); }} className="shrink-0 w-[200px] cursor-pointer rounded-2xl bg-[#111] border border-gray-800 hover:border-green-500 overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500">
+                      <div className="grid grid-cols-4 h-[72px] bg-gray-900">{listCover(l).map((m) => <img key={"mlc-" + l.id + m.id} src={m.bgImage} alt="" loading="lazy" className="w-full h-full object-cover" />)}</div>
+                      <div className="p-2.5">
+                        <p className="text-sm font-bold text-white truncate">{l.name}</p>
+                        <p className="text-[11px] text-gray-400">{l.mine ? "Tuya" : "de " + l.owner} · {l.movieIds.length} títulos</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {!accountUser ? (
             <div className="bg-[#0f0f0f] border border-gray-800 rounded-2xl p-6 max-w-xl">
               <p className="text-base font-bold text-white mb-1">Inicia sesión para usar Mi Lista</p>
@@ -6026,6 +6274,34 @@ export default function Home() {
             </div>
           </div>
 
+          {accountUser && (
+            <div className="space-y-4">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-white">🏅 Mis logros</h3>
+                  <p className="text-xs text-gray-500">{unlocked.length} de {BADGES.length} desbloqueados{topBadge ? " · Tu insignia en las reseñas: " + topBadge.icon + " " + topBadge.name : ""}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {BADGES.map((b) => {
+                  const ok = b.have >= b.need;
+                  const pct = Math.min(100, Math.round((Math.min(b.have, b.need) / b.need) * 100));
+                  return (
+                    <div key={b.id} className={"rounded-2xl border p-3 flex flex-col gap-2 " + (ok ? "bg-gradient-to-br from-yellow-500/15 to-green-500/10 border-yellow-500/40" : "bg-[#0f0f0f] border-gray-900")}>
+                      <div className="flex items-center gap-2">
+                        <span className={"text-2xl leading-none " + (ok ? "" : "grayscale opacity-40")}>{b.icon}</span>
+                        <span className={"text-sm font-bold leading-tight " + (ok ? "text-white" : "text-gray-400")}>{b.name}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 leading-snug">{b.desc}</p>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + "%", background: ok ? "#facc15" : "#22c55e" }} /></div>
+                      <p className="text-[10px] font-bold" style={{ color: ok ? "#facc15" : "#6b7280" }}>{ok ? "✔ Desbloqueado" : Math.min(b.have, b.need) + " / " + b.need}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             <div>
               <h3 className="text-lg font-bold text-white">🎬 Pedir una película o serie</h3>
@@ -6358,6 +6634,63 @@ export default function Home() {
                   </div>
                 </div>
               )}
+              {!selectedMovie.comingSoon && (
+                <div className="bg-white/[0.03] border border-gray-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-black text-white">⭐ Lo que dice la comunidad</p>
+                      {revData && revData.count > 0 ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-2xl font-black text-white">{revData.avg.toFixed(1)}</span>
+                          {starRow(revData.avg, 16)}
+                          <span className="text-xs text-gray-400">({revData.count} reseña{revData.count === 1 ? "" : "s"})</span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 mt-1">Aún no hay reseñas. ¡Sé el primero en opinar!</p>
+                      )}
+                    </div>
+                    <button onClick={() => { if (!accountUser) { showToast("Inicia sesión para crear listas."); return; } setListPickFor(selectedMovie); }} className="text-xs font-bold text-white bg-[#181818] hover:bg-gray-800 border border-gray-700 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">📂 Añadir a una lista</button>
+                  </div>
+                  {accountUser ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1" onMouseLeave={() => setRevHover(0)}>
+                        <span className="text-xs text-gray-400 mr-2">Tu nota:</span>
+                        {[1, 2, 3, 4, 5].map((k) => (
+                          <button key={"st-" + k} type="button" aria-label={k + " estrellas"} onMouseEnter={() => setRevHover(k)} onClick={() => setRevStars(k)} className="p-0.5 cursor-pointer rounded focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill={(revHover || revStars) >= k ? "#facc15" : "none"} stroke="#facc15" strokeWidth="1.6" strokeLinejoin="round"><path d="m12 2.6 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.5l-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z" /></svg>
+                          </button>
+                        ))}
+                        <span className="text-xs text-yellow-400 font-bold ml-2">{["", "Mala", "Regular", "Buena", "Muy buena", "¡Obra maestra!"][revHover || revStars]}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <input type="text" maxLength={160} value={revText} onChange={(e) => setRevText(e.target.value)} placeholder="Tu opinión en una línea (opcional)" className="flex-1 min-w-0 bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                        <button onClick={submitReview} disabled={revBusy} className="shrink-0 bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-black font-black px-4 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60">{revBusy ? "…" : revData && revData.reviews.some((r) => r.mine) ? "Actualizar" : "Publicar"}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setSelectedMovie(null); goToLogin(); }} className="text-xs font-bold text-green-400 hover:underline cursor-pointer">Inicia sesión para dejar tu reseña con estrellas</button>
+                  )}
+                  {revData && revData.reviews.length > 0 && (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {revData.reviews.map((r, i) => (
+                        <div key={"rv-" + i} className="flex gap-3 bg-black/30 rounded-xl p-3">
+                          {r.avatar ? <img src={r.avatar} alt="" className="w-9 h-9 rounded-lg object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-9 rounded-lg bg-gray-700 shrink-0" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-white">{r.name}</span>
+                              {r.badge && <span className="text-sm" title="Logro">{r.badge}</span>}
+                              {starRow(r.stars, 12)}
+                              <span className="text-[10px] text-gray-500 ml-auto">{new Date(r.at).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}</span>
+                            </div>
+                            {r.text && <p className="text-sm text-gray-300 mt-0.5 break-words">{r.text}</p>}
+                            {r.mine && <button onClick={deleteMyReview} className="text-[11px] text-red-400 hover:underline mt-1 cursor-pointer">Borrar mi reseña</button>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-6 sm:gap-8 border-b border-gray-800 text-sm font-bold overflow-x-auto scrollbar-none">
                 <button 
                   onClick={() => setMovieModalTab("detalles")}
@@ -6620,6 +6953,32 @@ export default function Home() {
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
+              <div className="relative">
+                <button
+                  onClick={() => setRateOpen((o) => !o)}
+                  aria-label="Velocidad de reproducción"
+                  className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <span className="text-green-400">⏩</span> {playRate === 1 ? "Velocidad" : playRate + "x"}
+                </button>
+                {rateOpen && (
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-[#141414] border border-gray-700 rounded-xl p-1.5 flex flex-col min-w-[110px] shadow-2xl z-30">
+                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => (
+                      <button key={"rate-" + r} onClick={() => { setPlayRate(r); setRateOpen(false); }} className={"text-xs font-bold px-3 py-2 rounded-lg text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (playRate === r ? "bg-green-500 text-black" : "text-gray-200 hover:bg-white/10")}>
+                        {r === 1 ? "Normal" : r + "x"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {pipSupported && (
+                <button
+                  onClick={togglePip}
+                  className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold border border-gray-800 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><rect x="12" y="11" width="8" height="6" rx="1" fill="#4ade80" /></svg> Imagen flotante
+                </button>
+              )}
               {nextEpisodeOf(selectedMovie, currentEpisode) && (
                 <button
                   onClick={() => { const nx = nextEpisodeOf(selectedMovie, currentEpisode); if (nx) playEpisode(selectedMovie, nx); }}
@@ -7058,6 +7417,102 @@ export default function Home() {
           </div>
         );
       })()}
+
+      {/* VER UNA LISTA */}
+      {viewList && (
+        <div data-tv-modal className="fixed inset-0 z-[72] bg-black/85 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" onClick={(e) => { if (e.target === e.currentTarget) setViewList(null); }}>
+          <div className="w-full max-w-3xl bg-[#0e0e0e] border border-gray-800 rounded-3xl p-5 sm:p-7 space-y-5 my-4" style={{ animation: "cvFade .25s ease-out both" }}>
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-black tracking-widest text-green-400 uppercase">Lista de la comunidad</p>
+                <h3 className="text-2xl sm:text-3xl font-black text-white break-words">{viewList.name}</h3>
+                {viewList.desc && <p className="text-sm text-gray-400 mt-1">{viewList.desc}</p>}
+                <div className="flex items-center gap-2 mt-2">
+                  {viewList.avatar && <img src={viewList.avatar} alt="" className="w-6 h-6 rounded-md object-cover" />}
+                  <span className="text-xs text-gray-400">de <b className="text-gray-200">{viewList.owner}</b> · {viewList.movieIds.length} títulos · {viewList.followers} seguidor{viewList.followers === 1 ? "" : "es"}</span>
+                </div>
+              </div>
+              <button data-close-on-back onClick={() => setViewList(null)} aria-label="Cerrar" className="w-10 h-10 rounded-full bg-[#181818] text-gray-300 hover:text-white flex items-center justify-center shrink-0 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {viewList.mine ? (
+                <>
+                  <button data-autofocus onClick={() => { setListEdit({ id: viewList.id, name: viewList.name, desc: viewList.desc, movieIds: viewList.movieIds.slice() }); setViewList(null); }} className="bg-white text-black font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">✏️ Editar lista</button>
+                  <button onClick={() => { if (window.confirm("¿Borrar la lista «" + viewList.name + "»?")) commPost({ action: "listDelete", id: viewList.id }).then(() => { showToast("Lista borrada."); setViewList(null); loadLists(); loadMeCounts(); }); }} className="border border-red-900 text-red-400 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Borrar</button>
+                </>
+              ) : (
+                <button data-autofocus onClick={() => toggleFollow(viewList)} className={"font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (viewList.following ? "bg-[#181818] text-white border border-gray-700" : "bg-green-500 text-black")}>{viewList.following ? "✔ Siguiendo" : "+ Seguir lista"}</button>
+              )}
+              <button onClick={() => {
+                const url = window.location.origin + "/?lista=" + encodeURIComponent(viewList.id);
+                const nav: any = navigator;
+                const text = "Mira mi lista «" + viewList.name + "» en Cineverso Mágico 🍿";
+                if (nav.share) { nav.share({ title: viewList.name, text, url }).catch(() => {}); return; }
+                try { nav.clipboard.writeText(url).then(() => showToast("🔗 Enlace de la lista copiado")); } catch (e) { showToast(url, 8000); }
+              }} className="bg-[#181818] text-white border border-gray-700 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Compartir</button>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+              {viewList.movieIds.map((id) => catalogAll.find((x) => String(x.id) === id)).filter(Boolean).map((m) => (
+                <div key={"vl-" + (m as Movie).id} onClick={() => { setViewList(null); setSelectedMovie(m as Movie); }} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") { setViewList(null); setSelectedMovie(m as Movie); } }} className="cursor-pointer rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500">
+                  <img src={(m as Movie).bgImage} alt={(m as Movie).title} loading="lazy" className="w-full aspect-[2/3] object-cover rounded-xl bg-gray-900 border border-gray-800 hover:border-green-500" />
+                  <p className="text-[11px] text-gray-300 font-semibold truncate mt-1">{(m as Movie).title}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AÑADIR A UNA LISTA */}
+      {listPickFor && (
+        <div data-tv-modal className="fixed inset-0 z-[74] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) setListPickFor(null); }}>
+          <div className="w-full sm:max-w-md bg-[#141414] border border-gray-800 rounded-t-3xl sm:rounded-3xl p-5 space-y-4" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)", animation: "cvFade .2s ease-out both" }}>
+            <div className="flex items-center gap-3">
+              <img src={listPickFor.bgImage} alt="" className="w-10 h-14 rounded-lg object-cover bg-gray-900" />
+              <div className="flex-1 min-w-0"><p className="text-xs text-gray-400">Añadir a una lista</p><p className="text-sm font-bold text-white truncate">{listPickFor.title}</p></div>
+              <button data-close-on-back onClick={() => setListPickFor(null)} aria-label="Cerrar" className="w-9 h-9 rounded-full bg-[#222] text-gray-300 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto">
+              {myLists.filter((l) => l.mine).map((l, i) => (
+                <button key={"pick-" + l.id} data-autofocus={i === 0 ? true : undefined} onClick={() => addMovieToList(l, listPickFor)} className="w-full flex items-center justify-between gap-3 bg-[#0a0a0a] hover:bg-white/5 border border-gray-800 rounded-xl px-4 py-3 text-left cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">
+                  <span className="text-sm font-bold text-white truncate">📂 {l.name}</span>
+                  <span className="text-[11px] text-gray-400 shrink-0">{l.movieIds.indexOf(String(listPickFor.id)) !== -1 ? "✔ Ya está" : l.movieIds.length + " títulos"}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { setListEdit({ name: "", desc: "", movieIds: [String(listPickFor.id)] }); setListPickFor(null); }} className="w-full bg-white text-black font-bold py-3 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">+ Crear lista nueva con esta película</button>
+          </div>
+        </div>
+      )}
+
+      {/* CREAR / EDITAR LISTA */}
+      {listEdit && (
+        <div data-tv-modal className="fixed inset-0 z-[76] bg-black/85 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" onClick={(e) => { if (e.target === e.currentTarget) setListEdit(null); }}>
+          <div className="w-full max-w-lg bg-[#0e0e0e] border border-gray-800 rounded-3xl p-5 sm:p-7 space-y-4 my-4" style={{ animation: "cvFade .25s ease-out both" }}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-black text-white">{listEdit.id ? "Editar lista" : "Nueva lista"}</h3>
+              <button data-close-on-back onClick={() => setListEdit(null)} aria-label="Cerrar" className="w-9 h-9 rounded-full bg-[#181818] text-gray-300 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><X className="w-4 h-4" /></button>
+            </div>
+            <input type="text" maxLength={50} value={listEdit.name} onChange={(e) => setListEdit({ ...listEdit, name: e.target.value })} placeholder="Nombre (ej. Para ver en familia 🍿)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-base font-bold text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <input type="text" maxLength={140} value={listEdit.desc} onChange={(e) => setListEdit({ ...listEdit, desc: e.target.value })} placeholder="Descripción corta (opcional)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <div>
+              <p className="text-xs text-gray-400 mb-2">Títulos en la lista ({listEdit.movieIds.length}). Toca para quitar; agrega más desde cualquier ficha con “📂 Añadir a una lista”.</p>
+              <div className="flex flex-wrap gap-2">
+                {listEdit.movieIds.map((id) => { const m = catalogAll.find((x) => String(x.id) === id); return m ? (
+                  <button key={"le-" + id} onClick={() => setListEdit({ ...listEdit, movieIds: listEdit.movieIds.filter((x) => x !== id) })} className="flex items-center gap-2 bg-[#181818] border border-gray-800 rounded-lg pl-1 pr-2 py-1 text-xs text-gray-200 cursor-pointer hover:border-red-700">
+                    <img src={m.bgImage} alt="" className="w-6 h-9 rounded object-cover" /> <span className="max-w-[120px] truncate">{m.title}</span> <span className="text-red-400">✕</span>
+                  </button>
+                ) : null; })}
+                {myList.length > 0 && listEdit.movieIds.length === 0 && (
+                  <button onClick={() => setListEdit({ ...listEdit, movieIds: myList.map((t) => catalogAll.find((x) => x.title === t)).filter(Boolean).map((m) => String((m as Movie).id)).slice(0, 30) })} className="text-xs font-bold text-green-400 hover:underline cursor-pointer">Empezar con los títulos de Mi Lista</button>
+                )}
+              </div>
+            </div>
+            <button data-autofocus onClick={() => { const le = listEdit; saveList(le, le.id ? "📂 Lista actualizada" : "📂 ¡Lista creada! Ya la puede ver la comunidad.").then((l) => { if (l) setListEdit(null); }); }} className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-3.5 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60">{listEdit.id ? "Guardar cambios" : "Crear lista"}</button>
+            <p className="text-[11px] text-gray-500">Las listas con al menos un título aparecen en “Listas de la comunidad” en Inicio.</p>
+          </div>
+        </div>
+      )}
 
       {/* EDITAR PERFIL */}
       {editProfile && (
