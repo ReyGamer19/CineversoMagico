@@ -1,6 +1,6 @@
 import { NextResponse, connection } from "next/server";
 import { cookies } from "next/headers";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 // Solicitudes de películas de los usuarios (solo con cuenta).
 // Se guardan en la tabla "catalog", fila id = 5. El administrador las ve en su panel.
@@ -49,11 +49,34 @@ function sameText(a: string, b: string) {
   const x = Buffer.from(a, "utf8"), y = Buffer.from(b, "utf8");
   return x.length === y.length && timingSafeEqual(x, y);
 }
-function passwordOk(p: unknown) {
-  if (typeof p !== "string" || !p || p.length > 200) return false;
-  if (ADMIN_PASSWORD && sameText(p, ADMIN_PASSWORD)) return true;
-  if (/^[a-f0-9]{64}$/.test(ADMIN_HASH)) return sameText(createHash("sha256").update(p, "utf8").digest("hex"), ADMIN_HASH);
-  return false;
+// Seguridad: aquí solo vale el PASE temporal de administrador (lo entrega /api/catalog al iniciar sesión).
+// La clave real ya no viaja en cada acción ni se guarda en el navegador.
+function adminSecret() {
+  return createHash("sha256").update("cv-admin|" + ADMIN_HASH + "|" + ADMIN_PASSWORD + "|" + SERVICE_KEY, "utf8").digest();
+}
+// Pases anulados con "Cerrar sesión en todos los dispositivos" (fila 12: revokedBefore)
+let revCache = { at: 0, before: 0 };
+async function revokedBefore(): Promise<number> {
+  if (Date.now() - revCache.at < 15000) return revCache.before;
+  try {
+    const h: Record<string, string> = { apikey: SERVICE_KEY };
+    if (SERVICE_KEY.startsWith("eyJ")) h.Authorization = "Bearer " + SERVICE_KEY;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog?id=eq.12&select=data`, { headers: h, cache: "no-store" });
+    const rows = res.ok ? await res.json() : [];
+    const d = Array.isArray(rows) && rows[0] ? rows[0].data : null;
+    revCache = { at: Date.now(), before: d && typeof d.revokedBefore === "number" ? d.revokedBefore : 0 };
+  } catch {}
+  return revCache.before;
+}
+async function passwordOk(p: unknown): Promise<boolean> {
+  if (typeof p !== "string" || p.length > 300) return false;
+  const m = /^cvt\.(\d{10,13})\.([a-f0-9]{64})$/.exec(p);
+  if (!m || Number(m[1]) < Date.now()) return false;
+  if (!(ADMIN_PASSWORD || /^[a-f0-9]{64}$/.test(ADMIN_HASH))) return false;
+  const want = createHmac("sha256", adminSecret()).update("admin|" + m[1]).digest("hex");
+  if (!sameText(want, m[2])) return false;
+  // emitido antes de "cerrar sesión en todos" = ya no sirve
+  return Number(m[1]) - 7 * 86400000 >= (await revokedBefore());
 }
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max) : "");
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status, headers: noStore });
@@ -91,7 +114,7 @@ export async function POST(req: Request) {
     }
     // Administrador
     if (action === "list" || action === "status" || action === "delete") {
-      if (!passwordOk(b?.password)) {
+      if (!await passwordOk(b?.password)) {
         await new Promise((r) => setTimeout(r, 800));
         return fail("Clave incorrecta", 401);
       }

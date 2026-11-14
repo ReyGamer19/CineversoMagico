@@ -2042,6 +2042,85 @@ export default function Home() {
     if (wantsAdmin() && !adminDevice) setShowAdminLogin(true);
   }, []);
 
+  // Inicio de sesión de administrador: la clave se cambia por un pase temporal (7 días) firmado por el servidor
+  const adminLoginCall = (password: string) =>
+    fetch("/api/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "login", password }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .catch(() => ({ status: 0, d: {} as any }));
+  // Seguridad: si este dispositivo guardaba la CLAVE (versión anterior), se cambia sola por un pase.
+  // Si el pase está por vencer, se renueva.
+  useEffect(() => {
+    let saved = "";
+    try { saved = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!saved) return;
+    const store = (t: string) => { try { localStorage.setItem("cineverso_admin_pass", t); } catch (e) {} };
+    const m = /^cvt\.(\d+)\./.exec(saved);
+    if (!m) {
+      adminLoginCall(saved).then(({ status, d }) => {
+        if (status === 200 && d.token) { store(d.token); try { if (d.loginId) localStorage.setItem("cv_admin_login_id", d.loginId); } catch (e) {} }
+        else if (status === 401) { try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {} }
+      });
+      return;
+    }
+    if (Number(m[1]) - Date.now() < 3 * 86400000) {
+      fetch("/api/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "renew", password: saved }) })
+        .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+        .then(({ status, d }) => { if (status === 200 && d.token) store(d.token); else if (status === 401) { try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {} } })
+        .catch(() => {});
+    }
+  }, []);
+  // Copias de seguridad del catálogo (panel)
+  const [backups, setBackups] = useState<{ slot: number; at: number; count: number }[] | null>(null);
+  const adminPass = () => { try { return localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) { return ""; } };
+  const loadBackups = () => {
+    fetch("/api/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "backups", password: adminPass() }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .then(({ status, d }) => { if (status === 200) setBackups(d.backups || []); else if (status === 401) { setServerPassError("Por seguridad, vuelve a escribir tu clave de administrador."); setShowServerPass(true); } })
+      .catch(() => {});
+  };
+  const restoreBackup = (b: { slot: number; at: number; count: number }) => {
+    if (!window.confirm("¿Restaurar el catálogo como estaba el " + new Date(b.at).toLocaleString("es-PE", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " (" + b.count + " títulos)?\n\nEl catálogo actual queda guardado como copia de hoy, por si te arrepientes.")) return;
+    fetch("/api/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore", slot: b.slot, password: adminPass() }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (status === 200) {
+          showToast("🛡️ Catálogo restaurado (" + d.count + " títulos). Recargando…", 5000);
+          setTimeout(() => { try { localStorage.removeItem("cv_catalog_cache"); } catch (e) {} window.location.reload(); }, 1500);
+        } else showToast("No se pudo restaurar (" + ((d && d.error) || status) + ").", 6000);
+      })
+      .catch(() => showToast("Sin conexión."));
+  };
+  // Registro de entradas al panel y "cerrar sesión en todos los dispositivos"
+  const [adminLog, setAdminLog] = useState<{ at: number; kind: string; device: string; net: string; id?: string }[] | null>(null);
+  const myLoginId = () => { try { return localStorage.getItem("cv_admin_login_id") || ""; } catch (e) { return ""; } };
+  const loadAdminLog = () => {
+    fetch("/api/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logins", password: adminPass() }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .then(({ status, d }) => { if (status === 200) setAdminLog(d.log || []); })
+      .catch(() => {});
+  };
+  const revokeAllAdmins = () => {
+    if (!window.confirm("¿Cerrar la sesión de administrador en TODOS los demás dispositivos?\n\nCualquier otro celular, PC o TV (incluido alguien que no seas tú) perderá el acceso al instante. Este dispositivo sigue conectado.")) return;
+    fetch("/api/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "revokeAll", password: adminPass() }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ status: r.status, d })))
+      .then(({ status, d }) => {
+        if (status === 200 && d.token) {
+          try { localStorage.setItem("cineverso_admin_pass", d.token); if (d.loginId) localStorage.setItem("cv_admin_login_id", d.loginId); } catch (e) {}
+          showToast("🚨 Listo: se cerró la sesión de administrador en todos los demás dispositivos.", 7000);
+          loadAdminLog();
+        } else if (status === 401) { setServerPassError("Por seguridad, vuelve a escribir tu clave de administrador."); setShowServerPass(true); }
+        else showToast("No se pudo (" + ((d && d.error) || status) + ").", 6000);
+      })
+      .catch(() => showToast("Sin conexión."));
+  };
+  useEffect(() => { if (activeTab === "admin" && isAdmin) { const t = setTimeout(loadAdminLog, 1500); return () => clearTimeout(t); } }, [activeTab, isAdmin]);
+  const adminLogoutDevice = () => {
+    if (!window.confirm("¿Cerrar la sesión de administrador en este dispositivo?")) return;
+    try { localStorage.removeItem("cineverso_admin_pass"); localStorage.removeItem("cineverso_admin_key"); } catch (e) {}
+    setIsAdmin(false);
+    setActiveTab("inicio");
+    showToast("🔒 Sesión de administrador cerrada en este dispositivo.");
+  };
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminChecking) return;
@@ -2050,26 +2129,23 @@ export default function Home() {
     setAdminPassError("");
     // El servidor comprueba la clave sin modificar nada (movies:null a propósito):
     // clave correcta -> 400 "Catálogo inválido"; incorrecta -> 401.
-    fetch("/api/catalog", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pass, movies: null }),
-    })
-      .then((r) => r.status)
-      .catch(() => 0)
-      .then((status) => {
+    adminLoginCall(pass)
+      .then(({ status, d }) => {
         setAdminChecking(false);
-        if (status === 400) {
+        if (status === 200 && d.token) {
           try {
             localStorage.setItem("cineverso_admin_key", "server");
-            localStorage.setItem("cineverso_admin_pass", pass);
+            // Solo se guarda el pase temporal firmado por el servidor, nunca la clave
+            localStorage.setItem("cineverso_admin_pass", d.token);
+            if (d.loginId) localStorage.setItem("cv_admin_login_id", d.loginId);
           } catch (err) {}
           setIsAdmin(true);
           setShowAdminLogin(false);
           setAdminPassInput("");
           setActiveTab("admin");
           showToast("Sesión de administrador iniciada. Los cambios se publicarán para todos.");
-        } else if (status === 401) setAdminPassError("Clave incorrecta.");
+        } else if (status === 429) setAdminPassError("🔒 Demasiados intentos fallidos. Por seguridad espera " + (d.lockedMin || 15) + " minutos.");
+        else if (status === 401) setAdminPassError("Clave incorrecta." + (typeof d.left === "number" && d.left <= 3 ? " Te quedan " + d.left + " intento" + (d.left === 1 ? "" : "s") + " antes del bloqueo." : ""));
         else if (status === 503) setAdminPassError("El servidor no tiene la clave configurada todavía. Vuelve a ejecutar el actualizador con tu clave.");
         else setAdminPassError("No se pudo conectar con el servidor. Inténtalo de nuevo.");
       });
@@ -2160,17 +2236,11 @@ export default function Home() {
     if (serverPassBusy) return;
     setServerPassBusy(true);
     setServerPassError("");
-    fetch("/api/catalog", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: serverPassInput, movies: null }),
-    })
-      .then((r) => r.status)
-      .catch(() => 0)
-      .then((status) => {
+    adminLoginCall(serverPassInput)
+      .then(({ status, d }) => {
         setServerPassBusy(false);
-        if (status === 400) {
-          try { localStorage.setItem("cineverso_admin_pass", serverPassInput); } catch (err) {}
+        if (status === 200 && d.token) {
+          try { localStorage.setItem("cineverso_admin_key", "server"); localStorage.setItem("cineverso_admin_pass", d.token); if (d.loginId) localStorage.setItem("cv_admin_login_id", d.loginId); } catch (err) {}
           setHasServerPass(true);
           setShowServerPass(false);
           setServerPassInput("");
@@ -2178,8 +2248,10 @@ export default function Home() {
           pendingSaveRef.current = null;
           if (next) next();
           else showToast("Listo: ahora tus cambios se publican para todos.");
+        } else if (status === 429) {
+          setServerPassError("🔒 Demasiados intentos fallidos. Por seguridad espera " + (d.lockedMin || 15) + " minutos.");
         } else if (status === 401) {
-          setServerPassError("Clave incorrecta.");
+          setServerPassError("Clave incorrecta." + (typeof d.left === "number" && d.left <= 3 ? " Te quedan " + d.left + " intento" + (d.left === 1 ? "" : "s") + "." : ""));
         } else if (status === 503) {
           setServerPassError("El servidor no tiene la clave configurada todavía. Vuelve a ejecutar el actualizador con tu clave.");
         } else {
@@ -2236,8 +2308,11 @@ export default function Home() {
               setServerCatalog(true);
               showToast(okMsg + " ✔ Publicado en todos los dispositivos.");
             } else if (status === 401) {
+              // El pase de administrador venció: se pide la clave y se vuelve a intentar este mismo cambio
               try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {}
-              showToast("Tu clave guardada ya no es válida. Vuelve a entrar con ?admin.", 7000);
+              pendingSaveRef.current = () => saveChange(op, okMsg);
+              setServerPassError("Por seguridad, vuelve a escribir tu clave de administrador.");
+              setShowServerPass(true);
             } else {
               showToast("No se pudo publicar (" + ((x && x.error) || status) + ").", 7000);
             }
@@ -6849,6 +6924,79 @@ export default function Home() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* SEGURIDAD */}
+          <div className="bg-[#0f0f0f] border border-blue-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-bold text-white">🛡️ Seguridad y copias de seguridad</h3>
+                <p className="text-xs text-gray-500">Cada día se guarda sola una copia del catálogo (se conservan los últimos 7 días). Si algo se borra o alguien lo daña, lo restauras con un toque.</p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={loadBackups} className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-400">🗂️ Ver copias</button>
+                <button onClick={loadAdminLog} className="text-xs font-bold text-white bg-[#181818] border border-gray-800 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">📋 Ver entradas</button>
+                <button onClick={revokeAllAdmins} className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">🚨 Cerrar sesión en todos los demás</button>
+                <button onClick={adminLogoutDevice} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">🔒 Cerrar sesión aquí</button>
+              </div>
+            </div>
+            {adminLog && (() => {
+              const mine = myLoginId();
+              const week = Date.now() - 7 * 86400000;
+              const locks = adminLog.filter((x) => x.kind === "lock" && x.at > week);
+              const others = adminLog.filter((x) => x.kind === "login" && x.at > week && x.id !== mine);
+              return (
+                <div className="space-y-2">
+                  {locks.length > 0 && (
+                    <div className="rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
+                      🔒 <b>{locks.length} bloqueo{locks.length === 1 ? "" : "s"} por claves incorrectas</b> esta semana (último: {locks[0].device}, {new Date(locks[0].at).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}). Si no fuiste tú, alguien intentó adivinar tu clave: el bloqueo lo frenó.
+                    </div>
+                  )}
+                  {others.length > 0 && (
+                    <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-3 py-2.5 text-sm text-yellow-100 flex items-center gap-3 flex-wrap">
+                      <span className="flex-1 min-w-[200px]">⚠️ Hubo <b>{others.length} entrada{others.length === 1 ? "" : "s"}</b> al panel desde otros dispositivos esta semana. ¿Fuiste tú? Revisa la lista de abajo.</span>
+                      <button onClick={revokeAllAdmins} className="text-xs font-black text-white bg-red-600 hover:bg-red-500 px-3 py-2 rounded-lg cursor-pointer">🚨 No fui yo: cerrar todas</button>
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-gray-800 bg-[#050505] p-3">
+                    <p className="text-xs font-bold text-gray-400 mb-2">📋 Últimas entradas al panel</p>
+                    {adminLog.length === 0 ? <p className="text-xs text-gray-500">Todavía no hay registros. Se anotan desde esta actualización.</p> : (
+                      <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                        {adminLog.slice(0, 20).map((x, i) => (
+                          <div key={"lg-" + i} className="flex items-center gap-2 text-xs">
+                            <span className="w-5 text-center">{x.kind === "login" ? "🔑" : x.kind === "lock" ? "🔒" : "🚨"}</span>
+                            <span className="flex-1 min-w-0 truncate text-gray-200">{x.kind === "login" ? "Entrada" : x.kind === "lock" ? "Bloqueo por claves incorrectas" : "Cerró sesión en todos"} · {x.device}{x.id && x.id === mine ? <b className="text-green-400"> · este dispositivo</b> : null}</span>
+                            <span className="text-gray-500 shrink-0">{new Date(x.at).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            {backups && (backups.length === 0 ? (
+              <p className="text-sm text-gray-500">Todavía no hay copias. La primera se crea sola la próxima vez que guardes un cambio.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {backups.map((b) => (
+                  <div key={"bk-" + b.slot} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
+                    <span className="text-xl">🗂️</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-white truncate">{(() => { const t = new Date(b.at).toLocaleString("es-PE", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); return t.charAt(0).toUpperCase() + t.slice(1); })()}</span>
+                      <span className="block text-[11px] text-gray-400">{b.count} títulos</span>
+                    </span>
+                    <button onClick={() => restoreBackup(b)} className="text-[11px] font-bold px-3 py-2 rounded-lg bg-[#181818] text-blue-300 border border-gray-800 cursor-pointer hover:border-blue-400">↩ Restaurar</button>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <ul className="text-[11px] text-gray-500 space-y-1 list-disc pl-4">
+              <li>Tu clave ya no se guarda en el navegador: se usa un pase temporal que vence a los 7 días y se renueva solo.</li>
+              <li>Si alguien prueba claves, se bloquea 15 minutos después de 5 intentos fallidos.</li>
+              <li>No se puede guardar un catálogo vacío por accidente.</li>
+              <li>Si ves una entrada que no reconoces, pulsa «🚨 Cerrar sesión en todos los demás»: cualquier otro dispositivo pierde el acceso al instante.</li>
+            </ul>
           </div>
 
           {/* SAGAS AUTOMÁTICAS */}
