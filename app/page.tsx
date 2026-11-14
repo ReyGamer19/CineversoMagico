@@ -1804,79 +1804,8 @@ export default function Home() {
   const [editingMovieId, setEditingMovieId] = useState<number | string | null>(null);
 
   // Catálogo Base por defecto
-  const defaultMovies: Movie[] = [
-    {
-      id: "def-1",
-      title: "El Caballero Oscuro",
-      rating: "9.0",
-      year: "2008",
-      tag: "Acción",
-      type: "pelicula",
-      desc: "Batman se enfrenta al Caos encarnado por el Joker en una de las mejores adaptaciones cinematográficas de superhéroes de la historia.",
-      bgImage: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=800&auto=format&fit=crop",
-      videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-      duration: "2 h 32 min",
-      genres: ["Acción", "Crimen", "Drama"],
-      cast: "Christian Bale, Heath Ledger, Aaron Eckhart",
-      director: "Christopher Nolan",
-      production: "Warner Bros. Pictures",
-      originalLanguage: "EN"
-    },
-    {
-      id: "def-2",
-      title: "Wildwood",
-      rating: "8.4",
-      year: "2025",
-      tag: "Aventura",
-      type: "pelicula",
-      desc: "Una joven se adentra en un bosque secreto repleto de magia, criaturas místicas y peligros inimaginables para rescatar a su hermano menor.",
-      bgImage: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop",
-      videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-      duration: "1 h 58 min",
-      genres: ["Aventura", "Fantasía", "Animación"],
-      cast: "Carey Mulligan, Mahershala Ali, Peyton Elizabeth Lee",
-      director: "Travis Knight",
-      production: "Laika Studios",
-      originalLanguage: "EN"
-    },
-    {
-      id: "def-3",
-      title: "HOPE",
-      subtitle: "EL PRIMER IMPACTO",
-      rating: "8.8",
-      year: "2026",
-      tag: "Ciencia ficción",
-      type: "pelicula",
-      desc: "Los refuerzos se han desviado para combatir los incendios forestales y se han cortado todas las comunicaciones. El jefe del puesto policial de Hope, Bum-seok, y la agente Sung-ae luchan por defender un pueblo de ancianos, mientras que en las montañas, Sung-ki y los lugareños que se han lanzado a la búsqueda de la bestia se ven, por el contrario, acosados por ella. Lo que comienza como ignorancia siembra la semilla del desastre, que se intensifica a través del conflicto humano hasta convertirse en una tragedia de proporciones cósmicas.",
-      bgImage: "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=800&auto=format&fit=crop",
-      videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-      duration: "2 h 37 min",
-      genres: ["Ciencia ficción", "Misterio", "Acción"],
-      cast: "황정민, 조인성, 정호연, Alicia Vikander",
-      director: "Na Hong-jin",
-      production: "Forged Films",
-      originalLanguage: "KO"
-    },
-    {
-      id: "def-4",
-      title: "Toy Story 5",
-      rating: "9.1",
-      year: "2026",
-      tag: "Animación",
-      type: "pelicula",
-      desc: "Woody, Buzz y el resto de la pandilla enfrentan los nuevos desafíos de la tecnología moderna y los dispositivos electrónicos en las manos de los niños.",
-      bgImage: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
-      videoUrl: "https://archive.org/download/toy-story-5-2026-pelisde-rey/Toy%20Story%205%20%282026%25",
-      duration: "1 h 45 min",
-      genres: ["Animación", "Comedia", "Familia"],
-      cast: "Tom Hanks, Tim Allen, Joan Cusack",
-      director: "Andrew Stanton",
-      production: "Pixar Animation Studios",
-      originalLanguage: "EN"
-    }
-  ];
-
-  const [customMovies, setCustomMovies] = useState<Movie[]>(defaultMovies);
+  // Arranca vacío (sin películas de ejemplo): así Google y la primera carga nunca muestran títulos que no son tuyos
+  const [customMovies, setCustomMovies] = useState<Movie[]>([]);
   // ¿Ya está el catálogo real (del servidor o de la copia guardada)? Hasta entonces se ve la pantalla de carga
   const [catalogReady, setCatalogReady] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -1891,8 +1820,10 @@ export default function Home() {
   const kidsMode = !!activeProfile.isKid;
   // Sagas: "Marvel", "marvel " y "MARVEL" son la misma (se muestra con el primer nombre escrito)
   const sagaCanon: Record<string, string> = {};
-  customMovies.forEach((m) => { if (m.saga && m.saga.trim()) { const k = m.saga.trim().toLowerCase(); if (!sagaCanon[k]) sagaCanon[k] = m.saga.trim(); } });
-  const sagaFix = (m: Movie): Movie => { if (!m.saga) return m; const c = sagaCanon[m.saga.trim().toLowerCase()]; return c && c !== m.saga ? { ...m, saga: c } : m; };
+  // TMDB a veces agrega "(Live-Action)", "(Theatrical)", "- Colección"…: se muestran sin eso
+  const sagaClean = (n: string) => n.replace(/\s*\((live[- ]?action|theatrical|animated|animada|animaci[oó]n|colecci[oó]n|collection|saga|franquicia|franchise|serie|series|trilog[ií]a|trilogy)\)\s*$/i, "").replace(/\s*[-–:]\s*colecci[oó]n\s*$/i, "").replace(/\s+collection$/i, "").trim() || n.trim();
+  customMovies.forEach((m) => { if (m.saga && m.saga.trim()) { const k = sagaClean(m.saga).toLowerCase(); if (!sagaCanon[k]) sagaCanon[k] = sagaClean(m.saga); } });
+  const sagaFix = (m: Movie): Movie => { if (!m.saga) return m; const c = sagaCanon[sagaClean(m.saga).toLowerCase()]; return c && c !== m.saga ? { ...m, saga: c } : m; };
   const catalogAll: Movie[] = (kidsMode ? customMovies.filter(isKidFriendly) : customMovies).map(sagaFix);
   // Fecha de hoy "AAAA-MM-DD" (se lee en el navegador; al compilar queda vacía)
   const [todayStr, setTodayStr] = useState("");
@@ -1908,6 +1839,18 @@ export default function Home() {
   // Un próximo estreno pasa solo a las películas cuando llega su fecha y ya tiene video
   const isNewMovie = (m: Movie) => !!(m.addedAt && nowTs && nowTs - m.addedAt < 7 * 86400000);
   const isNewMovie30 = (m: Movie) => !!(m.addedAt && nowTs && nowTs - m.addedAt < 30 * 86400000);
+  // Nombre corto dentro de la saga: "Los juegos del hambre: En llamas" → "En llamas"
+  const sagaShort = (m: Movie, i: number) => {
+    const nt = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const t = m.title.trim();
+    const sg = (m.saga || "").trim();
+    if (sg && nt(t).startsWith(nt(sg))) {
+      const rest = t.slice(sg.length).replace(/^[\s:·\-–—,.]+/, "").trim();
+      if (rest) return /^\d+$/.test(rest) ? "Parte " + rest : rest.charAt(0).toUpperCase() + rest.slice(1);
+      return i === 0 ? "Parte 1" : t;
+    }
+    return t;
+  };
   const sagaSort = (a: Movie, b: Movie) => (a.sagaOrder || 999) - (b.sagaOrder || 999) || String(a.year).localeCompare(String(b.year)) || a.title.localeCompare(b.title);
   // Siguiente película de la misma saga
   const nextInSaga = (m: Movie | null): Movie | null => {
@@ -1919,8 +1862,8 @@ export default function Home() {
   // Nombre de saga para una película nueva: si ya existe (mismo id de TMDB o mismo nombre), se usa el de siempre
   const sagaNameFor = (name: string, sagaId?: number) => {
     const byId = sagaId ? customMovies.find((x) => x.sagaId === sagaId && x.saga) : undefined;
-    if (byId && byId.saga) return byId.saga.trim();
-    return sagaCanon[name.trim().toLowerCase()] || name.trim();
+    if (byId && byId.saga) return sagaClean(byId.saga);
+    return sagaCanon[sagaClean(name).toLowerCase()] || sagaClean(name);
   };
   const isUpcoming = (m: Movie) =>
     !!m.comingSoon && !(m.releaseDate && todayStr && m.releaseDate <= todayStr && m.videoUrl && !/gtv-videos-bucket/i.test(m.videoUrl));
@@ -5549,7 +5492,8 @@ export default function Home() {
     const day = recoSeed;
     const hash = (x: string) => { let h = day; for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) % 100000; return h; };
     return catalog
-      .filter((m) => myList.indexOf(m.title) === -1 && ratings[String(m.id)] !== -1)
+      // Solo lo que todavía no ha visto (ni está en Mi Lista ni marcó 👎)
+      .filter((m) => myList.indexOf(m.title) === -1 && ratings[String(m.id)] !== -1 && !seenIds.has(String(m.id)) && !continueWatchingList.some((p) => String(p.id) === String(m.id)))
       .map((m) => ({ m, score: (likedTags[m.tag] || 0) * 1000 + (hash(String(m.id)) % 1000) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 12)
@@ -5951,7 +5895,7 @@ export default function Home() {
               onClick={() => setActiveTab("explorar")} 
               className={`px-3 py-1.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-green-500 ${activeTab === "explorar" ? "bg-white/10 text-white font-bold border border-green-500/50" : "hover:text-green-400"}`}
             >
-              Explorador
+              Explorar
             </button>
             {!kidsMode && (
             <button 
@@ -6101,7 +6045,16 @@ export default function Home() {
       </nav>
 
       {/* VISTA INICIO */}
-      {activeTab === "inicio" && (() => {
+      {activeTab === "inicio" && catalog.length === 0 && (
+        <div className="pt-28 pb-24 px-6 sm:px-12 max-w-4xl mx-auto text-center space-y-5">
+          <img src="/icons/icon-192.png" alt="Cineverso Mágico" className="w-20 h-20 rounded-2xl mx-auto" />
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white">Cineverso <span className="text-green-400">Mágico</span></h1>
+          <p className="text-lg sm:text-xl text-gray-300">Películas, series y TV en vivo gratis 🍿 Estrenos, sagas completas, reseñas y una comunidad para pedir lo que quieras ver.</p>
+          <p className="text-sm text-gray-500">{catalogReady ? "No se pudo cargar el catálogo. Revisa tu conexión y vuelve a intentarlo." : "Cargando el catálogo…"}</p>
+          {catalogReady && <button onClick={() => window.location.reload()} className="bg-white text-black font-bold px-6 py-3 rounded-xl cursor-pointer">Reintentar</button>}
+        </div>
+      )}
+      {activeTab === "inicio" && catalog.length > 0 && (() => {
         const posterCard = (m: Movie, key: string) => (
           <div
             key={key}
@@ -7006,7 +6959,7 @@ export default function Home() {
                 <h3 className="text-lg font-bold text-white">🎞️ Ordenar mis sagas</h3>
                 <p className="text-xs text-gray-500">Busca en TMDB a qué saga pertenece cada película que ya subiste y le pone su número (1, 2, 3…) según su fecha de estreno. Las nuevas se completan solas al usar «Autocompletar».</p>
               </div>
-              <button onClick={scanSagas} disabled={!!(sagaScan && sagaScan.busy)} className="text-sm font-black text-black bg-green-500 hover:bg-green-400 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-300">{sagaScan && sagaScan.busy ? "Revisando " + sagaScan.done + " de " + sagaScan.total + "…" : "🪄 Revisar todo el catálogo"}</button>
+              <button onClick={scanSagas} disabled={!!(sagaScan && sagaScan.busy)} className="text-sm font-black text-black bg-green-500 hover:bg-green-400 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-300">{sagaScan && sagaScan.busy ? "Revisando " + sagaScan.done + " de " + sagaScan.total + "…" : "✨ Revisar todo el catálogo"}</button>
             </div>
             {sagaScan && sagaScan.busy && (
               <div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-green-500" style={{ width: Math.round((sagaScan.done / Math.max(1, sagaScan.total)) * 100) + "%", transition: "width .3s" }} /></div>
@@ -8326,9 +8279,9 @@ export default function Home() {
                       >
                         <div className="relative aspect-[2/3] bg-gray-900">
                           <img decoding="async" src={posterSrc(x)} alt={x.title} loading="lazy" className="w-full h-full object-cover" />
-                          <span className="absolute top-1 left-1 bg-black/75 text-white text-[10px] font-black px-1.5 py-0.5 rounded">{x.sagaOrder || i + 1}</span>
+                          <span className="absolute top-1 left-1 bg-black/75 text-white text-[10px] font-black px-1.5 py-0.5 rounded">{i + 1}</span>
                         </div>
-                        <p className="text-[11px] text-gray-300 font-semibold truncate px-1.5 py-1">{x.title}</p>
+                        <p className="text-[11px] text-gray-300 font-semibold leading-tight mx-1.5 mt-1 mb-1.5 h-[28px] overflow-hidden" title={x.title} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>{sagaShort(x, i)}</p>
                       </button>
                     ))}
                   </div>

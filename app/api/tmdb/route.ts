@@ -42,6 +42,7 @@ const cleanSagaName = (n: string) =>
     .replace(/^colecci[oó]n\s+(de\s+)?/i, "")
     .replace(/\s*\(colecci[oó]n\)\s*/i, " ")
     .replace(/\s+collection$/i, "")
+    .replace(/\s*\((live[- ]?action|theatrical|animated|animada|animaci[oó]n|colecci[oó]n|collection|saga|franquicia|franchise|serie|series|trilog[ií]a|trilogy)\)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 60);
