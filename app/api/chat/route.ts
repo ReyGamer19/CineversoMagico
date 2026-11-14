@@ -17,7 +17,7 @@ const ROW = 6;
 const MAX_MSGS = 200;
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
-type Msg = { id: string; at: number; uid: string; name: string; avatar: string; text: string; admin?: boolean };
+type Msg = { id: string; at: number; uid: string; name: string; avatar: string; text: string; admin?: boolean; owner?: boolean };
 type Room = { msgs: Msg[]; pinned: string; banned: string[]; seen: Record<string, number>; last: Record<string, number> };
 const emptyRoom = (): Room => ({ msgs: [], pinned: "¡Bienvenidos al chat de Cineverso! 🍿 Aquí puedes pedir películas, avisar si un video no funciona y conversar con la comunidad. Sé respetuoso. No se permiten enlaces.", banned: [], seen: {}, last: {} });
 
@@ -162,13 +162,22 @@ export async function POST(req: Request) {
       const name = isAdmin ? (str(b.name, 24) || "Rey") : str(b.name, 24) || (u ? u.email.split("@")[0].slice(0, 20) : "Usuario");
       const avatar = /^\/[a-zA-Z0-9_\-./ %]+$/.test(str(b.avatar, 200)) ? str(b.avatar, 200) : "";
       const now = Date.now();
+      // ¿Es la cuenta del dueño? (fila 9, la registra el admin con su clave)
+      let isOwner = false;
+      if (u) {
+        try {
+          const ro = await fetch(`${SUPABASE_URL}/rest/v1/catalog?id=eq.9&select=data`, { headers: sbHeaders(SERVICE_KEY), cache: "no-store" });
+          const rows = ro.ok ? await ro.json() : [];
+          isOwner = !!(rows[0] && rows[0].data && rows[0].data.ownerUid === u.id);
+        } catch {}
+      }
       const { room, error } = await updateRoom((r) => {
         if (!isAdmin && r.banned.indexOf(uid) !== -1) return "No puedes escribir en el chat.";
         r.last = r.last || {};
         if (!isAdmin && r.last[uid] && now - r.last[uid] < 3000) return "Espera unos segundos antes de enviar otro mensaje.";
         r.last[uid] = now;
         for (const k of Object.keys(r.last)) if (now - r.last[k] > 600000) delete r.last[k];
-        r.msgs.push({ id: "m" + now.toString(36) + Math.random().toString(36).slice(2, 6), at: now, uid, name, avatar, text: isAdmin ? text : clean(text), admin: isAdmin || undefined });
+        r.msgs.push({ id: "m" + now.toString(36) + Math.random().toString(36).slice(2, 6), at: now, uid, name, avatar, text: isAdmin || isOwner ? text : clean(text), admin: isAdmin || undefined, owner: isOwner || undefined });
         if (r.msgs.length > MAX_MSGS) r.msgs = r.msgs.slice(-MAX_MSGS);
       });
       if (error) return fail(error, 429);

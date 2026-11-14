@@ -14,6 +14,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_HASH = "29c7b21d3cde1ccfca37823fe7bb9eed806a4e2d145df2a531f1be576ee26031";
 const ROW_REVIEWS = 7;
 const ROW_LISTS = 8;
+const ROW_OWNER = 9; // { ownerUid } — la cuenta del dueño de la web (la registra el admin con su clave)
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
 type Review = { uid: string; name: string; avatar: string; badge?: string; stars: number; text: string; at: number };
@@ -96,6 +97,9 @@ function clean(text: string): string {
   return t;
 }
 const avatarOk = (v: unknown) => { const a = str(v, 200); return /^\/[a-zA-Z0-9_\-./ %]+$/.test(a) ? a : ""; };
+async function ownerUid(): Promise<string> {
+  try { const { data } = await readRow(ROW_OWNER); return data && typeof data.ownerUid === "string" ? data.ownerUid : ""; } catch { return ""; }
+}
 const summary = (list: Review[]) => {
   const n = list.length;
   const avg = n ? Math.round((list.reduce((s, r) => s + r.stars, 0) / n) * 10) / 10 : 0;
@@ -148,13 +152,13 @@ export async function GET(req: Request) {
     // Para los logros: cuántas reseñas y listas tiene el usuario
     if (sp.get("me")) {
       const u = await currentUser();
-      if (!u) return NextResponse.json({ reviews: 0, lists: 0, follows: 0 }, { headers: noStore });
-      const [{ data: rv }, { data: ls }] = await Promise.all([readRow(ROW_REVIEWS), readRow(ROW_LISTS)]);
+      if (!u) return NextResponse.json({ reviews: 0, lists: 0, follows: 0, owner: false }, { headers: noStore });
+      const [{ data: rv }, { data: ls }, own] = await Promise.all([readRow(ROW_REVIEWS), readRow(ROW_LISTS), ownerUid()]);
       let reviews = 0;
       const by = rv && rv.byMovie ? rv.byMovie : {};
       for (const k of Object.keys(by)) if (by[k].some((r: Review) => r.uid === u.id)) reviews++;
       const lists: List[] = ls && Array.isArray(ls.lists) ? ls.lists : [];
-      return NextResponse.json({ reviews, lists: lists.filter((l) => l.uid === u.id).length, follows: lists.filter((l) => l.followers.indexOf(u.id) !== -1).length }, { headers: noStore });
+      return NextResponse.json({ reviews, lists: lists.filter((l) => l.uid === u.id).length, follows: lists.filter((l) => l.followers.indexOf(u.id) !== -1).length, owner: !!own && own === u.id }, { headers: noStore });
     }
     return fail("Consulta inválida", 400);
   } catch {
@@ -185,6 +189,13 @@ export async function POST(req: Request) {
     const u = await currentUser();
     if (!u) return fail("Inicia sesión para participar", 401);
 
+    // El administrador registra SU cuenta como la del dueño (necesita la clave de la web)
+    if (action === "claimOwner") {
+      if (!passwordOk(b?.password)) { await new Promise((r) => setTimeout(r, 800)); return fail("Clave incorrecta", 401); }
+      await updateRow(ROW_OWNER, () => ({}), (d) => { d.ownerUid = u.id; d.at = Date.now(); });
+      return NextResponse.json({ ok: true, owner: true }, { headers: noStore });
+    }
+
     if (action === "review") {
       const movie = str(b.movieId, 40);
       const stars = Math.round(Number(b.stars));
@@ -193,10 +204,13 @@ export async function POST(req: Request) {
       if (!(stars >= 1 && stars <= 5)) return fail("Elige de 1 a 5 estrellas", 400);
       if (text && hasLink(text)) return fail("🚫 No se permiten enlaces en las reseñas.", 422);
       const name = str(b.name, 24) || u.email.split("@")[0].slice(0, 20);
+      // La corona 👑 es solo del dueño
+      let badge = str(b.badge, 4);
+      if (badge === "👑" && (await ownerUid()) !== u.id) badge = "";
       const { data } = await updateRow(ROW_REVIEWS, () => ({ byMovie: {} }), (d) => {
         const list: Review[] = Array.isArray(d.byMovie[movie]) ? d.byMovie[movie] : [];
         const rest = list.filter((r) => r.uid !== u.id);
-        rest.push({ uid: u.id, name, avatar: avatarOk(b.avatar), badge: str(b.badge, 4), stars, text: clean(text), at: Date.now() });
+        rest.push({ uid: u.id, name, avatar: avatarOk(b.avatar), badge, stars, text: clean(text), at: Date.now() });
         d.byMovie[movie] = rest.slice(-200);
       });
       return NextResponse.json({ ok: true, ...summary(data.byMovie[movie]) }, { headers: noStore });

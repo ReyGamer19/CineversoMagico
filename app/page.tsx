@@ -3816,11 +3816,24 @@ export default function Home() {
 
   // ---------- Logros e insignias ----------
   const [meCounts, setMeCounts] = useState({ reviews: 0, lists: 0, follows: 0 });
+  // ¿Esta cuenta es la del dueño de la web? (lo confirma el servidor)
+  const [isOwner, setIsOwner] = useState(false);
+  const [meLoaded, setMeLoaded] = useState(false);
   const loadMeCounts = () => {
     if (!accountUser) return;
-    fetch("/api/community?me=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => { if (d) setMeCounts({ reviews: d.reviews || 0, lists: d.lists || 0, follows: d.follows || 0 }); }).catch(() => {});
+    fetch("/api/community?me=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => {
+      if (d) { setMeCounts({ reviews: d.reviews || 0, lists: d.lists || 0, follows: d.follows || 0 }); setIsOwner(!!d.owner); setMeLoaded(true); }
+    }).catch(() => {});
   };
-  useEffect(() => { loadMeCounts(); }, [accountUser && accountUser.email]);
+  useEffect(() => { setIsOwner(false); setMeLoaded(false); loadMeCounts(); }, [accountUser && accountUser.email]);
+  // En el dispositivo del admin (con su clave), su cuenta queda registrada como la del dueño: la 👑 se ve en todos sus dispositivos
+  useEffect(() => {
+    if (!isAdmin || !accountUser || !meLoaded || isOwner) return;
+    let password = "";
+    try { password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!password) return;
+    commPost({ action: "claimOwner", password }).then(({ ok }) => { if (ok) { setIsOwner(true); showToast("👑 Tu cuenta quedó registrada como la del Fundador de Cineverso."); } });
+  }, [isAdmin, accountUser && accountUser.email, meLoaded, isOwner]);
   const watched = continueWatchingList.filter((p) => p.duration > 0 && p.time / p.duration > 0.15);
   const watchedMovies = watched.map((p) => catalogAll.find((x) => String(x.id) === String(p.id))).filter(Boolean) as Movie[];
   const genresSeen = new Set(watchedMovies.map((m) => m.tag).filter(Boolean));
@@ -3838,11 +3851,12 @@ export default function Home() {
     { id: "resenista", icon: "✍️", name: "Reseñista", desc: "Publica 3 reseñas con estrellas", have: meCounts.reviews, need: 3 },
     { id: "curador", icon: "📂", name: "Curador", desc: "Crea una lista para la comunidad", have: meCounts.lists, need: 1 },
     { id: "aldia", icon: "🔔", name: "Siempre al día", desc: "Activa la campanita de estrenos", have: pushState === "subscribed" ? 1 : 0, need: 1 },
-    { id: "fundador", icon: "⭐", name: "Fundador", desc: "Únete a Cineverso en su primer año", have: accountUser && new Date().getFullYear() <= 2027 ? 1 : 0, need: 1 },
+    { id: "pionero", icon: "🌟", name: "Pionero", desc: "Únete a Cineverso en su primer año", have: accountUser && new Date().getFullYear() <= 2027 ? 1 : 0, need: 1 },
   ];
   const unlocked = accountUser ? BADGES.filter((b) => b.have >= b.need) : [];
-  const BADGE_RANK = ["cinefilo", "resenista", "maraton", "curador", "explorador", "final", "critico", "coleccion", "aldia", "estreno", "fundador"];
-  const topBadge = unlocked.slice().sort((a, b) => BADGE_RANK.indexOf(a.id) - BADGE_RANK.indexOf(b.id))[0];
+  const BADGE_RANK = ["cinefilo", "resenista", "maraton", "curador", "explorador", "final", "critico", "coleccion", "aldia", "estreno", "pionero"];
+  const OWNER_BADGE = { id: "fundador", icon: "👑", name: "Fundador", desc: "Creador y dueño de Cineverso Mágico", have: 1, need: 1 };
+  const topBadge = isOwner ? OWNER_BADGE : unlocked.slice().sort((a, b) => BADGE_RANK.indexOf(a.id) - BADGE_RANK.indexOf(b.id))[0];
   // Aviso cuando se desbloquea un logro nuevo
   const unlockedKey = unlocked.map((b) => b.id).join(",");
   // Durante los primeros segundos (mientras cargan los datos) solo se anota, sin avisar
@@ -6281,9 +6295,18 @@ export default function Home() {
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-bold text-white">🏅 Mis logros</h3>
-                  <p className="text-xs text-gray-500">{unlocked.length} de {BADGES.length} desbloqueados{topBadge ? " · Tu insignia en las reseñas: " + topBadge.icon + " " + topBadge.name : ""}</p>
+                  <p className="text-xs text-gray-500">{unlocked.length} de {BADGES.length} desbloqueados{topBadge ? " · Tu insignia en las reseñas y el chat: " + topBadge.icon + " " + topBadge.name : ""}</p>
                 </div>
               </div>
+              {isOwner && (
+                <div className="flex items-center gap-4 rounded-2xl p-4 border border-yellow-400/50" style={{ background: "linear-gradient(120deg, rgba(250,204,21,.18), rgba(34,197,94,.10) 60%, rgba(0,0,0,0))" }}>
+                  <span className="text-4xl leading-none">👑</span>
+                  <div>
+                    <p className="text-base font-black text-yellow-300">Fundador de Cineverso Mágico</p>
+                    <p className="text-xs text-gray-300">Insignia exclusiva del creador y dueño de la web. Solo tu cuenta la tiene, y se muestra junto a tu nombre en las reseñas y en el chat.</p>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {BADGES.map((b) => {
                   const ok = b.have >= b.need;
@@ -6680,7 +6703,7 @@ export default function Home() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-bold text-white">{r.name}</span>
-                              {r.badge && <span className="text-sm" title="Logro">{r.badge}</span>}
+                              {r.badge === "👑" ? <span className="text-[10px] font-black bg-yellow-400 text-black px-1.5 py-0.5 rounded">👑 FUNDADOR</span> : r.badge && <span className="text-sm" title="Logro">{r.badge}</span>}
                               {starRow(r.stars, 12)}
                               <span className="text-[10px] text-gray-500 ml-auto">{new Date(r.at).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}</span>
                             </div>
@@ -7297,7 +7320,8 @@ export default function Home() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
                     <span className="text-[13px] font-bold truncate" style={{ color: m.admin ? "#22c55e" : nameColor(m.name) }}>{m.name}</span>
-                    {m.admin && <span className="text-[9px] font-black bg-green-500 text-black px-1.5 rounded">ADMIN</span>}
+                    {(m as any).owner && <span className="text-[9px] font-black bg-yellow-400 text-black px-1.5 rounded">👑 FUNDADOR</span>}
+                    {m.admin && !(m as any).owner && <span className="text-[9px] font-black bg-green-500 text-black px-1.5 rounded">ADMIN</span>}
                     <span className="ml-auto text-[10px] text-gray-500 shrink-0">{fmtChatTime(m.at)}</span>
                   </div>
                   {(() => {
