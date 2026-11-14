@@ -5542,7 +5542,7 @@ export default function Home() {
               <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-black/60" />
               <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-[#050505]/60 to-transparent" />
               <div className="relative z-10 px-4 sm:px-6 md:px-12 max-w-3xl w-full pb-14 pt-10">
-                <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight uppercase leading-tight text-white drop-shadow-lg">
+                <h1 className={(heroMovie.title.length > 38 ? "text-2xl sm:text-4xl md:text-5xl" : "text-3xl sm:text-5xl md:text-6xl") + " font-black tracking-tight uppercase leading-tight text-white drop-shadow-lg"}>
                   {heroMovie.title}
                   {heroMovie.subtitle && <span className="block text-xl sm:text-3xl text-orange-500 mt-1 font-extrabold">{heroMovie.subtitle}</span>}
                 </h1>
@@ -5554,21 +5554,21 @@ export default function Home() {
                   <span className="bg-[#121212] border border-gray-800 text-gray-200 px-2.5 py-0.5 rounded font-medium">{heroMovie.tag}</span>
                 </div>
                 <p className="text-gray-300 text-xs sm:text-sm md:text-base leading-relaxed mb-6 line-clamp-3 max-w-2xl" style={{ transition: "opacity .6s", opacity: heroTrailerReady ? 0.55 : 1 }}>{heroMovie.desc}</p>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <button
                     data-autofocus-home
                     onClick={() => startPlayback(heroMovie)}
                     onFocus={() => setHeroPaused(true)}
                     onBlur={() => setHeroPaused(false)}
-                    className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base shadow-lg"
+                    className="flex-1 sm:flex-none justify-center min-w-0 flex items-center gap-2 bg-white text-black font-bold px-4 sm:px-6 py-3 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base shadow-lg whitespace-nowrap"
                   >
-                    <Play className="w-5 h-5 fill-black" /> Reproducir
+                    <Play className="w-5 h-5 fill-black shrink-0" /> Reproducir
                   </button>
                   <button
                     onClick={() => setSelectedMovie(heroMovie)}
                     onFocus={() => setHeroPaused(true)}
                     onBlur={() => setHeroPaused(false)}
-                    className="flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-5 py-3 rounded-xl border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base"
+                    className="shrink-0 flex items-center gap-2 bg-[#121212]/90 text-white font-medium px-4 sm:px-5 py-3 rounded-xl border border-gray-800 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer text-sm sm:text-base whitespace-nowrap"
                   >
                     <Info className="w-5 h-5" /> <span className="hidden sm:inline">Más información</span><span className="sm:hidden">Info</span>
                   </button>
@@ -5576,22 +5576,29 @@ export default function Home() {
                     onClick={() => toggleMyList(heroMovie)}
                     onFocus={() => setHeroPaused(true)}
                     onBlur={() => setHeroPaused(false)}
-                    className="p-3 rounded-full bg-[#121212]/90 border border-gray-600 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer"
+                    className="shrink-0 p-3 rounded-full bg-[#121212]/90 border border-gray-600 hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer"
                     aria-label={inMyList(heroMovie) ? "Quitar de Mi Lista" : "Agregar a Mi Lista"}
                   >
                     {inMyList(heroMovie) ? <Check className="w-5 h-5 text-green-400" /> : <Plus className="w-5 h-5" />}
                   </button>
+                  {/* Sonido del tráiler: en la misma fila que los botones, al final (celular, PC y TV) */}
+                  {heroTrailerOn && heroTrailerReady && heroMovie.trailerUrl && (
+                    <button
+                      onClick={() => setHeroMuted((m) => !m)}
+                      onFocus={() => setHeroPaused(true)}
+                      onBlur={() => setHeroPaused(false)}
+                      aria-label={heroMuted ? "Activar sonido del tráiler" : "Silenciar tráiler"}
+                      className="shrink-0 p-3 rounded-full bg-black/40 border border-gray-500 text-white hover:bg-white/10 focus:outline-none focus:ring-4 focus:ring-green-500 transition cursor-pointer"
+                    >
+                      {heroMuted ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z" /><line x1="22" y1="9" x2="16" y2="15" /><line x1="16" y1="9" x2="22" y2="15" /></svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M19 5a10 10 0 0 1 0 14" /></svg>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
-              {heroTrailerOn && heroTrailerReady && heroMovie.trailerUrl && (
-                <button
-                  onClick={() => setHeroMuted((m) => !m)}
-                  aria-label={heroMuted ? "Activar sonido del tráiler" : "Silenciar tráiler"}
-                  className="absolute z-10 right-6 md:right-12 bottom-14 p-2.5 rounded-full border border-gray-400 bg-black/40 text-white cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
-                >
-                  {heroMuted ? <span className="text-xs font-bold px-1">🔇</span> : <span className="text-xs font-bold px-1">🔊</span>}
-                </button>
-              )}
               {heroList.length > 1 && (
                 <div className="absolute z-10 bottom-5 left-0 right-0 flex justify-center gap-2">
                   {heroList.map((m, i) => (
