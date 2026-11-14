@@ -4505,7 +4505,8 @@ export default function Home() {
     if (!editProfile) return;
     const name = editName.trim().replace(/\s+/g, " ");
     if (!name) { setEditError("Escribe un nombre para el perfil."); return; }
-    if (name.toLowerCase() === "rey" && !isAdmin) { setEditError("Ese nombre no está disponible."); return; }
+    // "Rey" está reservado solo para NUEVOS nombres: si el perfil ya se llama así (tu cuenta), se puede guardar igual
+    if (name.toLowerCase() === "rey" && !isAdmin && editProfile.name.trim().toLowerCase() !== "rey") { setEditError("Ese nombre no está disponible."); return; }
     if (profiles.some((x) => x.id !== editProfile.id && x.name.trim().toLowerCase() === name.toLowerCase())) { setEditError("Ya tienes un perfil con ese nombre."); return; }
     let pinHash = editProfile.pinHash;
     if (editIsKid) {
