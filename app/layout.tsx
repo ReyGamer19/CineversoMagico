@@ -14,9 +14,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // cv-meta-v2: datos para Google, Facebook, WhatsApp y X
+  metadataBase: new URL("https://www.cineversomagico.com"),
   title: "Cineverso Mágico",
-  description: "Tu plataforma de streaming en vivo, películas y series",
+  description: "Películas, series y TV en vivo gratis 🍿 Estrenos, sagas completas, reseñas y una comunidad para pedir lo que quieras ver.",
   manifest: "/manifest.json",
+  openGraph: {
+    type: "website",
+    url: "https://www.cineversomagico.com",
+    siteName: "Cineverso Mágico",
+    locale: "es_PE",
+    title: "Cineverso Mágico · Películas, series y TV en vivo",
+    description: "Estrenos, sagas completas, reseñas y una comunidad para pedir lo que quieras ver. ¡Entra gratis! 🍿",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cineverso Mágico · Películas, series y TV en vivo",
+    description: "Estrenos, sagas completas, reseñas y una comunidad para pedir lo que quieras ver. ¡Entra gratis! 🍿",
+  },
 };
 
 export const viewport: Viewport = {
