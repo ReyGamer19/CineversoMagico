@@ -217,7 +217,7 @@ const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGA
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
   "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
   "@media (orientation:portrait) and (max-width:900px){.cv-pstage{flex:0 0 auto!important;padding:0!important}.cv-pstage>div{height:56.25vw!important;max-height:70vh;border-radius:0!important}}" + "@media (max-height:520px){.cv-ppanel{padding-top:6px!important;column-gap:12px!important}.cv-ppanel>button{font-size:14px!important}.cv-pstage{padding:0!important}}" +
-  "@keyframes cvRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}.cv-home>section,.cv-home>.cv-greet{animation:cvRise .55s cubic-bezier(.2,.7,.2,1) both}.cv-home>section:nth-of-type(2){animation-delay:.06s}.cv-home>section:nth-of-type(3){animation-delay:.12s}.cv-home>section:nth-of-type(4){animation-delay:.18s}.cv-home>section:nth-of-type(n+5){animation-delay:.24s}@keyframes cvConf{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}.cv-conf{position:fixed;top:-20px;width:10px;height:16px;border-radius:2px;z-index:95;pointer-events:none;animation:cvConf linear forwards}@keyframes cvStory{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}@keyframes cvSpin{from{opacity:.35;transform:translateY(-18px) scale(.97)}to{opacity:1;transform:none}}@keyframes cvPick{0%{transform:scale(.82)}60%{transform:scale(1.07)}100%{transform:scale(1)}}@media (prefers-reduced-motion:reduce){.cv-home>section,.cv-home>.cv-greet,.cv-conf{animation:none!important}}" +
+  "@keyframes cvRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}.cv-home>section,.cv-home>.cv-greet{animation:cvRise .55s cubic-bezier(.2,.7,.2,1) both}.cv-home>section:nth-of-type(2){animation-delay:.06s}.cv-home>section:nth-of-type(3){animation-delay:.12s}.cv-home>section:nth-of-type(4){animation-delay:.18s}.cv-home>section:nth-of-type(n+5){animation-delay:.24s}@keyframes cvConf{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}.cv-conf{position:fixed;top:-20px;width:10px;height:16px;border-radius:2px;z-index:95;pointer-events:none;animation:cvConf linear forwards}@keyframes cvStory{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-search-decoration{-webkit-appearance:none;appearance:none}@keyframes cvSpin{from{opacity:.35;transform:translateY(-18px) scale(.97)}to{opacity:1;transform:none}}@keyframes cvPick{0%{transform:scale(.82)}60%{transform:scale(1.07)}100%{transform:scale(1)}}@media (prefers-reduced-motion:reduce){.cv-home>section,.cv-home>.cv-greet,.cv-conf{animation:none!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
@@ -5406,14 +5406,137 @@ export default function Home() {
     requestProfileSwitch(p);
   };
 
+  // ---------- Búsqueda inteligente ----------
+  // Encuentra aunque escribas mal ("jugos del ambre"), sin tildes, y también por actor, director, saga, género o año.
+  const normTxt = (t: string | undefined) => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const lev = (a: string, b: string, max: number) => {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      let rowMin = i;
+      for (let j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (cur[j] < rowMin) rowMin = cur[j];
+      }
+      if (rowMin > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  };
+  const STOP = ["de", "la", "el", "los", "las", "y", "del", "en", "a", "un", "una", "the", "of"];
+  // ¿Qué tan bien coincide una palabra buscada con una palabra del título? (0 = nada)
+  const wordHit = (q: string, w: string) => {
+    if (w === q) return 1.2;
+    if (w.startsWith(q)) return q.length >= 3 || w.length <= 3 ? 1 : 0.6;
+    if (q.length >= 4) {
+      const tol = q.length >= 7 ? 2 : 1;
+      if (lev(q, w, tol) <= tol) return 0.75;
+      if (w.length > q.length && lev(q, w.slice(0, q.length), tol) <= tol) return 0.65;
+    }
+    return 0;
+  };
+  const searchIndex = catalog.map((m) => ({
+    m,
+    fields: [
+      { k: "title", w: 10, words: normTxt(m.title + " " + (m.subtitle || "")).split(" ").filter(Boolean) },
+      { k: "saga", w: 7, words: normTxt(m.saga).split(" ").filter(Boolean) },
+      { k: "cast", w: 6, words: normTxt(m.cast).split(" ").filter(Boolean) },
+      { k: "director", w: 5, words: normTxt(m.director).split(" ").filter(Boolean) },
+      { k: "genre", w: 3, words: normTxt(genresOf(m).join(" ")).split(" ").filter(Boolean) },
+      { k: "year", w: 2, words: [String(m.year || "")] },
+    ],
+    titleN: normTxt(m.title + " " + (m.subtitle || "")),
+  }));
+  const searchQ = normTxt(exploreSearch);
+  const searchTokens = searchQ.split(" ").filter((t) => t && STOP.indexOf(t) === -1);
+  const searchHits = (() => {
+    const out = new Map<string, { score: number; why: string }>();
+    if (!searchQ) return out;
+    const toks = searchTokens.length ? searchTokens : searchQ.split(" ").filter(Boolean);
+    searchIndex.forEach((it) => {
+      let score = 0;
+      const kinds: Record<string, number> = {};
+      for (const t of toks) {
+        let best = 0, bestK = "";
+        for (const f of it.fields) {
+          for (const w of f.words) {
+            const h = wordHit(t, w) * f.w;
+            if (h > best) { best = h; bestK = f.k; }
+          }
+        }
+        if (!best) return; // todas las palabras deben coincidir
+        score += best;
+        kinds[bestK] = (kinds[bestK] || 0) + 1;
+      }
+      if (it.titleN.indexOf(searchQ) !== -1) score += 15;
+      const main = Object.keys(kinds).sort((a, b) => kinds[b] - kinds[a])[0];
+      let why = "";
+      const m = it.m;
+      const pick = (list: string) => list.split(",").map((x) => x.trim()).find((x) => toks.every((t) => normTxt(x).split(" ").some((w) => wordHit(t, w) > 0))) || "";
+      if (main === "cast") { const a = pick(m.cast || ""); if (a) why = "🎭 " + a; }
+      else if (main === "director") { const d = pick(m.director || ""); if (d) why = "🎬 Dir. " + d; }
+      else if (main === "saga" && m.saga) why = "🎞️ " + m.saga;
+      out.set(String(m.id), { score, why });
+    });
+    return out;
+  })();
+  // Personas que coinciden (para los atajos "🎭 Jennifer Lawrence · 4 títulos")
+  const searchPeople = (() => {
+    if (searchTokens.length === 0 || searchQ.length < 3) return [] as { name: string; role: string; n: number }[];
+    const map: Record<string, { name: string; role: string; n: number }> = {};
+    catalog.forEach((m) => {
+      ([["🎭", m.cast || ""], ["🎬", m.director || ""]] as [string, string][]).forEach(([role, list]) => {
+        list.split(",").map((x) => x.trim()).filter(Boolean).forEach((name) => {
+          const ws = normTxt(name).split(" ");
+          if (!searchTokens.every((t) => ws.some((w) => wordHit(t, w) > 0))) return;
+          const k = normTxt(name);
+          map[k] = map[k] ? { ...map[k], n: map[k].n + 1 } : { name, role, n: 1 };
+        });
+      });
+    });
+    return Object.keys(map).map((k) => map[k]).sort((a, b) => b.n - a.n).slice(0, 4);
+  })();
+  const [searchFocus, setSearchFocus] = useState(false);
+  const [voiceOk, setVoiceOk] = useState(false);
+  const [listening, setListening] = useState(false);
+  const voiceRef = useRef<any>(null);
+  const exploreInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => { try { const w = window as any; setVoiceOk(!!(w.SpeechRecognition || w.webkitSpeechRecognition)); } catch (e) {} }, []);
+  useEffect(() => {
+    if (activeTab !== "explorar" || tvMode) return;
+    const t = setTimeout(() => { try { if (exploreInputRef.current && !exploreSearch) exploreInputRef.current.focus({ preventScroll: true } as any); } catch (e) {} }, 250);
+    return () => clearTimeout(t);
+  }, [activeTab]);
+  const startVoice = () => {
+    const w = window as any;
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) { showToast("Tu navegador no permite buscar por voz."); return; }
+    if (listening && voiceRef.current) { try { voiceRef.current.stop(); } catch (e) {} return; }
+    try {
+      const r = new SR();
+      r.lang = "es-PE"; r.interimResults = true; r.maxAlternatives = 1;
+      r.onresult = (ev: any) => { let txt = ""; for (let i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript; setExploreSearch(txt.replace(/[.¿?¡!]+$/g, "").trim()); };
+      r.onerror = (ev: any) => { setListening(false); if (ev && ev.error === "not-allowed") showToast("Permite el micrófono para buscar por voz 🎤", 6000); };
+      r.onend = () => setListening(false);
+      voiceRef.current = r;
+      setListening(true);
+      r.start();
+    } catch (e) { setListening(false); showToast("No se pudo usar el micrófono."); }
+  };
+
   const filteredExploreMovies = catalog.filter((movie) => {
-    const matchesSearch = exploreSearch === "" || movie.title.toLowerCase().includes(exploreSearch.toLowerCase());
+    const matchesSearch = exploreSearch.trim() === "" || searchHits.has(String(movie.id));
     const matchesType = exploreTypeFilter === "todos" || movie.type === exploreTypeFilter;
     const matchesGenre = exploreGenreFilter === "Todos" || (exploreGenreFilter === "Novedades" ? isNewMovie30(movie) : !!(movie.tag && movie.tag.toLowerCase() === exploreGenreFilter.toLowerCase()));
     const matchesYear = exploreYearFilter === "Cualquier año" || movie.year === exploreYearFilter;
     
     return matchesSearch && matchesType && matchesGenre && matchesYear;
-  }).sort((a, b) => (exploreGenreFilter === "Novedades" ? (b.addedAt || 0) - (a.addedAt || 0) : 0));
+  }).sort((a, b) => {
+    if (searchQ) return ((searchHits.get(String(b.id)) || { score: 0 }).score) - ((searchHits.get(String(a.id)) || { score: 0 }).score);
+    return exploreGenreFilter === "Novedades" ? (b.addedAt || 0) - (a.addedAt || 0) : 0;
+  });
+  const searchSuggest = searchQ ? catalog.filter((m) => searchHits.has(String(m.id))).sort((a, b) => (searchHits.get(String(b.id)) as any).score - (searchHits.get(String(a.id)) as any).score).slice(0, 6) : [];
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden pb-24 lg:pb-0">
@@ -6032,16 +6155,54 @@ export default function Home() {
       {/* VISTA EXPLORAR */}
       {activeTab === "explorar" && (
         <div className="pt-24 px-4 sm:px-6 md:px-12 pb-24 max-w-7xl mx-auto space-y-6 w-full overflow-x-hidden">
-          <div className="relative max-w-xl">
-            <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-500" />
+          <div className="relative max-w-xl z-30">
+            <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-500 pointer-events-none" />
             <input 
-              type="text"
-              placeholder="Buscar películas, series o personas..."
+              ref={exploreInputRef}
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              placeholder="Título, actor, director, saga o año…"
               value={exploreSearch}
               onChange={(e) => setExploreSearch(e.target.value)}
-              className="w-full bg-[#121212] border border-gray-800 rounded-full pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition shadow-inner"
+              onFocus={() => setSearchFocus(true)}
+              onBlur={() => setTimeout(() => setSearchFocus(false), 180)}
+              onKeyDown={(e) => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } if (e.key === "Escape") setExploreSearch(""); }}
+              className={"w-full bg-[#121212] border border-gray-800 rounded-full pl-12 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition shadow-inner text-base sm:text-sm " + (voiceOk ? "pr-24" : "pr-12")}
             />
+            {exploreSearch && (
+              <button onClick={() => { setExploreSearch(""); try { exploreInputRef.current && exploreInputRef.current.focus(); } catch (e) {} }} aria-label="Borrar búsqueda" className={"absolute top-1.5 w-9 h-9 rounded-full text-gray-400 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (voiceOk ? "right-12" : "right-2")}>✕</button>
+            )}
+            {voiceOk && (
+              <button onClick={startVoice} aria-label={listening ? "Detener búsqueda por voz" : "Buscar por voz"} className={"absolute right-2 top-1.5 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (listening ? "bg-red-600 text-white animate-pulse" : "text-gray-300 hover:text-white hover:bg-white/10")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v1a7 7 0 0 0 14 0v-1" /><line x1="12" y1="18" x2="12" y2="22" /></svg>
+              </button>
+            )}
+            {listening && <p className="absolute left-12 -bottom-6 text-xs font-bold text-red-400">🎤 Te escucho… di el nombre de una película o actor</p>}
+            {searchFocus && searchSuggest.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-[#141414] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden" role="listbox">
+                {searchSuggest.map((m) => {
+                  const h = searchHits.get(String(m.id));
+                  return (
+                    <button key={"sg-" + m.id} role="option" aria-selected={false} onMouseDown={(e) => e.preventDefault()} onClick={() => { setSearchFocus(false); setSelectedMovie(m); }} className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/5 focus:bg-white/10 focus:outline-none cursor-pointer">
+                      <img decoding="async" loading="lazy" src={posterSrc(m)} alt="" className="w-9 h-12 rounded object-cover bg-gray-900 shrink-0" />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold text-white truncate">{m.title}</span>
+                        <span className="block text-[11px] text-gray-400 truncate">{[m.year, m.tag].filter(Boolean).join(" · ")}{h && h.why ? " · " + h.why : ""}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+          {searchPeople.length > 0 && (
+            <div className="flex flex-wrap gap-2 -mt-2">
+              {searchPeople.map((p) => (
+                <button key={"sp-" + p.name} onClick={() => setExploreSearch(p.name)} className="text-xs font-bold px-3 py-2 rounded-full bg-white/5 border border-white/10 text-gray-200 hover:border-green-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">{p.role} {p.name} <span className="text-gray-500">· {p.n} título{p.n === 1 ? "" : "s"}</span></button>
+              ))}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <div className="flex items-center bg-[#121212] border border-gray-800 rounded-full p-1">
@@ -6108,14 +6269,17 @@ export default function Home() {
             ))}
           </div>
 
-          <h2 className="text-xl font-black text-white pt-2 capitalize">
-            {exploreGenreFilter === "Todos" ? "Todas las Películas y Series" : exploreGenreFilter === "Novedades" ? "🆕 Novedades (últimos 30 días)" : exploreGenreFilter}
+          <h2 className={"text-xl font-black text-white pt-2 " + (searchQ ? "" : "capitalize")}>
+            {searchQ ? (filteredExploreMovies.length ? "Resultados para «" + exploreSearch.trim() + "»" : "") : exploreGenreFilter === "Todos" ? "Todas las Películas y Series" : exploreGenreFilter === "Novedades" ? "🆕 Novedades (últimos 30 días)" : exploreGenreFilter}
           </h2>
 
           {filteredExploreMovies.length === 0 ? (
             <div className="py-20 text-center text-gray-500 space-y-2">
-              <p className="text-base font-semibold">No se encontraron títulos en esta categoría.</p>
-              <p className="text-xs">Prueba seleccionando otro género o limpia los filtros.</p>
+              <p className="text-base font-semibold">{searchQ ? "No encontramos «" + exploreSearch.trim() + "»" : "No se encontraron títulos en esta categoría."}</p>
+              <p className="text-xs">{searchQ ? "Prueba con otra palabra, el nombre de un actor o pídela en Cuenta → Pedir una película." : "Prueba seleccionando otro género o limpia los filtros."}</p>
+              {searchQ && (exploreGenreFilter !== "Todos" || exploreTypeFilter !== "todos" || exploreYearFilter !== "Cualquier año") && (
+                <button onClick={() => { setExploreGenreFilter("Todos"); setExploreTypeFilter("todos"); setExploreYearFilter("Cualquier año"); }} className="mt-3 text-xs font-bold text-green-400 hover:underline cursor-pointer">Buscar en todo el catálogo</button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -6135,6 +6299,7 @@ export default function Home() {
                     </div>
                   </div>
                   <h4 className="text-xs font-bold text-gray-200 group-hover:text-green-400 transition truncate">{movie.title}</h4>
+                  {searchQ && searchHits.get(String(movie.id)) && (searchHits.get(String(movie.id)) as any).why && <p className="text-[10px] text-green-400 font-bold truncate -mt-1">{(searchHits.get(String(movie.id)) as any).why}</p>}
                   <div className="flex items-center justify-between text-[10px] text-gray-500">
                     <span>{movie.year}</span>
                     <span className="bg-gray-900 border border-gray-800 px-1.5 py-0.5 rounded text-gray-400 font-medium">{movie.tag}</span>

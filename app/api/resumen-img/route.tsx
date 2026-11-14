@@ -5,6 +5,30 @@ import { ImageResponse } from "next/og";
 
 const clip = (v: string | null, max: number) => (v || "").replace(/[<>]/g, "").trim().slice(0, max);
 
+// Letra gruesa (Inter) para que los títulos se vean fuertes; si no se puede descargar, se usa la letra normal
+const FONT_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz{|}~áéíóúÁÉÍÓÚñÑüÜ¿¡·«»–—…";
+async function interFont(weight: number): Promise<ArrayBuffer | null> {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 3000);
+    const css = await (await fetch("https://fonts.googleapis.com/css2?family=Inter:wght@" + weight + "&text=" + encodeURIComponent(FONT_CHARS), { signal: ctl.signal })).text();
+    const m = css.match(/src: url\((.+?)\) format\('(opentype|truetype)'\)/);
+    if (!m) { clearTimeout(t); return null; }
+    const r = await fetch(m[1], { signal: ctl.signal });
+    clearTimeout(t);
+    return r.ok ? await r.arrayBuffer() : null;
+  } catch {
+    return null;
+  }
+}
+async function interFonts() {
+  const [b, n] = await Promise.all([interFont(900), interFont(500)]);
+  const out: { name: string; data: ArrayBuffer; weight: 900 | 500; style: "normal" }[] = [];
+  if (b) out.push({ name: "Inter", data: b, weight: 900, style: "normal" });
+  if (n) out.push({ name: "Inter", data: n, weight: 500, style: "normal" });
+  return out;
+}
+
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const name = clip(sp.get("n"), 20) || "Cinéfilo";
@@ -15,6 +39,7 @@ export async function GET(req: Request) {
   const badges = String(Math.max(0, Math.min(99, parseInt(sp.get("b") || "0", 10) || 0)));
   const owner = sp.get("f") === "1";
   const year = clip(sp.get("y"), 4) || "2026";
+  const fontsP = interFonts();
   // El póster se descarga antes: si falla o tarda, la tarjeta sale igual (sin póster) en vez de quedar en blanco
   let poster = "";
   const pUrl = sp.get("i") || "";
@@ -32,6 +57,7 @@ export async function GET(req: Request) {
     } catch {}
   }
 
+  const fonts = await fontsP;
   const holes = Array.from({ length: 22 });
   const strip = (top: boolean) => (
     <div style={{ position: "absolute", left: 0, right: 0, [top ? "top" : "bottom"]: 0, height: 34, background: "#050505", display: "flex", alignItems: "center", justifyContent: "space-around", padding: "0 10px" }}>
@@ -41,7 +67,7 @@ export async function GET(req: Request) {
 
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", color: "#fff", fontFamily: "sans-serif", background: "#07060d", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", color: "#fff", fontFamily: fonts.length ? "Inter" : "sans-serif", fontWeight: 500, background: "#07060d", overflow: "hidden" }}>
         {/* luces de fondo */}
         <div style={{ position: "absolute", left: -180, top: -160, width: 620, height: 620, borderRadius: 620, background: "radial-gradient(circle, rgba(34,197,94,.55) 0%, rgba(34,197,94,0) 68%)" }} />
         <div style={{ position: "absolute", right: -160, bottom: -220, width: 700, height: 700, borderRadius: 700, background: "radial-gradient(circle, rgba(168,85,247,.55) 0%, rgba(168,85,247,0) 68%)" }} />
@@ -100,6 +126,6 @@ export async function GET(req: Request) {
         <div style={{ position: "absolute", left: 60, bottom: 50, display: "flex", fontSize: 20, fontWeight: 800, color: "#a7f3d0" }}>¿Y tú? Descubre tu año en cineversomagico.com</div>
       </div>
     ),
-    { width: 1200, height: 630, headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400", "Content-Type": "image/png" } }
+    { width: 1200, height: 630, ...(fonts.length ? { fonts } : {}), headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400", "Content-Type": "image/png" } }
   );
 }

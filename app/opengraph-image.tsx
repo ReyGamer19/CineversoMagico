@@ -50,6 +50,30 @@ async function latestMovies(): Promise<any[]> {
   }
 }
 
+// Letra gruesa (Inter) para que los títulos se vean fuertes; si no se puede descargar, se usa la letra normal
+const FONT_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz{|}~áéíóúÁÉÍÓÚñÑüÜ¿¡·«»–—…";
+async function interFont(weight: number): Promise<ArrayBuffer | null> {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 3000);
+    const css = await (await fetch("https://fonts.googleapis.com/css2?family=Inter:wght@" + weight + "&text=" + encodeURIComponent(FONT_CHARS), { signal: ctl.signal })).text();
+    const m = css.match(/src: url\((.+?)\) format\('(opentype|truetype)'\)/);
+    if (!m) { clearTimeout(t); return null; }
+    const r = await fetch(m[1], { signal: ctl.signal });
+    clearTimeout(t);
+    return r.ok ? await r.arrayBuffer() : null;
+  } catch {
+    return null;
+  }
+}
+async function interFonts() {
+  const [b, n] = await Promise.all([interFont(900), interFont(500)]);
+  const out: { name: string; data: ArrayBuffer; weight: 900 | 500; style: "normal" }[] = [];
+  if (b) out.push({ name: "Inter", data: b, weight: 900, style: "normal" });
+  if (n) out.push({ name: "Inter", data: n, weight: 500, style: "normal" });
+  return out;
+}
+
 const Tri = ({ s, c }: { s: number; c: string }) => (
   <svg width={s} height={s} viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z" fill={c} /></svg>
 );
@@ -59,11 +83,13 @@ export default async function Image() {
   const movies = await latestMovies();
   const picks = movies.slice(0, 5);
   const bdMovie = movies.find((m) => /^https:\/\//.test(m.backdrop || ""));
+  const fontsP = interFonts();
   const [logo, backdrop, ...posters] = await Promise.all([
     asData(SITE + "/icons/icon-512.png"),
     asData(bdMovie ? sized(bdMovie.backdrop, "w1280") : ""),
     ...picks.map((m) => asData(sized(m.bgImage, "w342"))),
   ]);
+  const fonts = await fontsP;
   const shown = picks.map((m, i) => ({ m, src: posters[i] })).filter((x) => x.src).slice(0, 5);
 
   const holes = Array.from({ length: 22 });
@@ -82,7 +108,7 @@ export default async function Image() {
 
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", color: "#fff", fontFamily: "sans-serif", background: "#07060d", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", color: "#fff", fontFamily: fonts.length ? "Inter" : "sans-serif", fontWeight: 500, background: "#07060d", overflow: "hidden" }}>
         {backdrop ? (
           <img src={backdrop} width={1200} height={675} style={{ position: "absolute", left: 0, top: 0, width: 1200, height: 675, objectFit: "cover" }} />
         ) : null}
@@ -140,6 +166,6 @@ export default async function Image() {
         )}
       </div>
     ),
-    { ...size, headers: { "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400" } }
+    { ...size, ...(fonts.length ? { fonts } : {}), headers: { "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400" } }
   );
 }
