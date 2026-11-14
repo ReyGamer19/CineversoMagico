@@ -216,7 +216,7 @@ const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGA
   // iPhone/Android: con letra de 16px el celular no hace zoom al escribir en un campo
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
   "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
-  "@media (orientation:portrait) and (max-width:900px){.cv-pstage{flex:0 0 auto!important;padding:0!important}.cv-pstage>div{height:56.25vw!important;max-height:70vh;border-radius:0!important}}" + "@media (max-height:520px){.cv-ppanel{padding-top:6px!important;column-gap:12px!important}.cv-ppanel>button{font-size:14px!important}.cv-pstage{padding:0!important}}" +
+  "@media (orientation:portrait) and (max-width:900px){.cv-pstage{flex:0 0 auto!important;padding:0!important}.cv-pstage>div{height:56.25vw!important;max-height:70vh;border-radius:0!important}}" + "@media (orientation:portrait){.cv-player:not(:fullscreen) .cv-tc-x{display:none!important}}@media (orientation:landscape){.cv-tc-p{display:none!important}}.cv-player:fullscreen .cv-tc-p{display:none!important}.cv-player:fullscreen .cv-tc-x{display:flex!important}" + ".cv-player:fullscreen .cv-ppanel,.cv-player:-webkit-full-screen .cv-ppanel{display:none!important}.cv-player:fullscreen .cv-pstage,.cv-player:-webkit-full-screen .cv-pstage{flex:1 1 auto!important;padding:0!important}.cv-player:fullscreen .cv-pstage>div,.cv-player:-webkit-full-screen .cv-pstage>div{height:100%!important;max-height:none!important;border-radius:0!important;border:0!important}@media (orientation:landscape) and (max-height:520px){.cv-touch .cv-ppanel{display:none!important}.cv-touch .cv-pstage{padding:0!important}.cv-touch .cv-pstage>div{border-radius:0!important;border:0!important}.cv-touch{padding-top:0!important}}" + "@media (max-height:520px){.cv-ppanel{padding-top:6px!important;column-gap:12px!important}.cv-ppanel>button{font-size:14px!important}.cv-pstage{padding:0!important}}" +
   "@keyframes cvRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}.cv-home>section,.cv-home>.cv-greet{animation:cvRise .55s cubic-bezier(.2,.7,.2,1) both}.cv-home>section:nth-of-type(2){animation-delay:.06s}.cv-home>section:nth-of-type(3){animation-delay:.12s}.cv-home>section:nth-of-type(4){animation-delay:.18s}.cv-home>section:nth-of-type(n+5){animation-delay:.24s}@keyframes cvConf{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}.cv-conf{position:fixed;top:-20px;width:10px;height:16px;border-radius:2px;z-index:95;pointer-events:none;animation:cvConf linear forwards}@keyframes cvStory{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-search-decoration{-webkit-appearance:none;appearance:none}@keyframes cvSpin{from{opacity:.35;transform:translateY(-18px) scale(.97)}to{opacity:1;transform:none}}@keyframes cvPick{0%{transform:scale(.82)}60%{transform:scale(1.07)}100%{transform:scale(1)}}@media (prefers-reduced-motion:reduce){.cv-home>section,.cv-home>.cv-greet,.cv-conf{animation:none!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
@@ -305,6 +305,209 @@ function YtBg({ vid, muted, title, style, onReady }: { vid: string; muted: boole
       onLoad={() => { ping(); setTimeout(ping, 400); setTimeout(ping, 1500); }}
       style={style}
     />
+  );
+}
+
+// Controles propios del reproductor para celulares y tablets (estilo Netflix):
+// tocar muestra/oculta, doble toque a los lados = ±10 s, toques seguidos se suman (+20, +30…),
+// barra de tiempo grande, velocidad, ajuste de imagen y pantalla completa real.
+function fmtClock(s: number) {
+  if (!isFinite(s) || s < 0) s = 0;
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = Math.floor(s % 60);
+  return (h ? h + ":" + String(m).padStart(2, "0") : String(m)) + ":" + String(x).padStart(2, "0");
+}
+function TouchControls(props: {
+  videoRef: { current: HTMLVideoElement | null };
+  title: string;
+  onBack: () => void;
+  onCast: () => void;
+  onFullscreen: () => void;
+  isFull: boolean;
+  fit: "contain" | "cover";
+  onFit: () => void;
+  rate: number;
+  onRate: (r: number) => void;
+  nextLabel: string;
+  onNext: (() => void) | null;
+  loading: boolean;
+}) {
+  const { videoRef } = props;
+  const [paused, setPaused] = useState(false);
+  const [cur, setCur] = useState(0);
+  const [dur, setDur] = useState(0);
+  const [buf, setBuf] = useState(0);
+  const [show, setShow] = useState(true);
+  const [scrub, setScrub] = useState<number | null>(null);
+  const [bubble, setBubble] = useState<{ side: "l" | "r"; n: number; k: number } | null>(null);
+  const [rateOpen, setRateOpen] = useState(false);
+  const hideT = useRef<any>(null);
+  const lastTap = useRef<{ t: number; x: number }>({ t: 0, x: 0 });
+  const singleT = useRef<any>(null);
+  const pend = useRef<{ base: number; delta: number; t: any } | null>(null);
+
+  const poke = (keep?: boolean) => {
+    setShow(true);
+    if (hideT.current) clearTimeout(hideT.current);
+    if (keep) return;
+    hideT.current = setTimeout(() => {
+      const v = videoRef.current;
+      if (v && !v.paused) { setShow(false); setRateOpen(false); }
+    }, 3500);
+  };
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const upd = () => {
+      if (!pend.current) setCur(v.currentTime || 0);
+      setDur(isFinite(v.duration) ? v.duration : 0);
+      setPaused(v.paused);
+      try { const b = v.buffered; let end = 0; for (let i = 0; i < b.length; i++) if (b.start(i) <= v.currentTime + 1) end = Math.max(end, b.end(i)); setBuf(end); } catch (e) {}
+    };
+    const onPlay = () => { setPaused(false); poke(); };
+    const onPause = () => { setPaused(true); poke(true); };
+    const evs: [string, any][] = [["timeupdate", upd], ["durationchange", upd], ["loadedmetadata", upd], ["progress", upd], ["seeked", upd], ["play", onPlay], ["pause", onPause]];
+    evs.forEach(([e, f]) => v.addEventListener(e, f));
+    upd(); poke();
+    return () => { evs.forEach(([e, f]) => v.removeEventListener(e, f)); if (hideT.current) clearTimeout(hideT.current); };
+  }, [videoRef.current]);
+
+  // ±10: los toques seguidos se suman y se aplica UN solo salto (más rápido y sin congelarse)
+  const seekBy = (delta: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    const p = pend.current || { base: v.currentTime || 0, delta: 0, t: null };
+    if (p.t) clearTimeout(p.t);
+    p.delta += delta;
+    const d = isFinite(v.duration) ? v.duration : Infinity;
+    const target = Math.max(0, Math.min(d - 1, p.base + p.delta));
+    setCur(target);
+    p.t = setTimeout(() => {
+      pend.current = null;
+      try { v.currentTime = target; } catch (e) {}
+    }, 350);
+    pend.current = p;
+    setBubble({ side: delta < 0 ? "l" : "r", n: Math.abs(p.delta), k: Date.now() });
+    poke();
+  };
+  useEffect(() => { if (!bubble) return; const t = setTimeout(() => setBubble(null), 800); return () => clearTimeout(t); }, [bubble && bubble.k]);
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { const r: any = v.play(); if (r && r.catch) r.catch(() => {}); } else v.pause();
+    poke();
+  };
+  // Toque simple: muestra/oculta. Doble toque a la izquierda/derecha: −10/+10
+  const onSurface = (e: any) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const now = Date.now();
+    const dbl = now - lastTap.current.t < 300 && Math.abs(x - lastTap.current.x) < 0.25;
+    lastTap.current = { t: now, x };
+    if (dbl && (x < 0.4 || x > 0.6)) {
+      if (singleT.current) clearTimeout(singleT.current);
+      seekBy(x < 0.4 ? -10 : 10);
+      return;
+    }
+    if (singleT.current) clearTimeout(singleT.current);
+    singleT.current = setTimeout(() => { if (show && !bubble) { setShow(false); setRateOpen(false); } else poke(); }, 260);
+  };
+  const shownT = scrub !== null ? scrub : cur;
+  const pct = dur ? (shownT / dur) * 100 : 0;
+  const bufPct = dur ? Math.min(100, (buf / dur) * 100) : 0;
+  const btn = "flex items-center justify-center rounded-full text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500";
+  const chip = "flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-full text-xs font-bold text-white whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500";
+  return (
+    <div className="absolute inset-0 z-[31] select-none" style={{ WebkitTapHighlightColor: "transparent" }}>
+      <div className="absolute inset-0" onClick={onSurface} />
+      {bubble && (
+        <div className={"absolute top-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center " + (bubble.side === "l" ? "left-[4%]" : "right-[4%]")}>
+          <span className="w-20 h-20 portrait:w-16 portrait:h-16 rounded-full bg-black/60 flex flex-col items-center justify-center text-white font-black text-lg" style={{ animation: "cvPick .35s ease-out" }}>
+            {bubble.side === "l" ? "«" : "»"}<span className="text-sm">{bubble.side === "l" ? "−" : "+"}{bubble.n} s</span>
+          </span>
+        </div>
+      )}
+      {props.loading && !show && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="w-12 h-12 rounded-full border-4 border-white/20 border-t-green-500 animate-spin" /></div>
+      )}
+      <div className="absolute inset-0 pointer-events-none transition-opacity duration-300" style={{ opacity: show ? 1 : 0 }}>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/80" />
+        {/* arriba: volver + título · transmitir */}
+        <div className={"cv-tc-x absolute left-0 right-0 top-0 flex items-center gap-2 px-3 pt-2 " + (show ? "pointer-events-auto" : "")} style={{ paddingTop: "max(8px, env(safe-area-inset-top))", paddingLeft: "max(12px, env(safe-area-inset-left))", paddingRight: "max(12px, env(safe-area-inset-right))" }}>
+          <button onClick={props.onBack} aria-label="Volver" className={btn + " w-10 h-10 shrink-0 hover:bg-white/10"}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <p className="flex-1 min-w-0 truncate text-white font-black text-sm sm:text-base">{props.title}</p>
+          <button onClick={props.onCast} aria-label="Transmitir a la TV" className={btn + " w-10 h-10 shrink-0 hover:bg-white/10"}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" /><line x1="2" y1="20" x2="2.01" y2="20" /></svg>
+          </button>
+        </div>
+        {/* centro: −10 · play/pausa · +10 */}
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 portrait:-translate-y-[60%] flex items-center justify-center gap-[10vw]">
+          <button onClick={() => seekBy(-10)} aria-label="Retroceder 10 segundos" className={btn + " w-12 h-12 sm:w-14 sm:h-14 portrait:w-10 portrait:h-10 bg-black/35 " + (show ? "pointer-events-auto" : "")}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7" /><polyline points="3 3 3 9 9 9" /><text x="12" y="15.5" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="currentColor" stroke="none">10</text></svg>
+          </button>
+          <button onClick={togglePlay} aria-label={paused ? "Reproducir" : "Pausar"} className={btn + " w-16 h-16 sm:w-20 sm:h-20 portrait:w-14 portrait:h-14 bg-black/40 " + (show ? "pointer-events-auto" : "")}>
+            {props.loading && !paused ? <span className="w-10 h-10 rounded-full border-4 border-white/20 border-t-green-500 animate-spin" /> : paused ? (
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" /></svg>
+            ) : (
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+            )}
+          </button>
+          <button onClick={() => seekBy(10)} aria-label="Adelantar 10 segundos" className={btn + " w-12 h-12 sm:w-14 sm:h-14 portrait:w-10 portrait:h-10 bg-black/35 " + (show ? "pointer-events-auto" : "")}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7" /><polyline points="21 3 21 9 15 9" /><text x="12" y="15.5" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="currentColor" stroke="none">10</text></svg>
+          </button>
+        </div>
+        {/* abajo: tiempo + barra · velocidad · ajuste · siguiente · pantalla completa */}
+        <div className={"absolute left-0 right-0 bottom-0 px-3 pb-2 " + (show ? "pointer-events-auto" : "")} style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))", paddingLeft: "max(12px, env(safe-area-inset-left))", paddingRight: "max(12px, env(safe-area-inset-right))" }}>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] sm:text-xs font-bold text-white tabular-nums w-14 text-right">{fmtClock(shownT)}</span>
+            <div className="relative flex-1 h-8 flex items-center">
+              <div className="absolute left-0 right-0 h-1.5 rounded-full bg-white/25 overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-white/40" style={{ width: bufPct + "%" }} />
+                <div className="absolute inset-y-0 left-0 bg-green-500" style={{ width: pct + "%" }} />
+              </div>
+              <div className="absolute w-4 h-4 rounded-full bg-green-400 shadow -translate-x-1/2 pointer-events-none" style={{ left: pct + "%" }} />
+              <input
+                type="range" min={0} max={dur || 0} step={1} value={shownT}
+                aria-label="Posición de la película"
+                onChange={(e) => { setScrub(Number(e.target.value)); poke(true); }}
+                onPointerUp={() => { const v = videoRef.current; if (v && scrub !== null) { try { v.currentTime = scrub; } catch (err) {} setCur(scrub); } setScrub(null); poke(); }}
+                onTouchEnd={() => { const v = videoRef.current; if (v && scrub !== null) { try { v.currentTime = scrub; } catch (err) {} setCur(scrub); } setScrub(null); poke(); }}
+                onKeyUp={() => { const v = videoRef.current; if (v && scrub !== null) { try { v.currentTime = scrub; } catch (err) {} } setScrub(null); }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </div>
+            <span className="text-[11px] sm:text-xs font-bold text-white/80 tabular-nums w-14">-{fmtClock(Math.max(0, dur - shownT))}</span>
+            <button onClick={() => { props.onFullscreen(); poke(); }} aria-label={props.isFull ? "Salir de pantalla completa" : "Pantalla completa"} className={"cv-tc-p " + btn + " w-9 h-9 shrink-0 hover:bg-white/10"}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" /></svg>
+            </button>
+          </div>
+          <div className="cv-tc-x flex items-center gap-2 mt-1 overflow-x-auto scrollbar-none" style={{ scrollbarWidth: "none" }}>
+            <div className="relative shrink-0">
+              <button onClick={() => { setRateOpen((o) => !o); poke(true); }} className={chip}>⏩ {props.rate === 1 ? "Velocidad" : props.rate + "x"}</button>
+            </div>
+            <button onClick={() => { props.onFit(); poke(); }} className={chip + " shrink-0"}>{props.fit === "cover" ? "⤡ Ver completa" : "⤢ Llenar pantalla"}</button>
+            {props.onNext && <button onClick={props.onNext} className={chip + " shrink-0 !bg-white !text-black"}>⏭ {props.nextLabel}</button>}
+            <span className="flex-1" />
+            <button onClick={() => { props.onFullscreen(); poke(); }} aria-label={props.isFull ? "Salir de pantalla completa" : "Pantalla completa"} className={chip + " shrink-0"}>
+              {props.isFull ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" /></svg>
+              )}
+              <span className="hidden sm:inline">{props.isFull ? "Salir" : "Pantalla completa"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      {rateOpen && show && (
+        <div className="absolute left-3 bottom-16 bg-[#141414]/95 border border-gray-700 rounded-xl p-1.5 flex flex-col min-w-[110px] shadow-2xl z-10">
+          {[0.5, 0.75, 1, 1.25, 1.5, 2].map((r) => (
+            <button key={"tr-" + r} onClick={() => { props.onRate(r); setRateOpen(false); poke(); }} className={"text-xs font-bold px-3 py-2 rounded-lg text-left cursor-pointer " + (props.rate === r ? "bg-green-500 text-black" : "text-gray-200 hover:bg-white/10")}>{r === 1 ? "Normal" : r + "x"}</button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2712,6 +2915,45 @@ export default function Home() {
       if (f === "cover" || f === "contain") setVideoFit(f);
     } catch (e) {}
   }, []);
+  // Celulares y tablets: controles propios (estilo Netflix) y pantalla completa real
+  const [touchUi, setTouchUi] = useState(false);
+  useEffect(() => { try { setTouchUi(!tvMode && !!window.matchMedia && window.matchMedia("(pointer: coarse)").matches); } catch (e) {} }, [tvMode]);
+  const playerShellRef = useRef<HTMLDivElement | null>(null);
+  const [isFull, setIsFull] = useState(false);
+  useEffect(() => {
+    const d: any = document;
+    const upd = () => setIsFull(!!(d.fullscreenElement || d.webkitFullscreenElement));
+    document.addEventListener("fullscreenchange", upd);
+    document.addEventListener("webkitfullscreenchange", upd);
+    return () => { document.removeEventListener("fullscreenchange", upd); document.removeEventListener("webkitfullscreenchange", upd); };
+  }, []);
+  const toggleTouchFullscreen = () => {
+    const d: any = document;
+    const v: any = playerRef.current;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      try { const ex = d.exitFullscreen || d.webkitExitFullscreen; const r = ex && ex.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+      try { (screen as any).orientation.unlock(); } catch (e) {}
+      return;
+    }
+    const box: any = playerShellRef.current;
+    const req = box && (box.requestFullscreen || box.webkitRequestFullscreen);
+    const native = () => { try { if (v && v.webkitEnterFullscreen) v.webkitEnterFullscreen(); } catch (e) {} };
+    if (req) {
+      try {
+        Promise.resolve(req.call(box))
+          .then(() => { try { const o: any = (screen as any).orientation; if (o && o.lock) o.lock("landscape").catch(() => {}); } catch (e) {} })
+          .catch(native);
+      } catch (e) { native(); }
+      return;
+    }
+    // iPhone: Safari solo deja poner en pantalla completa el video (reproductor de Apple)
+    native();
+  };
+  useEffect(() => {
+    if (isPlaying) return;
+    const d: any = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) { try { const ex = d.exitFullscreen || d.webkitExitFullscreen; const r = ex && ex.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+  }, [isPlaying]);
   const toggleVideoFit = () => {
     const next = videoFit === "cover" ? "contain" : "cover";
     setVideoFit(next);
@@ -8120,7 +8362,8 @@ export default function Home() {
       {selectedMovie && isPlaying && (
         <div
           data-tv-modal
-          className="fixed inset-0 bg-[#070707] z-50 overflow-hidden flex flex-col justify-center"
+          ref={playerShellRef}
+          className={"cv-player fixed inset-0 bg-[#070707] z-50 overflow-hidden flex flex-col justify-center" + (touchUi ? " cv-touch" : "")}
           style={{ cursor: playerUi ? "default" : "none", paddingTop: "env(safe-area-inset-top, 0px)" }}
           onMouseMove={wakePlayerUi}
           onTouchStart={wakePlayerUi}
@@ -8133,7 +8376,7 @@ export default function Home() {
               x-webkit-airplay="allow"
               data-autofocus
               tabIndex={0}
-              controls 
+              controls={!touchUi}
               autoPlay
               playsInline
               preload="auto"
@@ -8171,8 +8414,25 @@ export default function Home() {
             >
               Tu navegador no soporta el reproductor.
             </video>
+            {touchUi && !playerError && (
+              <TouchControls
+                videoRef={playerRef}
+                title={selectedMovie.title + (currentEpisode ? " · T" + currentEpisode.season + ":E" + currentEpisode.number : "")}
+                onBack={() => setIsPlaying(false)}
+                onCast={handleCast}
+                onFullscreen={toggleTouchFullscreen}
+                isFull={isFull}
+                fit={videoFit}
+                onFit={toggleVideoFit}
+                rate={playRate}
+                onRate={setPlayRate}
+                nextLabel="Siguiente episodio"
+                onNext={nextEpisodeOf(selectedMovie, currentEpisode) ? () => { const nx = nextEpisodeOf(selectedMovie, currentEpisode); if (nx) playEpisode(selectedMovie, nx); } : null}
+                loading={videoLoading}
+              />
+            )}
             {nextSaga && !playerError && (
-              <div style={{ position: "absolute", right: 20, bottom: 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-3 shadow-2xl flex gap-3 items-center max-w-[340px]" data-tv-modal>
+              <div style={{ position: "absolute", right: 20, bottom: touchUi ? 118 : 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-3 shadow-2xl flex gap-3 items-center max-w-[340px]" data-tv-modal>
                 <img src={posterSrc(nextSaga.m)} alt="" className="w-14 h-20 rounded-lg object-cover bg-gray-900 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-[11px] text-green-400 uppercase font-black">🎞️ Sigue la saga · en {nextSaga.secs} s</p>
@@ -8203,7 +8463,7 @@ export default function Home() {
                   setContinueWatchingList((prev) => prev.filter((p) => String(p.id) !== String(selectedMovie.id)));
                   setIsPlaying(false);
                 }}
-                style={{ position: "absolute", right: 20, bottom: 70, zIndex: 34 }}
+                style={{ position: "absolute", right: 20, bottom: touchUi ? 118 : 70, zIndex: 34 }}
                 className="flex items-center gap-2 bg-white/95 hover:bg-white text-black font-bold text-sm px-5 py-3 rounded-lg shadow-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
               >
                 <SkipForward className="w-4 h-4" />
@@ -8211,7 +8471,7 @@ export default function Home() {
               </button>
             )}
             {nextUp && (
-              <div style={{ position: "absolute", right: 20, bottom: 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-4 shadow-2xl" data-tv-modal>
+              <div style={{ position: "absolute", right: 20, bottom: touchUi ? 118 : 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-4 shadow-2xl" data-tv-modal>
                 <p className="text-[11px] text-gray-400 uppercase font-bold">Siguiente episodio en {nextUp.secs} s</p>
                 <p className="text-sm font-bold text-white mt-1 max-w-[260px] truncate">T{nextUp.ep.season}:E{nextUp.ep.number} · {nextUp.ep.title}</p>
                 <div className="flex gap-2 mt-3">
@@ -8220,7 +8480,7 @@ export default function Home() {
                 </div>
               </div>
             )}
-            {videoLoading && !playerError && (
+            {videoLoading && !playerError && !touchUi && (
               <div style={{ position: "absolute", top: "50%", left: 0, right: 0, marginTop: -40, textAlign: "center", pointerEvents: "none" }}>
                 <div className="inline-block w-12 h-12 rounded-full border-4 border-gray-700 border-t-green-500 animate-spin" />
                 <p className="text-sm text-gray-300 mt-3">Cargando película...</p>
@@ -8272,7 +8532,7 @@ export default function Home() {
             </button>
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none max-w-full pb-0.5" style={{ scrollbarWidth: "none" }}>
               <button 
-                onClick={requestFullscreenSafe}
+                onClick={touchUi ? toggleTouchFullscreen : requestFullscreenSafe}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
