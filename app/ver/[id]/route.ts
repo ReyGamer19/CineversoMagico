@@ -14,6 +14,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   await connection();
   const { id } = await ctx.params;
   const origin = new URL(req.url).origin;
+  // Facebook, WhatsApp y otros robots NO deben ser redirigidos: si lo son, leen la portada de la web en vez de la película
+  const ua = req.headers.get("user-agent") || "";
+  const bot = /facebookexternalhit|facebookcatalog|facebot|meta-externalagent|whatsapp|telegrambot|twitterbot|discordbot|slackbot|linkedinbot|pinterest|skypeuripreview|embedly|vkshare|redditbot|applebot|googlebot|bingbot|bytespider|iframely|mastodon|whatsapp/i.test(ua);
   let m: any = null;
   if (SUPABASE_URL && SERVICE_KEY) {
     try {
@@ -42,6 +45,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:image" content="${esc(image)}">
+<meta property="og:image:secure_url" content="${esc(image)}">
+<meta property="og:image:alt" content="${esc(title)}">
 <meta property="og:url" content="${esc(origin + "/ver/" + encodeURIComponent(id))}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
@@ -49,11 +54,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 <meta name="twitter:image" content="${esc(image)}">
 <meta name="theme-color" content="#050505">
 <link rel="icon" href="/icon.png">
-<meta http-equiv="refresh" content="0;url=${esc(target)}">
 <style>body{margin:0;background:#050505;color:#e5e7eb;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}a{color:#4ade80}</style>
 </head><body>
 <p>Abriendo <a href="${esc(target)}">${esc(m ? m.title : "Cineverso Mágico")}</a>…</p>
-<script>location.replace(${JSON.stringify(target)});</script>
+${bot ? "" : "<script>location.replace(" + JSON.stringify(target) + ");</script>"}
 </body></html>`;
-  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } });
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300", "Vary": "User-Agent" } });
 }

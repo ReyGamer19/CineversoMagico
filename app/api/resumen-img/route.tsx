@@ -15,7 +15,22 @@ export async function GET(req: Request) {
   const badges = String(Math.max(0, Math.min(99, parseInt(sp.get("b") || "0", 10) || 0)));
   const owner = sp.get("f") === "1";
   const year = clip(sp.get("y"), 4) || "2026";
-  const poster = /^https:\/\/[^\s"']+$/.test(sp.get("i") || "") ? (sp.get("i") as string) : "";
+  // El póster se descarga antes: si falla o tarda, la tarjeta sale igual (sin póster) en vez de quedar en blanco
+  let poster = "";
+  const pUrl = sp.get("i") || "";
+  if (/^https:\/\/[^\s"']+$/.test(pUrl)) {
+    try {
+      const ctl = new AbortController();
+      const tm = setTimeout(() => ctl.abort(), 4000);
+      const r = await fetch(pUrl, { signal: ctl.signal });
+      clearTimeout(tm);
+      const ct = r.headers.get("content-type") || "";
+      if (r.ok && /^image\/(jpeg|jpg|png)/i.test(ct)) {
+        const buf = await r.arrayBuffer();
+        if (buf.byteLength > 0 && buf.byteLength < 6_000_000) poster = "data:" + ct.split(";")[0] + ";base64," + Buffer.from(buf).toString("base64");
+      }
+    } catch {}
+  }
 
   const holes = Array.from({ length: 22 });
   const strip = (top: boolean) => (
@@ -85,6 +100,6 @@ export async function GET(req: Request) {
         <div style={{ position: "absolute", left: 60, bottom: 50, display: "flex", fontSize: 20, fontWeight: 800, color: "#a7f3d0" }}>¿Y tú? Descubre tu año en cineversomagico.com</div>
       </div>
     ),
-    { width: 1200, height: 630, headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400" } }
+    { width: 1200, height: 630, headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400", "Content-Type": "image/png" } }
   );
 }
