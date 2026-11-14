@@ -14,10 +14,13 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_HASH = "29c7b21d3cde1ccfca37823fe7bb9eed806a4e2d145df2a531f1be576ee26031";
 const ROW_REVIEWS = 7;
 const ROW_LISTS = 8;
+const ROW_POLLS = 10; // { polls: Poll[] } — votaciones de la comunidad
 const ROW_OWNER = 9; // { ownerUid } — la cuenta del dueño de la web (la registra el admin con su clave)
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
 type Review = { uid: string; name: string; avatar: string; badge?: string; stars: number; text: string; at: number };
+type PollOpt = { id: string; label: string; img?: string; movieId?: string };
+type Poll = { id: string; q: string; opts: PollOpt[]; votes: Record<string, string>; open: boolean; at: number; closedAt?: number; winner?: string };
 type List = { id: string; uid: string; owner: string; avatar: string; name: string; desc: string; movieIds: string[]; followers: string[]; at: number; updated: number };
 
 const sbHeaders = (key: string, bearer?: string): Record<string, string> => {
@@ -105,6 +108,13 @@ const summary = (list: Review[]) => {
   const avg = n ? Math.round((list.reduce((s, r) => s + r.stars, 0) / n) * 10) / 10 : 0;
   return { avg, count: n };
 };
+const pollOut = (p: Poll, uid: string) => {
+  const counts: Record<string, number> = {};
+  for (const k of Object.keys(p.votes || {})) counts[p.votes[k]] = (counts[p.votes[k]] || 0) + 1;
+  const total = Object.keys(p.votes || {}).length;
+  return { id: p.id, q: p.q, open: p.open, at: p.at, closedAt: p.closedAt || 0, winner: p.winner || "", total, mine: uid && p.votes ? p.votes[uid] || "" : "",
+    opts: p.opts.map((o) => ({ id: o.id, label: o.label, img: o.img || "", movieId: o.movieId || "", count: counts[o.id] || 0 })) };
+};
 const listOut = (l: List, uid?: string) => ({
   id: l.id, owner: l.owner, avatar: l.avatar, name: l.name, desc: l.desc, movieIds: l.movieIds,
   followers: l.followers.length, mine: !!uid && l.uid === uid, following: !!uid && l.followers.indexOf(uid) !== -1, updated: l.updated,
@@ -149,6 +159,19 @@ export async function GET(req: Request) {
       const mine = u ? lists.filter((l) => l.uid === u.id || l.followers.indexOf(u.id) !== -1).map((l) => listOut(l, u.id)) : [];
       return NextResponse.json({ lists: pub, mine }, { headers: noStore });
     }
+    // Votaciones: la abierta y las cerradas de los últimos 7 días
+    if (sp.get("polls")) {
+      const u = await currentUser().catch(() => null);
+      const { data } = await readRow(ROW_POLLS);
+      const polls: Poll[] = data && Array.isArray(data.polls) ? data.polls : [];
+      const now = Date.now();
+      const out = polls
+        .filter((p) => p.open || (p.closedAt && now - p.closedAt < 7 * 86400000) || sp.get("all"))
+        .sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at)
+        .slice(0, sp.get("all") ? 20 : 3)
+        .map((p) => pollOut(p, u ? u.id : ""));
+      return NextResponse.json({ polls: out }, { headers: noStore });
+    }
     // Para los logros: cuántas reseñas y listas tiene el usuario
     if (sp.get("me")) {
       const u = await currentUser();
@@ -186,8 +209,56 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true }, { headers: noStore });
     }
 
+    // Administrador: crear, cerrar o borrar votaciones
+    if (action === "adminPollCreate" || action === "adminPollClose" || action === "adminPollDelete") {
+      if (!passwordOk(b?.password)) { await new Promise((r) => setTimeout(r, 800)); return fail("Clave incorrecta", 401); }
+      if (action === "adminPollCreate") {
+        const q = clean(str(b.q, 120).trim());
+        const raw: any[] = Array.isArray(b.opts) ? b.opts.slice(0, 6) : [];
+        const opts: PollOpt[] = raw
+          .map((o, i) => ({ id: "o" + i, label: clean(str(o && o.label, 80).trim()), img: /^https:\/\/[^\s"']+$/.test(str(o && o.img, 500)) ? str(o.img, 500) : "", movieId: str(o && o.movieId, 40) }))
+          .filter((o) => o.label);
+        if (!q) return fail("Escribe la pregunta", 400);
+        if (opts.length < 2) return fail("Pon al menos 2 opciones", 400);
+        const poll: Poll = { id: "v" + Date.now().toString(36), q, opts, votes: {}, open: true, at: Date.now() };
+        await updateRow(ROW_POLLS, () => ({ polls: [] }), (d) => { d.polls = [poll].concat(Array.isArray(d.polls) ? d.polls : []).slice(0, 30); });
+        return NextResponse.json({ ok: true, poll: pollOut(poll, "") }, { headers: noStore });
+      }
+      const id = str(b.id, 40);
+      let result: any = null;
+      const { error } = await updateRow(ROW_POLLS, () => ({ polls: [] }), (d) => {
+        const list: Poll[] = Array.isArray(d.polls) ? d.polls : [];
+        const p = list.find((x) => x.id === id);
+        if (!p) return "La votación ya no existe";
+        if (action === "adminPollDelete") { d.polls = list.filter((x) => x.id !== id); return; }
+        const out = pollOut(p, "");
+        const best = out.opts.slice().sort((a, c) => c.count - a.count)[0];
+        p.open = false; p.closedAt = Date.now(); p.winner = best && best.count > 0 ? best.id : "";
+        result = pollOut(p, "");
+      });
+      if (error) return fail(error, 404);
+      return NextResponse.json({ ok: true, poll: result }, { headers: noStore });
+    }
+
     const u = await currentUser();
     if (!u) return fail("Inicia sesión para participar", 401);
+
+    // Votar (se puede cambiar el voto mientras la votación siga abierta)
+    if (action === "pollVote") {
+      const id = str(b.id, 40), opt = str(b.opt, 10);
+      let result: any = null;
+      const { error } = await updateRow(ROW_POLLS, () => ({ polls: [] }), (d) => {
+        const p: Poll | undefined = (Array.isArray(d.polls) ? d.polls : []).find((x: Poll) => x.id === id);
+        if (!p) return "La votación ya no existe";
+        if (!p.open) return "Esta votación ya cerró";
+        if (!p.opts.some((o) => o.id === opt)) return "Opción inválida";
+        p.votes = p.votes || {};
+        p.votes[u.id] = opt;
+        result = pollOut(p, u.id);
+      });
+      if (error) return fail(error, 400);
+      return NextResponse.json({ ok: true, poll: result }, { headers: noStore });
+    }
 
     // El administrador registra SU cuenta como la del dueño (necesita la clave de la web)
     if (action === "claimOwner") {

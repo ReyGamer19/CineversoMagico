@@ -16,7 +16,7 @@ const KEYS_ROW = 3;
 const SUBS_ROW = 4;
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
-type Sub = { endpoint: string; keys: { p256dh: string; auth: string }; created: number };
+type Sub = { endpoint: string; keys: { p256dh: string; auth: string }; created: number; f?: { s: string[]; g: string[] } };
 
 const headers = (): Record<string, string> => {
   const h: Record<string, string> = { apikey: SERVICE_KEY, "Content-Type": "application/json" };
@@ -56,16 +56,48 @@ function passwordOk(p: unknown) {
   return false;
 }
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+const cleanFollows = (f: any): { s: string[]; g: string[] } | null => {
+  if (!f || typeof f !== "object") return null;
+  const arr = (a: any, n: number) => (Array.isArray(a) ? Array.from(new Set(a.filter((x: any) => typeof x === "string" && x.trim()).map((x: string) => x.trim().slice(0, 60)))).slice(0, n) as string[] : []);
+  return { s: arr(f.sagas, 50), g: arr(f.genres, 30) };
+};
 
-// Envía un aviso a todos los dispositivos suscritos y limpia los que ya no existen
-async function sendToAll(msg: { title: string; body: string; image?: string; url?: string; tag?: string }) {
-  const payload = JSON.stringify({
-    title: msg.title || "Cineverso Mágico",
-    body: msg.body || "",
-    image: msg.image || undefined,
-    url: msg.url || "/",
-    tag: msg.tag || undefined,
-  });
+const GENRE_EMOJI: Record<string, string> = { "Terror": "👻", "Acción": "💥", "Comedia": "😂", "Romance": "💘", "Animación": "✨", "Ciencia ficción": "🚀", "Drama": "🎭", "Aventura": "🧭", "Suspenso": "🔎", "Familia": "🏡", "Fantasía": "🐉" };
+// Película de un aviso "m-ID" (para personalizar el aviso a quien sigue su saga o género)
+async function movieForTag(tag: string): Promise<any> {
+  const m = /^m-(.+)$/.exec(tag || "");
+  if (!m) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/catalog?id=eq.1&select=data`, { headers: headers(), cache: "no-store" });
+    const rows = res.ok ? await res.json() : [];
+    const list: any[] = Array.isArray(rows) && rows[0] && Array.isArray(rows[0].data) ? rows[0].data : [];
+    return list.find((x) => x && String(x.id) === m[1]) || null;
+  } catch { return null; }
+}
+
+// Envía un aviso a todos los dispositivos suscritos y limpia los que ya no existen.
+// Si el aviso es de una película, quien sigue su saga o su género recibe un aviso especial ("Llegó otra de Marvel").
+async function sendToAll(msg: { title: string; body: string; image?: string; url?: string; tag?: string }, mv?: any) {
+  const base = { title: msg.title || "Cineverso Mágico", body: msg.body || "", image: msg.image || undefined, url: msg.url || "/", tag: msg.tag || undefined };
+  const payload = JSON.stringify(base);
+  const personal = new Map<string, string>();
+  const payloadFor = (s: Sub): string => {
+    if (!mv || !s.f || /episodio/i.test(base.title)) return payload;
+    const saga = typeof mv.saga === "string" && mv.saga && s.f.s.indexOf(mv.saga) !== -1 ? mv.saga : "";
+    const gs: string[] = [mv.tag].concat(Array.isArray(mv.genres) ? mv.genres : []).filter((x: any) => typeof x === "string" && x);
+    const genre = saga ? "" : gs.find((g) => s.f!.g.indexOf(g) !== -1) || "";
+    if (!saga && !genre) return payload;
+    const key = saga ? "s:" + saga : "g:" + genre;
+    const hit = personal.get(key);
+    if (hit) return hit;
+    const soon = /Próximo/i.test(base.title);
+    const what = saga ? "otra de " + saga : "una nueva de " + genre.toLowerCase() + " " + (GENRE_EMOJI[genre] || "🎬");
+    const title = soon ? "🔔 Pronto llega " + what : "🔔 Llegó " + what;
+    const body = String(mv.title || "") + (soon ? " · " + base.body : " ya está disponible. ¡Tú sigues " + (saga ? "esta saga" : "este género") + "!");
+    const out = JSON.stringify({ ...base, title: title.slice(0, 80), body: body.slice(0, 200) });
+    personal.set(key, out);
+    return out;
+  };
   const k = await vapidKeys();
   setVapidDetails("mailto:" + CONTACT, k.publicKey, k.privateKey);
   const data = (await getRow(SUBS_ROW)) || { subs: [] };
@@ -74,7 +106,7 @@ async function sendToAll(msg: { title: string; body: string; image?: string; url
   let sent = 0, failed = 0;
   for (let i = 0; i < subs.length; i += 50) {
     const batch = subs.slice(i, i + 50);
-    const results = await Promise.allSettled(batch.map((s) => sendNotification(s, payload, { TTL: 86400, urgency: "high" })));
+    const results = await Promise.allSettled(batch.map((s) => sendNotification(s, payloadFor(s), { TTL: 86400, urgency: "high" })));
     results.forEach((r, j) => {
       if (r.status === "fulfilled") sent++;
       else {
@@ -122,15 +154,31 @@ export async function POST(req: Request) {
       if (!/^https:\/\//.test(endpoint)) return NextResponse.json({ error: "Suscripción inválida" }, { status: 400, headers: noStore });
       const data = (await getRow(SUBS_ROW)) || { subs: [] };
       let subs: Sub[] = Array.isArray(data.subs) ? data.subs : [];
+      const prevSub = subs.find((x) => x.endpoint === endpoint);
       subs = subs.filter((x) => x.endpoint !== endpoint);
       if (action === "subscribe") {
         const p256dh = str(s?.keys?.p256dh, 200), auth = str(s?.keys?.auth, 100);
         if (!p256dh || !auth) return NextResponse.json({ error: "Suscripción inválida" }, { status: 400, headers: noStore });
-        subs.push({ endpoint, keys: { p256dh, auth }, created: Date.now() });
+        const nf = cleanFollows(b?.follows);
+        subs.push({ endpoint, keys: { p256dh, auth }, created: Date.now(), ...(nf ? { f: nf } : prevSub && prevSub.f ? { f: prevSub.f } : {}) });
         if (subs.length > 5000) subs = subs.slice(subs.length - 5000);
       }
       await setRow(SUBS_ROW, { ...data, subs });
       return NextResponse.json({ ok: true, total: subs.length }, { headers: noStore });
+    }
+
+    // Sagas y géneros que sigue este dispositivo (para los avisos especiales)
+    if (action === "follows") {
+      const endpoint = str(b?.endpoint, 1000);
+      const nf = cleanFollows(b?.follows);
+      if (!/^https:\/\//.test(endpoint) || !nf) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400, headers: noStore });
+      const data = (await getRow(SUBS_ROW)) || { subs: [] };
+      const subs: Sub[] = Array.isArray(data.subs) ? data.subs : [];
+      const it = subs.find((x) => x.endpoint === endpoint);
+      if (!it) return NextResponse.json({ ok: false, missing: true }, { headers: noStore });
+      it.f = nf;
+      await setRow(SUBS_ROW, { ...data, subs });
+      return NextResponse.json({ ok: true }, { headers: noStore });
     }
 
     if (action === "send") {
@@ -138,7 +186,11 @@ export async function POST(req: Request) {
         await new Promise((r) => setTimeout(r, 800));
         return NextResponse.json({ error: "Clave incorrecta" }, { status: 401, headers: noStore });
       }
-      const r = await sendToAll({ title: str(b.title, 80), body: str(b.body, 200), image: str(b.image, 500), url: str(b.url, 300), tag: str(b.tag, 60) });
+      const bm = b?.movie && typeof b.movie === "object" ? b.movie : null;
+      const mv = bm
+        ? { title: str(bm.title, 120), saga: str(bm.saga, 60), tag: str(bm.tag, 40), genres: Array.isArray(bm.genres) ? bm.genres.slice(0, 8).map((x: unknown) => str(x, 40)).filter(Boolean) : [] }
+        : /Ya disponible|Nueva (película|serie)|Próximo estreno/.test(str(b.title, 80)) ? await movieForTag(str(b.tag, 60)) : null;
+      const r = await sendToAll({ title: str(b.title, 80), body: str(b.body, 200), image: str(b.image, 500), url: str(b.url, 300), tag: str(b.tag, 60) }, mv);
       // Recuerda que ya se avisó de esta película (para no repetir el aviso automático)
       const m = /^m-(\d+)$/.exec(str(b.tag, 60));
       if (m && /Ya disponible|Nueva (película|serie)/.test(str(b.title, 80))) {
@@ -182,7 +234,7 @@ export async function POST(req: Request) {
       ).slice(0, 3);
       let sent = 0;
       for (const mv of due) {
-        const r = await sendToAll({ title: "¡Ya disponible! 🍿", body: String(mv.title || "") + " ya se puede ver en Cineverso Mágico.", image: mv.backdrop || mv.bgImage, url: "/ver/" + mv.id, tag: "m-" + mv.id });
+        const r = await sendToAll({ title: "¡Ya disponible! 🍿", body: String(mv.title || "") + " ya se puede ver en Cineverso Mágico.", image: mv.backdrop || mv.bgImage, url: "/ver/" + mv.id, tag: "m-" + mv.id }, mv);
         sent += r.sent;
         notified.push(String(mv.id));
       }

@@ -214,7 +214,7 @@ const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGA
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
   "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
   "@media (orientation:portrait) and (max-width:900px){.cv-pstage{flex:0 0 auto!important;padding:0!important}.cv-pstage>div{height:56.25vw!important;max-height:70vh;border-radius:0!important}}" + "@media (max-height:520px){.cv-ppanel{padding-top:6px!important;column-gap:12px!important}.cv-ppanel>button{font-size:14px!important}.cv-pstage{padding:0!important}}" +
-  "@keyframes cvRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}.cv-home>section,.cv-home>.cv-greet{animation:cvRise .55s cubic-bezier(.2,.7,.2,1) both}.cv-home>section:nth-of-type(2){animation-delay:.06s}.cv-home>section:nth-of-type(3){animation-delay:.12s}.cv-home>section:nth-of-type(4){animation-delay:.18s}.cv-home>section:nth-of-type(n+5){animation-delay:.24s}@keyframes cvConf{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}.cv-conf{position:fixed;top:-20px;width:10px;height:16px;border-radius:2px;z-index:95;pointer-events:none;animation:cvConf linear forwards}@keyframes cvStory{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}@media (prefers-reduced-motion:reduce){.cv-home>section,.cv-home>.cv-greet,.cv-conf{animation:none!important}}" +
+  "@keyframes cvRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}.cv-home>section,.cv-home>.cv-greet{animation:cvRise .55s cubic-bezier(.2,.7,.2,1) both}.cv-home>section:nth-of-type(2){animation-delay:.06s}.cv-home>section:nth-of-type(3){animation-delay:.12s}.cv-home>section:nth-of-type(4){animation-delay:.18s}.cv-home>section:nth-of-type(n+5){animation-delay:.24s}@keyframes cvConf{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}.cv-conf{position:fixed;top:-20px;width:10px;height:16px;border-radius:2px;z-index:95;pointer-events:none;animation:cvConf linear forwards}@keyframes cvStory{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}@keyframes cvSpin{from{opacity:.35;transform:translateY(-18px) scale(.97)}to{opacity:1;transform:none}}@keyframes cvPick{0%{transform:scale(.82)}60%{transform:scale(1.07)}100%{transform:scale(1)}}@media (prefers-reduced-motion:reduce){.cv-home>section,.cv-home>.cv-greet,.cv-conf{animation:none!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
@@ -438,6 +438,11 @@ export default function Home() {
   const [tvMode, setTvMode] = useState(false);
   const [skipAdsNotice, setSkipAdsNotice] = useState(true);
   const [continueWatchingList, setContinueWatchingList] = useState<ProgressItem[]>([]);
+  // Historial de lo visto (no se borra al terminar), lo que sigue y las insignias de temporada
+  const [watchHistory, setWatchHistory] = useState<{ id: string; at: number; pct: number; mins: number }[]>([]);
+  const [follows, setFollows] = useState<{ sagas: string[]; genres: string[] }>({ sagas: [], genres: [] });
+  const [seasonBadges, setSeasonBadges] = useState<string[]>([]);
+  const [challengesDone, setChallengesDone] = useState<string[]>([]);
 
   // CANALES DE TV EN VIVO COMPLETO
   const [liveChannels] = useState<Channel[]>([
@@ -2140,7 +2145,7 @@ export default function Home() {
     const avisar = window.confirm("¿Avisar a todos que \"" + m.title + "\" ya está disponible?");
     const released: Movie = { ...m, videoUrl: url, comingSoon: undefined, releaseDate: undefined, addedAt: Date.now() };
     saveChange({ type: "upsert", movie: released }, "¡Estrenada! Ya aparece con las demás películas.");
-    if (avisar) sendPush({ title: "¡Ya disponible! 🍿", body: m.title + " ya se puede ver en Cineverso Mágico.", image: m.backdrop || m.bgImage, url: "/ver/" + m.id, tag: "m-" + m.id });
+    if (avisar) sendPush({ title: "¡Ya disponible! 🍿", body: m.title + " ya se puede ver en Cineverso Mágico.", image: m.backdrop || m.bgImage, url: "/ver/" + m.id, tag: "m-" + m.id }, m);
   };
 
   // Probar un enlace desde el panel
@@ -3006,8 +3011,8 @@ export default function Home() {
         saveChange({ type: "upsert", movie: updated }, m.comingSoon && !comingFinal ? "¡Estrenada! Ya aparece con las demás películas." : "¡Contenido actualizado!");
         if (!updated.comingSoon) fulfillRequestsFor(updated);
         if (notifyAll) {
-          if (m.comingSoon && !comingFinal) sendPush({ title: "¡Ya disponible! 🍿", body: updated.title + " ya se puede ver en Cineverso Mágico.", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
-          else if (!m.comingSoon && comingFinal) sendPush({ title: "Próximo estreno 🎬", body: updated.title + " llega el " + fmtRelease(updated.releaseDate) + ".", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id });
+          if (m.comingSoon && !comingFinal) sendPush({ title: "¡Ya disponible! 🍿", body: updated.title + " ya se puede ver en Cineverso Mágico.", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id }, updated);
+          else if (!m.comingSoon && comingFinal) sendPush({ title: "Próximo estreno 🎬", body: updated.title + " llega el " + fmtRelease(updated.releaseDate) + ".", image: updated.backdrop || updated.bgImage, url: "/ver/" + updated.id, tag: "m-" + updated.id }, updated);
         }
       }
       setEditingMovieId(null);
@@ -3046,8 +3051,8 @@ export default function Home() {
       if (!createdMovie.comingSoon) fulfillRequestsFor(createdMovie);
       if (notifyAll) {
         const img = createdMovie.backdrop || createdMovie.bgImage;
-        if (createdMovie.comingSoon) sendPush({ title: "Próximo estreno 🎬", body: createdMovie.title + " llega el " + fmtRelease(createdMovie.releaseDate) + ".", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id });
-        else sendPush({ title: createdMovie.type === "serie" ? "Nueva serie 🍿" : "Nueva película 🍿", body: createdMovie.title + " ya está disponible en Cineverso Mágico.", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id });
+        if (createdMovie.comingSoon) sendPush({ title: "Próximo estreno 🎬", body: createdMovie.title + " llega el " + fmtRelease(createdMovie.releaseDate) + ".", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id }, createdMovie);
+        else sendPush({ title: createdMovie.type === "serie" ? "Nueva serie 🍿" : "Nueva película 🍿", body: createdMovie.title + " ya está disponible en Cineverso Mágico.", image: img, url: "/ver/" + createdMovie.id, tag: "m-" + createdMovie.id }, createdMovie);
       }
     }
 
@@ -3279,6 +3284,10 @@ export default function Home() {
     setMyList(data && Array.isArray(data.myList) ? data.myList : []);
     setRatings(data && data.ratings && typeof data.ratings === "object" ? data.ratings : {});
     setNotifSeen(data && typeof data.notifSeen === "number" ? data.notifSeen : 0);
+    setWatchHistory(data && Array.isArray(data.history) ? data.history.filter((h: any) => h && h.id !== undefined && typeof h.at === "number").map((h: any) => ({ id: String(h.id), at: h.at, pct: Number(h.pct) || 0, mins: Number(h.mins) || 0 })) : []);
+    setFollows(data && data.follows && typeof data.follows === "object" ? { sagas: Array.isArray(data.follows.sagas) ? data.follows.sagas : [], genres: Array.isArray(data.follows.genres) ? data.follows.genres : [] } : { sagas: [], genres: [] });
+    setSeasonBadges(data && Array.isArray(data.seasonBadges) ? data.seasonBadges : []);
+    setChallengesDone(data && Array.isArray(data.challengesDone) ? data.challengesDone : []);
     setContinueWatchingList(
       data && Array.isArray(data.progress)
         ? data.progress.filter((x: any) => x && x.id !== undefined && typeof x.time === "number" && typeof x.duration === "number")
@@ -3314,6 +3323,10 @@ export default function Home() {
         progress: continueWatchingList.slice(0, 50),
         ratings,
         notifSeen,
+        history: watchHistory.slice(0, 400),
+        follows,
+        seasonBadges,
+        challengesDone,
       };
       fetch("/api/account", {
         method: "PUT",
@@ -3333,7 +3346,7 @@ export default function Home() {
         .catch(() => {});
     }, 1200);
     return () => clearTimeout(t);
-  }, [profiles, activeProfile, myList, continueWatchingList, ratings, notifSeen, accountUser, accountLoaded]);
+  }, [profiles, activeProfile, myList, continueWatchingList, ratings, notifSeen, watchHistory, follows, seasonBadges, challengesDone, accountUser, accountLoaded]);
 
   const onLoggedIn = (d: any, isNew?: boolean, isReset?: boolean) => {
     setAccountUser(d.user);
@@ -3505,6 +3518,10 @@ export default function Home() {
       setContinueWatchingList([]);
       setRatings({});
       setNotifSeen(0);
+      setWatchHistory([]);
+      setFollows({ sagas: [], genres: [] });
+      setSeasonBadges([]);
+      setChallengesDone([]);
       showToast("Sesión cerrada.");
     };
     postAccount({ action: "logout" }).then(reset, reset);
@@ -3549,6 +3566,7 @@ export default function Home() {
     const w = watchRef.current;
     watchRef.current = null;
     if (w && w.played && w.secs >= 10) sendStat({ type: "watch", movieId: w.id, title: w.title, pct: Math.round(w.maxPct), secs: Math.round(w.secs) });
+    if (w && w.played && w.secs >= 10) addHistory(w.id, w.maxPct, w.secs);
   };
   const trackTime = (video: HTMLVideoElement, m: Movie) => {
     const w = watchRef.current;
@@ -4177,7 +4195,7 @@ export default function Home() {
         title: movies.length === 1 ? (first.type === "serie" ? "Nueva serie 🍿" : "Nueva película 🍿") : movies.length + " estrenos nuevos 🍿",
         body: movies.length === 1 ? first.title + " ya está disponible en Cineverso Mágico." : movies.slice(0, 3).map((m) => m.title).join(", ") + (movies.length > 3 ? " y más" : "") + " ya están en Cineverso Mágico.",
         image: first.backdrop || first.bgImage, url: movies.length === 1 ? "/ver/" + first.id : "/", tag: movies.length === 1 ? "m-" + first.id : "lote-" + Date.now(),
-      });
+      }, movies.length === 1 ? first : undefined);
     }
     setBulkItems([]);
     setBulkText("");
@@ -4185,11 +4203,11 @@ export default function Home() {
 
 
   // Administrador: enviar un aviso a todos los dispositivos suscritos
-  const sendPush = (msg: { title: string; body: string; image?: string; url?: string; tag?: string }) => {
+  const sendPush = (msg: { title: string; body: string; image?: string; url?: string; tag?: string }, mv?: Movie) => {
     let pass = "";
     try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
     if (!pass) { showToast("Para enviar avisos vuelve a entrar con ?admin.", 6000); return; }
-    fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", password: pass, ...msg }) })
+    fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", password: pass, ...msg, movie: mv ? { title: mv.title, saga: mv.saga || "", tag: mv.tag || "", genres: mv.genres || [] } : undefined }) })
       .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (ok) {
@@ -4413,6 +4431,419 @@ export default function Home() {
     txt("¿Y tú? Descubre tu año en cineversomagico.com", W / 2, cy2 + 58, 32, "#04130a", "900", "center");
     return await new Promise<Blob | null>((resolve) => { try { c.toBlob((b) => resolve(b), "image/png"); } catch (e) { resolve(null); } });
   };
+  // ================================================================
+  // A TU GUSTO: Sorpréndeme personalizado, "Porque viste…", seguir sagas y géneros,
+  // retos del mes y votaciones de la comunidad
+  // ================================================================
+  const addHistory = (id: string, pct: number, secs: number) => {
+    const at = Date.now();
+    setWatchHistory((prev) => {
+      const cur = prev.find((h) => h.id === id);
+      const item = { id, at, pct: Math.max(cur ? cur.pct : 0, Math.min(100, Math.round(pct || 0))), mins: Math.round(((cur ? cur.mins : 0) + secs / 60) * 10) / 10 };
+      return [item].concat(prev.filter((h) => h.id !== id)).slice(0, 400);
+    });
+  };
+  // Sin cuenta: lo mismo se guarda en este dispositivo
+  const guestDataLoaded = useRef(false);
+  useEffect(() => {
+    if (!accountChecked || accountUser || guestDataLoaded.current) return;
+    guestDataLoaded.current = true;
+    try {
+      const g = JSON.parse(localStorage.getItem("cv_taste_guest") || "null");
+      if (g && typeof g === "object") {
+        if (Array.isArray(g.history)) setWatchHistory(g.history.filter((h: any) => h && typeof h.id === "string" && typeof h.at === "number"));
+        if (g.follows && Array.isArray(g.follows.sagas) && Array.isArray(g.follows.genres)) setFollows({ sagas: g.follows.sagas, genres: g.follows.genres });
+        if (Array.isArray(g.seasonBadges)) setSeasonBadges(g.seasonBadges);
+        if (Array.isArray(g.challengesDone)) setChallengesDone(g.challengesDone);
+      }
+    } catch (e) {}
+  }, [accountChecked, accountUser]);
+  useEffect(() => { if (accountUser) guestDataLoaded.current = false; }, [accountUser]);
+  useEffect(() => {
+    if (accountUser || !accountChecked || !guestDataLoaded.current) return;
+    try { localStorage.setItem("cv_taste_guest", JSON.stringify({ history: watchHistory.slice(0, 300), follows, seasonBadges, challengesDone })); } catch (e) {}
+  }, [watchHistory, follows, seasonBadges, challengesDone, accountUser, accountChecked]);
+
+  const genresOf = (m: Movie) => Array.from(new Set([m.tag].concat(m.genres || []).filter(Boolean) as string[]));
+  const castOf = (m: Movie) => (m.cast || "").split(",").map((x) => x.trim()).filter((x) => x.length > 2).slice(0, 4);
+  // Todo lo que vio: historial + "Continuar viendo"
+  const seenMap = (() => {
+    const map = new Map<string, { at: number; pct: number; mins: number }>();
+    watchHistory.forEach((h) => map.set(h.id, { at: h.at, pct: h.pct, mins: h.mins }));
+    continueWatchingList.forEach((p) => {
+      const id = String(p.id);
+      const pct = p.duration > 0 ? (p.time / p.duration) * 100 : 0;
+      const cur = map.get(id);
+      if (!cur) map.set(id, { at: p.updatedAt || 0, pct, mins: p.time / 60 });
+      else map.set(id, { at: Math.max(cur.at, p.updatedAt || 0), pct: Math.max(cur.pct, pct), mins: Math.max(cur.mins, p.time / 60) });
+    });
+    return map;
+  })();
+  const seenOk = (x: { pct: number; mins: number }) => x.pct >= 15 || x.mins >= 10;
+  const seenIds = new Set(Array.from(seenMap.keys()).filter((k) => seenOk(seenMap.get(k) as any)));
+  // Perfil de gustos
+  const taste = (() => {
+    const g: Record<string, number> = {}, sg: Record<string, number> = {}, cast: Record<string, number> = {};
+    const add = (m: Movie, w: number) => {
+      genresOf(m).forEach((x, i) => { g[x] = (g[x] || 0) + (i === 0 ? w : w * 0.6); });
+      if (m.saga) sg[m.saga] = (sg[m.saga] || 0) + w;
+      castOf(m).forEach((c) => { cast[c] = (cast[c] || 0) + w * 0.5; });
+    };
+    catalogAll.forEach((m) => {
+      const id = String(m.id);
+      const s = seenMap.get(id);
+      if (s && seenOk(s)) add(m, s.pct >= 85 ? 3 : 2);
+      const r = ratings[id];
+      if (r === 1) add(m, 3); else if (r === -1) add(m, -3);
+      if (myList.indexOf(m.title) !== -1) add(m, 1);
+    });
+    follows.genres.forEach((x) => { g[x] = (g[x] || 0) + 2; });
+    follows.sagas.forEach((x) => { sg[x] = (sg[x] || 0) + 3; });
+    const topG = Object.keys(g).filter((k) => g[k] > 0).sort((a, b) => g[b] - g[a]);
+    return { g, sg, cast, topG, has: topG.length > 0 };
+  })();
+  const tasteScore = (m: Movie) => {
+    let s = 0;
+    genresOf(m).forEach((x) => { s += taste.g[x] || 0; });
+    if (m.saga) s += (taste.sg[m.saga] || 0) * 1.5;
+    castOf(m).forEach((c) => { s += taste.cast[c] || 0; });
+    const cs = commStars[String(m.id)];
+    if (cs && cs.count) s += (cs.avg - 3) * 0.8;
+    if (isNewMovie30(m)) s += 0.5;
+    return s;
+  };
+  const tasteWhy = (m: Movie) => {
+    if (m.saga && (taste.sg[m.saga] || 0) > 0) return follows.sagas.indexOf(m.saga) !== -1 ? "Sigues la saga «" + m.saga + "»: esta todavía no la ves 🎞️" : "Te gustó la saga «" + m.saga + "»: sigue con esta 🎞️";
+    const gs = genresOf(m).filter((x) => taste.topG.slice(0, 4).indexOf(x) !== -1).slice(0, 2);
+    const actor = castOf(m).find((c) => (taste.cast[c] || 0) > 0.9);
+    if (gs.length && actor) return "Te gusta " + gs.map((x) => x.toLowerCase()).join(" y ") + ", y sale " + actor + " 👀";
+    if (gs.length) return "Te gusta " + gs.map((x) => x.toLowerCase()).join(" y ") + ": prueba esta 👀";
+    if (actor) return "Sale " + actor + ", que ya viste en otras 🎬";
+    return "Algo distinto para variar 🎲";
+  };
+  const pickSurprise = (exclude: string): { m: Movie; why: string } | null => {
+    const playable = catalog.filter((m) => String(m.id) !== exclude);
+    const fresh = playable.filter((m) => !seenIds.has(String(m.id)) && ratings[String(m.id)] !== -1);
+    const base = fresh.length ? fresh : playable;
+    if (!base.length) return null;
+    if (!taste.has) {
+      const tops = commTop.map((id) => base.find((x) => String(x.id) === id)).filter(Boolean) as Movie[];
+      const from = tops.length ? tops.slice(0, 10) : base;
+      const m = from[Math.floor(Math.random() * from.length)];
+      return { m, why: tops.length ? "Aún no conocemos tus gustos: esta es de lo mejor valorado por la comunidad ⭐" : "Aún no conocemos tus gustos. ¡Mira algo y aprenderemos de ti! 🍿" };
+    }
+    // Se elige al azar entre las que más encajan (las de mayor puntaje tienen mucha más probabilidad)
+    const top = base.map((m) => ({ m, s: tasteScore(m) })).sort((a, b) => b.s - a.s).slice(0, 6);
+    const minS = Math.min.apply(null, top.map((x) => x.s));
+    const w = top.map((x) => Math.pow(x.s - minS + 0.5, 2));
+    let r = Math.random() * w.reduce((a, b) => a + b, 0);
+    let chosen = top[0];
+    for (let i = 0; i < top.length; i++) { r -= w[i]; if (r <= 0) { chosen = top[i]; break; } }
+    return { m: chosen.m, why: fresh.length ? tasteWhy(chosen.m) : "¡Ya viste casi todo! Esta te puede gustar de nuevo 🔁" };
+  };
+  // Ruleta de Sorpréndeme
+  const [surprise, setSurprise] = useState<{ phase: "spin" | "done"; reel: Movie[]; idx: number; pick: Movie; why: string } | null>(null);
+  const startSurprise = (exclude?: string) => {
+    const p = pickSurprise(exclude || "");
+    if (!p) { showToast("Todavía no hay películas para elegir."); return; }
+    let reduce = false;
+    try { reduce = !!window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    const others = catalog.filter((x) => x.id !== p.m.id && x.bgImage);
+    const reel: Movie[] = [];
+    for (let i = 0; i < 15 && others.length; i++) reel.push(others[Math.floor(Math.random() * others.length)]);
+    reel.push(p.m);
+    setSurprise({ phase: reduce || reel.length < 3 ? "done" : "spin", reel, idx: reduce ? reel.length - 1 : 0, pick: p.m, why: p.why });
+  };
+  useEffect(() => {
+    if (!surprise || surprise.phase !== "spin") return;
+    let alive = true, i = 0;
+    const n = surprise.reel.length;
+    const step = () => {
+      if (!alive) return;
+      i++;
+      if (i >= n - 1) { setSurprise((s) => (s ? { ...s, idx: n - 1, phase: "done" } : s)); return; }
+      setSurprise((s) => (s ? { ...s, idx: i } : s));
+      setTimeout(step, 60 + i * i * 1.3);
+    };
+    const t = setTimeout(step, 90);
+    return () => { alive = false; clearTimeout(t); };
+  }, [surprise && surprise.phase, surprise && String(surprise.pick.id)]);
+
+  useEffect(() => {
+    if (!surprise) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack" || e.keyCode === 461 || e.keyCode === 10009) { e.preventDefault(); e.stopPropagation(); setSurprise(null); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [!!surprise]);
+  // "Porque viste…": hasta 2 filas con títulos parecidos a lo último que vio
+  const similarity = (a: Movie, b: Movie) => {
+    let s = 0;
+    if (a.saga && a.saga === b.saga) s += 6;
+    const ga = genresOf(a), gb = genresOf(b);
+    ga.forEach((x) => { if (gb.indexOf(x) !== -1) s += 2; });
+    if (a.tag && a.tag === b.tag) s += 1;
+    const ca = castOf(a), cb = castOf(b);
+    ca.forEach((x) => { if (cb.indexOf(x) !== -1) s += 2; });
+    if (a.director && b.director && a.director === b.director) s += 2;
+    const ya = parseInt(a.year, 10), yb = parseInt(b.year, 10);
+    if (ya && yb && Math.abs(ya - yb) <= 5) s += 1;
+    if ((a.type || "pelicula") === (b.type || "pelicula")) s += 1;
+    return s;
+  };
+  const becauseRows = (() => {
+    const out: { anchor: Movie; items: Movie[] }[] = [];
+    const used = new Set<string>();
+    const anchors = Array.from(seenMap.keys())
+      .filter((k) => { const v = seenMap.get(k) as any; return (v.pct >= 40 || ratings[k] === 1) && ratings[k] !== -1; })
+      .sort((a, b) => (seenMap.get(b) as any).at - (seenMap.get(a) as any).at)
+      .map((k) => catalog.find((x) => String(x.id) === k))
+      .filter(Boolean) as Movie[];
+    for (const a of anchors) {
+      if (out.length >= 2) break;
+      if (out.some((r) => r.anchor.saga && r.anchor.saga === a.saga)) continue;
+      const items = catalog
+        .filter((b) => b.id !== a.id && !seenIds.has(String(b.id)) && ratings[String(b.id)] !== -1 && !used.has(String(b.id)))
+        .map((b) => ({ b, s: similarity(a, b) }))
+        .filter((x) => x.s >= 3)
+        .sort((x, y) => y.s - x.s)
+        .slice(0, 15)
+        .map((x) => x.b);
+      if (items.length >= 2) { items.forEach((x) => used.add(String(x.id))); out.push({ anchor: a, items }); }
+    }
+    return out;
+  })();
+
+  // ---------- Seguir sagas y géneros ----------
+  const isFollowing = (kind: "saga" | "genre", name: string) => (kind === "saga" ? follows.sagas : follows.genres).indexOf(name) !== -1;
+  const toggleFollowTopic = (kind: "saga" | "genre", name: string) => {
+    if (!name) return;
+    const on = !isFollowing(kind, name);
+    setFollows((f) => {
+      const key = kind === "saga" ? "sagas" : "genres";
+      const cur = f[key].filter((x) => x !== name);
+      return { ...f, [key]: on ? cur.concat(name).slice(-50) : cur };
+    });
+    if (!on) { showToast("Dejaste de seguir «" + name + "»."); return; }
+    showToast("🔔 Sigues «" + name + "». Te avisaremos cuando llegue " + (kind === "saga" ? "otra de esta saga." : "algo nuevo de este género.") + (pushState === "subscribed" ? "" : " Activa la campanita 🔔 para recibir el aviso en tu celular."), 7000);
+  };
+  // El servidor de avisos sabe qué sigue este dispositivo
+  useEffect(() => {
+    if (pushState !== "subscribed") return;
+    const t = setTimeout(() => {
+      try {
+        navigator.serviceWorker.ready
+          .then((reg) => reg.pushManager.getSubscription())
+          .then((sub) => {
+            if (!sub) return;
+            return fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "follows", endpoint: sub.endpoint, follows }) });
+          })
+          .catch(() => {});
+      } catch (e) {}
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [pushState, follows.sagas.join("|"), follows.genres.join("|")]);
+  const followMatch = (m: Movie): { kind: "saga" | "genre"; name: string } | null => {
+    if (m.saga && follows.sagas.indexOf(m.saga) !== -1) return { kind: "saga", name: m.saga };
+    const g = genresOf(m).find((x) => follows.genres.indexOf(x) !== -1);
+    return g ? { kind: "genre", name: g } : null;
+  };
+  const followedNew = catalog.filter((m) => isNewMovie30(m) && !seenIds.has(String(m.id)) && !!followMatch(m)).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)).slice(0, 15);
+  const allSagas = Array.from(new Set(catalogAll.map((m) => m.saga).filter(Boolean) as string[])).sort();
+  const allGenres = (() => {
+    const c: Record<string, number> = {};
+    catalogAll.forEach((m) => genresOf(m).forEach((g) => { c[g] = (c[g] || 0) + 1; }));
+    return Object.keys(c).sort((a, b) => c[b] - c[a]);
+  })();
+
+  // ---------- Retos del mes ----------
+  const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const MONTH_THEME: { g: string; name: string; icon: string }[] = [
+    { g: "Aventura", name: "Año nuevo, aventura nueva", icon: "🧭" },
+    { g: "Romance", name: "Mes del amor", icon: "💘" },
+    { g: "Comedia", name: "Marzo de risas", icon: "😂" },
+    { g: "Animación", name: "Abril animado", icon: "✨" },
+    { g: "Familia", name: "Mayo en familia", icon: "💐" },
+    { g: "Acción", name: "Junio de acción", icon: "💥" },
+    { g: "Drama", name: "Julio de grandes historias", icon: "🎭" },
+    { g: "Ciencia ficción", name: "Agosto galáctico", icon: "🚀" },
+    { g: "Fantasía", name: "Septiembre mágico", icon: "🐉" },
+    { g: "Terror", name: "Octubre de terror", icon: "🎃" },
+    { g: "Suspenso", name: "Noviembre de suspenso", icon: "🔎" },
+    { g: "Familia", name: "Navidad en familia", icon: "🎄" },
+  ];
+  const GENRE_ICON: Record<string, string> = { "Terror": "👻", "Acción": "💥", "Comedia": "😂", "Romance": "💘", "Animación": "✨", "Ciencia ficción": "🚀", "Drama": "🎭", "Aventura": "🧭", "Suspenso": "🔎", "Familia": "🏡", "Fantasía": "🐉" };
+  const monthKey = todayStr ? todayStr.slice(0, 7) : "";
+  const monthLabel = (key: string) => { const mm = parseInt(key.slice(5, 7), 10); return mm ? MONTHS[mm - 1].charAt(0).toUpperCase() + MONTHS[mm - 1].slice(1) + " " + key.slice(0, 4) : key; };
+  const seasonIcon = (key: string) => { const mm = parseInt(key.slice(5, 7), 10); return mm ? MONTH_THEME[mm - 1].icon : "🏆"; };
+  const challenges = (() => {
+    if (!monthKey || !catalog.length) return null;
+    const y = parseInt(monthKey.slice(0, 4), 10), mo = parseInt(monthKey.slice(5, 7), 10);
+    const start = new Date(y, mo - 1, 1).getTime();
+    const theme = MONTH_THEME[mo - 1];
+    const countG = (g: string) => catalog.filter((m) => genresOf(m).indexOf(g) !== -1).length;
+    let g = theme.g, name = theme.name;
+    let icon = theme.icon;
+    if (countG(g) < 3) { g = allGenres.find((x) => countG(x) >= 3) || allGenres[0] || ""; name = "Mes de " + (g || "cine").toLowerCase(); icon = GENRE_ICON[g] || "🎬"; }
+    const monthSeen = Array.from(seenMap.keys())
+      .filter((k) => { const v = seenMap.get(k) as any; return v.at >= start && seenOk(v); })
+      .map((k) => catalogAll.find((x) => String(x.id) === k))
+      .filter(Boolean) as Movie[];
+    const needG = Math.max(1, Math.min(5, countG(g)));
+    const needM = Math.max(1, Math.min(8, catalog.length));
+    const genresThisMonth = new Set<string>();
+    monthSeen.forEach((m) => { if (m.tag) genresThisMonth.add(m.tag); });
+    const needE = Math.max(1, Math.min(3, allGenres.length));
+    const list = [
+      { id: "genero", icon, text: "Mira " + needG + " de " + (g || "cine").toLowerCase(), have: monthSeen.filter((m) => genresOf(m).indexOf(g) !== -1).length, need: needG, genre: g },
+      { id: "maraton", icon: "🍿", text: "Mira " + needM + " títulos este mes", have: monthSeen.length, need: needM, genre: "" },
+      { id: "explora", icon: "🧭", text: "Mira " + needE + " géneros distintos", have: genresThisMonth.size, need: needE, genre: "" },
+    ].map((c) => ({ ...c, done: c.have >= c.need }));
+    return { key: monthKey, name, icon, label: monthLabel(monthKey), list, all: list.every((c) => c.done) };
+  })();
+  const [celebrate, setCelebrate] = useState(0);
+  useEffect(() => { if (!celebrate) return; const t = setTimeout(() => setCelebrate(0), 6000); return () => clearTimeout(t); }, [celebrate]);
+  // Primeros segundos (mientras cargan los datos): solo se anota, sin festejar
+  const challengeSettled = useRef(false);
+  useEffect(() => {
+    challengeSettled.current = false;
+    if (!accountChecked) return;
+    const t = setTimeout(() => { challengeSettled.current = true; }, 6000);
+    return () => clearTimeout(t);
+  }, [accountChecked, accountUser && accountUser.id, accountLoaded]);
+  const challengeKey = challenges ? challenges.key + ":" + challenges.list.map((c) => c.id + (c.done ? 1 : 0)).join(",") : "";
+  useEffect(() => {
+    if (!challenges) return;
+    if (accountUser && !accountLoaded) return;
+    const fresh = challenges.list.filter((c) => c.done && challengesDone.indexOf(challenges.key + ":" + c.id) === -1);
+    const earned = challenges.all && seasonBadges.indexOf(challenges.key) === -1;
+    if (!fresh.length && !earned) return;
+    if (fresh.length) setChallengesDone((prev) => prev.concat(fresh.map((c) => challenges.key + ":" + c.id)).slice(-720));
+    if (earned) setSeasonBadges((prev) => (prev.indexOf(challenges.key) === -1 ? prev.concat(challenges.key) : prev));
+    if (!challengeSettled.current) return;
+    if (earned) { showToast("🏅 ¡Completaste los retos! Ganaste la insignia «" + challenges.icon + " " + challenges.label + "»", 8000); setCelebrate(Date.now()); }
+    else { showToast("🏆 ¡Reto cumplido! " + fresh[0].icon + " " + fresh[0].text, 6000); setCelebrate(Date.now()); }
+  }, [challengeKey, accountLoaded, accountUser && accountUser.id]);
+
+  // ---------- Votaciones ----------
+  type PollView = { id: string; q: string; open: boolean; at: number; closedAt: number; winner: string; total: number; mine: string; opts: { id: string; label: string; img: string; movieId: string; count: number }[] };
+  const [polls, setPolls] = useState<PollView[]>([]);
+  const [pollBusy, setPollBusy] = useState("");
+  const loadPolls = () => {
+    fetch("/api/community?polls=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => { if (d && Array.isArray(d.polls)) setPolls(d.polls); }).catch(() => {});
+  };
+  useEffect(() => {
+    loadPolls();
+    const t = setInterval(() => { if (!document.hidden) loadPolls(); }, 45000);
+    return () => clearInterval(t);
+  }, [accountUser && accountUser.id]);
+  const votePoll = (p: PollView, opt: string) => {
+    if (!accountUser) { showToast("Inicia sesión para votar 🗳️ (Cuenta → Iniciar sesión)."); return; }
+    if (!p.open || pollBusy) return;
+    setPollBusy(p.id + ":" + opt);
+    commPost({ action: "pollVote", id: p.id, opt }).then(({ ok, d }) => {
+      setPollBusy("");
+      if (!ok) { showToast((d && d.error) || "No se pudo votar."); return; }
+      if (d.poll) setPolls((prev) => prev.map((x) => (x.id === p.id ? d.poll : x)));
+      showToast(p.mine ? "🗳️ Cambiaste tu voto." : "🗳️ ¡Gracias por votar!");
+    });
+  };
+  // Administrador
+  const [adminPolls, setAdminPolls] = useState<PollView[]>([]);
+  const [pollQ, setPollQ] = useState("¿Qué agregamos esta semana?");
+  const [pollOpts, setPollOpts] = useState("");
+  const adminPollCall = (action: string, extra: any) => {
+    let password = "";
+    try { password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    if (!password) { showToast("Vuelve a entrar con ?admin para usar esto.", 6000); return Promise.resolve(null as any); }
+    return fetch("/api/community", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, password, ...extra }) })
+      .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, d })))
+      .catch(() => ({ ok: false, d: { error: "Sin conexión" } }));
+  };
+  const loadAdminPolls = () => {
+    fetch("/api/community?polls=1&all=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => { if (d && Array.isArray(d.polls)) setAdminPolls(d.polls); }).catch(() => {});
+  };
+  useEffect(() => { if (activeTab === "admin" && isAdmin) loadAdminPolls(); }, [activeTab, isAdmin]);
+  const pollFromRequests = () => {
+    const counts: Record<string, { title: string; n: number }> = {};
+    adminReqs.filter((r) => r.status === "nueva").forEach((r) => {
+      const k = r.title.trim().toLowerCase();
+      if (!k) return;
+      counts[k] = counts[k] ? { title: counts[k].title, n: counts[k].n + 1 } : { title: r.title.trim(), n: 1 };
+    });
+    const top = Object.keys(counts).sort((a, b) => counts[b].n - counts[a].n).slice(0, 4).map((k) => counts[k].title);
+    if (!top.length) { showToast("Todavía no hay pedidos nuevos. Escribe las opciones a mano.", 6000); return; }
+    setPollOpts(top.join("\n"));
+    showToast(top.length === 1 ? "Se agregó el pedido más pedido. Escribe al menos otra opción debajo." : "Listo: se llenaron las opciones con los " + top.length + " pedidos más pedidos.", 6000);
+  };
+  const createPoll = () => {
+    const opts = pollOpts.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 6);
+    if (!pollQ.trim()) { showToast("Escribe la pregunta."); return; }
+    if (opts.length < 2) { showToast("Escribe al menos 2 opciones, una por línea."); return; }
+    const withImg = opts.map((label) => {
+      const mv = catalogAll.find((m) => m.title.toLowerCase() === label.toLowerCase());
+      return { label, img: mv && /^https:\/\//.test(mv.bgImage || "") ? mv.bgImage : "", movieId: mv ? String(mv.id) : "" };
+    });
+    adminPollCall("adminPollCreate", { q: pollQ.trim(), opts: withImg }).then((res) => {
+      if (!res) return;
+      if (!res.ok) { showToast((res.d && res.d.error) || "No se pudo crear."); return; }
+      showToast("🗳️ ¡Votación publicada! Ya aparece en la portada.");
+      chatAdminPost("🗳️ ¡Nueva votación! " + pollQ.trim() + " Vota en la portada de Cineverso.");
+      setPollOpts("");
+      loadAdminPolls(); loadPolls();
+    });
+  };
+  const closePoll = (p: PollView) => {
+    if (!window.confirm("¿Cerrar la votación «" + p.q + "» y anunciar el ganador en el chat?")) return;
+    adminPollCall("adminPollClose", { id: p.id }).then((res) => {
+      if (!res) return;
+      if (!res.ok) { showToast((res.d && res.d.error) || "No se pudo cerrar."); return; }
+      const pr: PollView = res.d.poll;
+      const win = pr && pr.opts.find((o) => o.id === pr.winner);
+      if (win) chatAdminPost("🏆 ¡Terminó la votación! «" + pr.q + "» Ganó «" + win.label + "» con " + win.count + " voto" + (win.count === 1 ? "" : "s") + ". ¡Gracias a todos por votar! 🗳️");
+      showToast(win ? "Votación cerrada. Ganó «" + win.label + "» y se anunció en el chat." : "Votación cerrada (nadie votó).", 6000);
+      loadAdminPolls(); loadPolls();
+    });
+  };
+  const deletePoll = (p: PollView) => {
+    if (!window.confirm("¿Borrar la votación «" + p.q + "»?")) return;
+    adminPollCall("adminPollDelete", { id: p.id }).then((res) => { if (res && res.ok) { loadAdminPolls(); loadPolls(); } });
+  };
+  const pollCard = (p: PollView, compact: boolean) => {
+    const showRes = !p.open || !!p.mine || isAdmin;
+    return (
+      <div key={"poll-" + p.id} className="rounded-3xl p-4 sm:p-6 border border-purple-400/30 overflow-hidden relative" style={{ background: "linear-gradient(125deg, rgba(168,85,247,.22) 0%, rgba(17,17,17,.95) 45%, rgba(34,197,94,.14) 100%)" }}>
+        <div className="flex items-start gap-3 mb-4">
+          <span className="text-3xl sm:text-4xl leading-none">{p.open ? "🗳️" : "🏆"}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-black tracking-widest uppercase" style={{ color: p.open ? "#d8b4fe" : "#facc15" }}>{p.open ? "Votación de la comunidad" : "Votación cerrada"}</p>
+            <p className="text-lg sm:text-2xl font-black text-white leading-tight">{p.q}</p>
+            <p className="text-xs text-gray-400 mt-1">{p.total} voto{p.total === 1 ? "" : "s"}{p.open ? (p.mine ? " · Puedes cambiar tu voto mientras siga abierta" : accountUser ? " · Toca una opción para votar" : " · Inicia sesión para votar") : ""}</p>
+          </div>
+        </div>
+        <div className={"grid gap-2.5 " + (compact ? "" : "sm:grid-cols-2")}>
+          {p.opts.map((o) => {
+            const pct = p.total ? Math.round((o.count / p.total) * 100) : 0;
+            const mine = p.mine === o.id, win = !p.open && p.winner === o.id;
+            const mv = o.movieId ? catalogAll.find((x) => String(x.id) === o.movieId) : undefined;
+            return (
+              <button key={o.id} disabled={!p.open || !!pollBusy} onClick={() => votePoll(p, o.id)} className={"relative text-left rounded-2xl overflow-hidden border flex items-center gap-3 p-2.5 pr-4 cursor-pointer disabled:cursor-default focus:outline-none focus:ring-4 focus:ring-purple-400 transition " + (mine ? "border-green-400 bg-green-500/10" : win ? "border-yellow-400 bg-yellow-400/10" : "border-white/10 bg-black/30 hover:border-purple-300/60")}>
+                {showRes && <span className="absolute inset-y-0 left-0 rounded-2xl" style={{ width: pct + "%", background: win ? "rgba(250,204,21,.18)" : mine ? "rgba(34,197,94,.18)" : "rgba(168,85,247,.16)", transition: "width .6s cubic-bezier(.2,.7,.2,1)" }} />}
+                {o.img ? <img src={o.img} alt="" loading="lazy" className="relative w-10 h-14 rounded-lg object-cover shrink-0" /> : <span className="relative w-10 h-14 rounded-lg bg-white/5 flex items-center justify-center text-xl shrink-0">🎬</span>}
+                <span className="relative flex-1 min-w-0">
+                  <span className="block text-sm sm:text-base font-bold text-white truncate">{win ? "🏆 " : ""}{o.label}</span>
+                  <span className="block text-[11px] text-gray-400">{mine ? "✔ Tu voto" : win ? "¡Ganadora!" : mv ? "Ya está en Cineverso" : p.open ? "Votar" : ""}</span>
+                </span>
+                {showRes && <span className="relative text-sm font-black" style={{ color: win ? "#facc15" : "#e9d5ff" }}>{pct}%</span>}
+                {pollBusy === p.id + ":" + o.id && <span className="relative text-xs text-gray-300">…</span>}
+              </button>
+            );
+          })}
+        </div>
+        {!p.open && p.winner && (() => { const w = p.opts.find((o) => o.id === p.winner); const mv = w && w.movieId ? catalogAll.find((x) => String(x.id) === w.movieId) : undefined; return mv ? <button onClick={() => setSelectedMovie(mv)} className="mt-4 bg-white text-black font-black text-sm px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">▶ Ver «{mv.title}»</button> : null; })()}
+        {!accountUser && p.open && <button onClick={() => setActiveTab("cuenta")} className="mt-4 bg-purple-500 hover:bg-purple-400 text-white font-black text-sm px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60">Iniciar sesión para votar</button>}
+      </div>
+    );
+  };
   const wrapCard = async (): Promise<Blob | null> => {
     let b: Blob | null = null;
     try { b = await makeWrapCard(true); } catch (e) { b = null; }
@@ -4460,7 +4891,11 @@ export default function Home() {
     const limit = nowTs - 45 * 24 * 3600 * 1000;
     catalogAll.forEach((m) => {
       const t = movieTime(m);
-      if (t > limit) out.push({ key: "m-" + m.id, title: m.title, text: m.comingSoon ? "Próximo estreno: " + fmtRelease(m.releaseDate) : m.type === "serie" ? "Nueva serie disponible" : "Nueva película disponible", time: t, movie: m });
+      // Si sigue su saga o su género, el aviso lo dice
+      const fSaga = m.saga && follows.sagas.indexOf(m.saga) !== -1 ? m.saga : "";
+      const fGenre = fSaga ? "" : ([m.tag].concat(m.genres || []).filter(Boolean) as string[]).find((g) => follows.genres.indexOf(g) !== -1) || "";
+      const fText = fSaga ? "🔔 Llegó otra de " + fSaga : fGenre ? "🔔 Nueva de " + fGenre.toLowerCase() + " (lo sigues)" : "";
+      if (t > limit) out.push({ key: "m-" + m.id, title: m.title, text: m.comingSoon ? (fText ? fText.replace("Llegó", "Pronto llega") + " · " : "") + "Próximo estreno: " + fmtRelease(m.releaseDate) : fText || (m.type === "serie" ? "Nueva serie disponible" : "Nueva película disponible"), time: t, movie: m });
       (m.episodes || []).forEach((ep) => {
         if (ep.addedAt && ep.addedAt > limit && ep.addedAt - t > 60000) {
           out.push({ key: "e-" + m.id + "-" + ep.id, title: m.title, text: "Nuevo episodio: T" + ep.season + ":E" + ep.number + " · " + ep.title, time: ep.addedAt, movie: m });
@@ -4647,8 +5082,7 @@ export default function Home() {
 
   const surpriseMe = () => {
     if (!catalog.length) return;
-    const m = catalog[Math.floor(Math.random() * catalog.length)];
-    setSelectedMovie(m);
+    startSurprise();
   };
 
   // Progreso de "Continuar viendo" (cada 15 s, al pausar y al cerrar)
@@ -4897,10 +5331,10 @@ export default function Home() {
           )}
           <button
             onClick={surpriseMe}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="flex items-center gap-1.5 p-2 xl:px-3 xl:py-1.5 rounded-full xl:rounded-lg text-sm text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
             aria-label="Sorpréndeme"
           >
-            <Shuffle className="w-4 h-4" /> Sorpréndeme
+            <Shuffle className="w-5 h-5 xl:w-4 xl:h-4" /> <span className="hidden xl:inline">Sorpréndeme</span>
           </button>
           <button 
             onClick={() => setActiveTab("explorar")}
@@ -5032,10 +5466,17 @@ export default function Home() {
             <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate group-hover:text-green-400">{m.title}</h4>
           </div>
         );
-        const row = (title: string, items: Movie[], keyPrefix: string, icon?: any) =>
+        const row = (title: string, items: Movie[], keyPrefix: string, icon?: any, follow?: { kind: "saga" | "genre"; name: string }) =>
           items.length ? (
             <section key={keyPrefix}>
-              <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white flex items-center gap-2">{icon}{title}</h2>
+              <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white flex items-center gap-2">
+                {icon}<span className="min-w-0 truncate">{title}</span>
+                {follow && (
+                  <button onClick={() => toggleFollowTopic(follow.kind, follow.name)} className={"shrink-0 ml-1 text-[11px] sm:text-xs font-black px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (isFollowing(follow.kind, follow.name) ? "bg-green-500 text-black border-green-500" : "bg-white/5 text-gray-200 border-white/15 hover:border-green-400")} aria-pressed={isFollowing(follow.kind, follow.name)}>
+                    {isFollowing(follow.kind, follow.name) ? "✓ Siguiendo" : "🔔 Seguir"}
+                  </button>
+                )}
+              </h2>
               <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
                 {items.map((m) => posterCard(m, keyPrefix + "-" + m.id))}
               </Rail>
@@ -5240,6 +5681,39 @@ export default function Home() {
                 </section>
               )}
 
+              {/* Votación de la comunidad */}
+              {polls.length > 0 && <section>{pollCard(polls[0], false)}</section>}
+              {/* Retos del mes */}
+              {challenges && (
+                <section>
+                  <div className="rounded-3xl p-4 sm:p-6 border border-yellow-400/25 relative overflow-hidden" style={{ background: "linear-gradient(120deg, rgba(250,204,21,.14) 0%, rgba(17,17,17,.96) 42%, rgba(34,197,94,.12) 100%)" }}>
+                    <div className="flex items-start gap-3 mb-4">
+                      <span className="text-3xl sm:text-4xl leading-none">{challenges.all ? "🏅" : "🏆"}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-black tracking-widest uppercase text-yellow-300">Retos de {MONTHS[parseInt(challenges.key.slice(5, 7), 10) - 1]}</p>
+                        <p className="text-lg sm:text-2xl font-black text-white leading-tight">{challenges.icon} {challenges.name}</p>
+                        <p className="text-xs text-gray-400 mt-1">{challenges.all ? "¡Completaste todo! Ganaste la insignia «" + challenges.label + "» 🎉" : "Completa los 3 retos y gana la insignia exclusiva «" + challenges.label + "»."}</p>
+                      </div>
+                      {challenges.all && <span className="hidden sm:flex shrink-0 w-14 h-14 rounded-full items-center justify-center text-2xl border-2 border-yellow-300" style={{ background: "radial-gradient(circle, rgba(250,204,21,.45), rgba(250,204,21,.05))" }}>{challenges.icon}</span>}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {challenges.list.map((c) => {
+                        const pct = Math.min(100, Math.round((Math.min(c.have, c.need) / c.need) * 100));
+                        return (
+                          <div key={c.id} onClick={() => { if (c.genre && !c.done) { setExploreGenreFilter(c.genre); setActiveTab("explorar"); try { window.scrollTo(0, 0); } catch (e) {} } }} className={"rounded-2xl p-3 border flex flex-col gap-2 " + (c.done ? "bg-yellow-400/10 border-yellow-400/50" : "bg-black/30 border-white/10") + (c.genre && !c.done ? " cursor-pointer hover:border-yellow-300/60" : "")}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl leading-none">{c.done ? "✅" : c.icon}</span>
+                              <span className="text-sm font-bold text-white leading-tight flex-1">{c.text}</span>
+                              <span className="text-xs font-black" style={{ color: c.done ? "#facc15" : "#9ca3af" }}>{Math.min(c.have, c.need)}/{c.need}</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full" style={{ width: pct + "%", background: c.done ? "linear-gradient(90deg,#facc15,#f59e0b)" : "linear-gradient(90deg,#22c55e,#a3e635)", transition: "width .8s cubic-bezier(.2,.7,.2,1)" }} /></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
               {/* Próximos estrenos */}
               {upcoming.length > 0 && (
                 <section>
@@ -5283,6 +5757,15 @@ export default function Home() {
                 </section>
               )}
 
+              {/* Novedades de lo que sigue */}
+              {followedNew.length > 0 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">🔔 Novedades de lo que sigues</h2>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {followedNew.map((m) => posterCard(m, "fol-" + m.id))}
+                  </Rail>
+                </section>
+              )}
               {/* Top 10 de la semana (automático) */}
               {catalog.length >= 3 && (
                 <section>
@@ -5340,10 +5823,11 @@ export default function Home() {
                   </Rail>
                 </section>
               )}
+              {becauseRows.map((r) => row("Porque viste «" + r.anchor.title + "»", r.items, "bc-" + r.anchor.id, <span>🎯</span>))}
               {row("Recomendado para ti", recommended, "rec", <Sparkle className="w-5 h-5 text-green-400" />)}
-              {sagaNames.map((sg) => row("Saga: " + sg, sagas[sg].slice().sort(sagaSort), "saga-" + sg, <span>🎞️</span>))}
+              {sagaNames.map((sg) => row("Saga: " + sg, sagas[sg].slice().sort(sagaSort), "saga-" + sg, <span>🎞️</span>, { kind: "saga", name: sg }))}
               {row(isAdmin ? "Tus Películas Subidas" : "Recién agregadas", catalog, "new")}
-              {groupOrder.filter((g) => groups[g].length >= 2).map((g) => row(g, groups[g], "g-" + g))}
+              {groupOrder.filter((g) => groups[g].length >= 2).map((g) => row(g, groups[g], "g-" + g, undefined, { kind: "genre", name: g }))}
             </div>
           </div>
         );
@@ -5736,6 +6220,48 @@ export default function Home() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* VOTACIONES */}
+          <div className="bg-[#0f0f0f] border border-purple-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-bold text-white">🗳️ Votaciones de la comunidad</h3>
+                <p className="text-xs text-gray-500">La votación abierta aparece en la portada. Cada cuenta vota una vez (puede cambiar su voto). Al cerrarla, el ganador se anuncia en el chat.</p>
+              </div>
+              <button onClick={loadAdminPolls} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400">Pregunta</label>
+                <input type="text" maxLength={120} value={pollQ} onChange={(e) => setPollQ(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                <label className="text-xs font-bold text-gray-400 block pt-1">Opciones (una por línea, de 2 a 6)</label>
+                <textarea rows={5} value={pollOpts} onChange={(e) => setPollOpts(e.target.value)} placeholder={"Opción 1\nOpción 2\nOpción 3"} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={pollFromRequests} className="text-xs font-bold text-purple-200 bg-purple-500/15 border border-purple-500/40 px-3 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400">📬 Llenar con los más pedidos</button>
+                  <button onClick={createPoll} className="text-sm font-black text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-purple-400">Publicar votación</button>
+                </div>
+                <p className="text-[11px] text-gray-500">Si una opción se llama igual que una película del catálogo, se muestra con su póster.</p>
+              </div>
+              <div className="space-y-2">
+                {adminPolls.length === 0 ? (
+                  <p className="text-sm text-gray-500">Todavía no hay votaciones.</p>
+                ) : adminPolls.map((p) => (
+                  <div key={"ap-" + p.id} className="rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={"text-[10px] font-black px-2 py-0.5 rounded-full " + (p.open ? "bg-green-500/20 text-green-400" : "bg-gray-700 text-gray-300")}>{p.open ? "ABIERTA" : "CERRADA"}</span>
+                      <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{p.q}</span>
+                      <span className="text-[11px] text-gray-400">{p.total} votos</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1 truncate">{p.opts.map((o) => (p.winner === o.id ? "🏆 " : "") + o.label + " (" + o.count + ")").join(" · ")}</p>
+                    <div className="flex gap-2 mt-2">
+                      {p.open && <button onClick={() => closePoll(p)} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-yellow-500 text-black cursor-pointer">🏆 Cerrar y anunciar</button>}
+                      <button onClick={() => deletePoll(p)} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#181818] text-red-400 border border-gray-800 cursor-pointer">Borrar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* PEDIDOS DE USUARIOS */}
@@ -6600,8 +7126,57 @@ export default function Home() {
                   );
                 })}
               </div>
+              <div className="rounded-2xl border border-yellow-500/20 bg-[#0f0f0f] p-4">
+                <p className="text-sm font-black text-white">🏆 Insignias de temporada</p>
+                <p className="text-[11px] text-gray-500 mb-3">Se ganan completando los 3 retos de cada mes. Son de colección: solo se consiguen en su mes.</p>
+                <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                  {seasonBadges.slice().sort().reverse().map((k) => (
+                    <div key={"sb-" + k} className="shrink-0 w-[92px] flex flex-col items-center text-center gap-1">
+                      <span className="w-16 h-16 rounded-full flex items-center justify-center text-3xl border-2 border-yellow-300" style={{ background: "radial-gradient(circle, rgba(250,204,21,.4), rgba(250,204,21,.05))", boxShadow: "0 0 24px rgba(250,204,21,.25)" }}>{seasonIcon(k)}</span>
+                      <span className="text-[11px] font-bold text-yellow-200 leading-tight">{monthLabel(k)}</span>
+                    </div>
+                  ))}
+                  {challenges && seasonBadges.indexOf(challenges.key) === -1 && (
+                    <div className="shrink-0 w-[92px] flex flex-col items-center text-center gap-1">
+                      <span className="w-16 h-16 rounded-full flex items-center justify-center text-3xl border-2 border-dashed border-gray-600 grayscale opacity-50">{challenges.icon}</span>
+                      <span className="text-[11px] font-bold text-gray-500 leading-tight">{challenges.label}<br />{challenges.list.filter((c) => c.done).length}/3 retos</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Lo que sigues */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">🔔 Sagas y géneros que sigues</h3>
+              <p className="text-xs text-gray-500">Cuando llegue algo nuevo de lo que sigues, te avisamos{pushState === "subscribed" ? " en este dispositivo" : " (activa la campanita 🔔 para recibirlo en tu celular)"} y aparece en «Novedades de lo que sigues».</p>
+            </div>
+            <div className="bg-[#0f0f0f] p-4 sm:p-5 rounded-2xl border border-gray-900 space-y-4">
+              {allSagas.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-gray-400 mb-2">🎞️ Sagas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allSagas.map((sg) => (
+                      <button key={"fs-" + sg} onClick={() => toggleFollowTopic("saga", sg)} aria-pressed={isFollowing("saga", sg)} className={"text-xs font-bold px-3 py-2 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (isFollowing("saga", sg) ? "bg-green-500 text-black border-green-500" : "bg-[#050505] text-gray-300 border-gray-800 hover:border-green-500")}>{isFollowing("saga", sg) ? "✓ " : "+ "}{sg}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="text-xs font-bold text-gray-400 mb-2">🎭 Géneros</p>
+                <div className="flex flex-wrap gap-2">
+                  {allGenres.slice(0, 24).map((g) => (
+                    <button key={"fg-" + g} onClick={() => toggleFollowTopic("genre", g)} aria-pressed={isFollowing("genre", g)} className={"text-xs font-bold px-3 py-2 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (isFollowing("genre", g) ? "bg-green-500 text-black border-green-500" : "bg-[#050505] text-gray-300 border-gray-800 hover:border-green-500")}>{isFollowing("genre", g) ? "✓ " : "+ "}{g}</button>
+                  ))}
+                </div>
+              </div>
+              {pushState !== "subscribed" && (follows.sagas.length > 0 || follows.genres.length > 0) && (
+                <button onClick={enablePush} className="text-xs font-black text-black bg-yellow-400 hover:bg-yellow-300 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-yellow-300">🔔 Activar avisos en este dispositivo</button>
+              )}
+            </div>
+          </div>
 
           <div className="space-y-4">
             <div>
@@ -6865,6 +7440,18 @@ export default function Home() {
                 <p className="text-gray-300 text-xs sm:text-sm leading-relaxed max-w-3xl line-clamp-3 pt-1">
                   {selectedMovie.desc}
                 </p>
+                {(selectedMovie.saga || selectedMovie.tag) && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {([["saga", selectedMovie.saga], ["genre", selectedMovie.tag]] as ["saga" | "genre", string | undefined][]).filter((x) => !!x[1]).map(([k, n]) => {
+                      const on = isFollowing(k, n as string);
+                      return (
+                        <button key={"mf-" + k} onClick={() => toggleFollowTopic(k, n as string)} aria-pressed={on} className={"text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-full border cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (on ? "bg-green-500/20 text-green-300 border-green-500/60" : "bg-black/40 text-gray-200 border-white/15 hover:border-green-400")}>
+                          {on ? "✓ Sigues " : "🔔 Seguir "}{k === "saga" ? "la saga «" + n + "»" : "«" + n + "»"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -7648,6 +8235,41 @@ export default function Home() {
               <button onClick={() => { setChatOpen(false); setActiveTab("cuenta"); try { window.scrollTo(0, 0); } catch (e) {} }} className="w-full bg-white hover:bg-gray-200 text-black font-bold py-3 rounded-xl text-sm cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Inicia sesión para escribir</button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* SORPRÉNDEME: ruleta según tus gustos */}
+      {surprise && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/85" style={{ backdropFilter: "blur(6px)" }} onClick={() => setSurprise(null)} role="dialog" aria-modal="true" aria-label="Sorpréndeme">
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-sm rounded-3xl border border-white/10 p-5 text-center overflow-hidden" style={{ background: "linear-gradient(160deg,#151515 0%,#0a0a0a 60%,#0d1f14 100%)", animation: "cvStory .3s ease-out" }}>
+            <button onClick={() => setSurprise(null)} aria-label="Cerrar" className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">✕</button>
+            <p className="text-[11px] font-black tracking-widest text-green-400 uppercase">🎲 Sorpréndeme</p>
+            <p className="text-lg font-black text-white mt-1">{surprise.phase === "spin" ? "Buscando algo para ti…" : "¡Esta es para ti, " + activeProfile.name + "!"}</p>
+            <div className="relative mx-auto mt-4 rounded-2xl overflow-hidden bg-gray-900" style={{ width: 190, height: 285, boxShadow: surprise.phase === "done" ? "0 0 0 3px #22c55e, 0 0 60px rgba(34,197,94,.45)" : "0 0 0 2px rgba(255,255,255,.12)", transition: "box-shadow .4s" }}>
+              {surprise.reel[surprise.idx] && <img key={"sr-" + surprise.idx} src={surprise.reel[surprise.idx].bgImage} alt={surprise.phase === "done" ? surprise.pick.title : ""} className="w-full h-full object-cover" style={{ animation: surprise.phase === "spin" ? "cvSpin .14s ease-out" : "cvPick .55s cubic-bezier(.2,.9,.3,1.3)" }} />}
+            </div>
+            {surprise.phase === "done" && (
+              <div style={{ animation: "cvRise .4s ease-out both" }}>
+                <p className="mt-4 text-xl font-black text-white leading-tight">{surprise.pick.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{[surprise.pick.year, surprise.pick.tag, surprise.pick.duration].filter(Boolean).join(" · ")}</p>
+                <p className="mt-3 text-sm text-green-300 font-bold bg-green-500/10 border border-green-500/30 rounded-xl px-3 py-2">{surprise.why}</p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button autoFocus onClick={() => { const m = surprise.pick; setSurprise(null); if (m.type === "serie") setSelectedMovie(m); else startPlayback(m); }} className="bg-white hover:bg-gray-200 text-black font-black text-sm px-4 py-3 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">▶ Ver ahora</button>
+                  <button onClick={() => { const m = surprise.pick; setSurprise(null); setSelectedMovie(m); }} className="bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-4 py-3 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Ver ficha</button>
+                </div>
+                <button onClick={() => startSurprise(String(surprise.pick.id))} className="mt-2 w-full bg-green-500 hover:bg-green-400 text-black font-black text-sm px-4 py-3 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60">🎲 Otra</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CONFETI DE RETOS CUMPLIDOS */}
+      {celebrate > 0 && (
+        <div aria-hidden className="fixed inset-0 pointer-events-none z-[95] overflow-hidden">
+          {Array.from({ length: 40 }).map((_, i) => (
+            <span key={"rc-" + celebrate + "-" + i} className="cv-conf" style={{ left: ((i * 41) % 100) + "%", background: ["#facc15", "#22c55e", "#a855f7", "#f472b6", "#60a5fa"][i % 5], animationDuration: 2.6 + (i % 7) * 0.3 + "s", animationDelay: (i % 9) * 0.12 + "s" }} />
+          ))}
         </div>
       )}
 

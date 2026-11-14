@@ -331,6 +331,23 @@ export async function PUT(req: Request) {
     })(),
     // Última vez que vio las notificaciones (milisegundos)
     notifSeen: typeof d.notifSeen === "number" && isFinite(d.notifSeen) ? d.notifSeen : 0,
+    // Historial de lo que vio (para recomendaciones y retos): { id, at, pct, mins }
+    history: Array.isArray(d.history)
+      ? d.history
+          .filter((h: any) => h && (typeof h.id === "string" || typeof h.id === "number") && typeof h.at === "number" && isFinite(h.at))
+          .slice(0, 400)
+          .map((h: any) => ({ id: String(h.id).slice(0, 80), at: h.at, pct: Math.max(0, Math.min(100, Number(h.pct) || 0)), mins: Math.max(0, Math.min(100000, Number(h.mins) || 0)) }))
+      : [],
+    // Sagas y géneros que sigue
+    follows: (() => {
+      const f = d.follows && typeof d.follows === "object" ? d.follows : {};
+      const arr = (a: any, n: number) => (Array.isArray(a) ? a.filter((x: unknown) => typeof x === "string" && x).map((x: string) => x.slice(0, 60)).slice(0, n) : []);
+      return { sagas: arr(f.sagas, 50), genres: arr(f.genres, 30) };
+    })(),
+    // Insignias de los retos del mes ("AAAA-MM")
+    seasonBadges: Array.isArray(d.seasonBadges) ? d.seasonBadges.filter((x: unknown) => typeof x === "string" && /^\d{4}-\d{2}$/.test(x)).slice(0, 240) : [],
+    // Retos sueltos completados ("AAAA-MM:reto")
+    challengesDone: Array.isArray(d.challengesDone) ? d.challengesDone.filter((x: unknown) => typeof x === "string" && /^\d{4}-\d{2}:[a-z]{2,20}$/.test(x)).slice(0, 720) : [],
   };
   if (JSON.stringify(clean).length > 300_000) return fail("Datos demasiado grandes", 413);
 
