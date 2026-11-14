@@ -59,6 +59,8 @@ interface Movie {
   releaseDate?: string;
   saga?: string;
   sagaOrder?: number;
+  sagaId?: number; // colección de TMDB
+  tmdbId?: number;
 }
 
 interface ProgressItem {
@@ -1589,7 +1591,7 @@ export default function Home() {
   const [newIntroStart, setNewIntroStart] = useState("");
   const [newIntroEnd, setNewIntroEnd] = useState("");
   const [newCreditsStart, setNewCreditsStart] = useState("");
-  const [tmdbExtra, setTmdbExtra] = useState<{ genres?: string[]; rating?: string; production?: string; originalLanguage?: string; backdrop?: string } | null>(null);
+  const [tmdbExtra, setTmdbExtra] = useState<{ genres?: string[]; rating?: string; production?: string; originalLanguage?: string; backdrop?: string; tmdbId?: number; sagaId?: number } | null>(null);
   const [tmdbResults, setTmdbResults] = useState<{ id: number; title: string; original: string; year: string; poster: string }[] | null>(null);
   const [tmdbBusy, setTmdbBusy] = useState(false);
   const [epSeason, setEpSeason] = useState("1");
@@ -1684,7 +1686,11 @@ export default function Home() {
     return g.some((x) => x.indexOf("anim") !== -1);
   };
   const kidsMode = !!activeProfile.isKid;
-  const catalogAll: Movie[] = kidsMode ? customMovies.filter(isKidFriendly) : customMovies;
+  // Sagas: "Marvel", "marvel " y "MARVEL" son la misma (se muestra con el primer nombre escrito)
+  const sagaCanon: Record<string, string> = {};
+  customMovies.forEach((m) => { if (m.saga && m.saga.trim()) { const k = m.saga.trim().toLowerCase(); if (!sagaCanon[k]) sagaCanon[k] = m.saga.trim(); } });
+  const sagaFix = (m: Movie): Movie => { if (!m.saga) return m; const c = sagaCanon[m.saga.trim().toLowerCase()]; return c && c !== m.saga ? { ...m, saga: c } : m; };
+  const catalogAll: Movie[] = (kidsMode ? customMovies.filter(isKidFriendly) : customMovies).map(sagaFix);
   // Fecha de hoy "AAAA-MM-DD" (se lee en el navegador; al compilar queda vacía)
   const [todayStr, setTodayStr] = useState("");
   useEffect(() => {
@@ -1699,7 +1705,20 @@ export default function Home() {
   // Un próximo estreno pasa solo a las películas cuando llega su fecha y ya tiene video
   const isNewMovie = (m: Movie) => !!(m.addedAt && nowTs && nowTs - m.addedAt < 7 * 86400000);
   const isNewMovie30 = (m: Movie) => !!(m.addedAt && nowTs && nowTs - m.addedAt < 30 * 86400000);
-  const sagaSort = (a: Movie, b: Movie) => (a.sagaOrder || 999) - (b.sagaOrder || 999) || String(a.year).localeCompare(String(b.year));
+  const sagaSort = (a: Movie, b: Movie) => (a.sagaOrder || 999) - (b.sagaOrder || 999) || String(a.year).localeCompare(String(b.year)) || a.title.localeCompare(b.title);
+  // Siguiente película de la misma saga
+  const nextInSaga = (m: Movie | null): Movie | null => {
+    if (!m || !m.saga || m.type === "serie") return null;
+    const list = catalog.filter((x) => x.saga === m.saga && x.type !== "serie").sort(sagaSort);
+    const i = list.findIndex((x) => String(x.id) === String(m.id));
+    return i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+  };
+  // Nombre de saga para una película nueva: si ya existe (mismo id de TMDB o mismo nombre), se usa el de siempre
+  const sagaNameFor = (name: string, sagaId?: number) => {
+    const byId = sagaId ? customMovies.find((x) => x.sagaId === sagaId && x.saga) : undefined;
+    if (byId && byId.saga) return byId.saga.trim();
+    return sagaCanon[name.trim().toLowerCase()] || name.trim();
+  };
   const isUpcoming = (m: Movie) =>
     !!m.comingSoon && !(m.releaseDate && todayStr && m.releaseDate <= todayStr && m.videoUrl && !/gtv-videos-bucket/i.test(m.videoUrl));
   // Lo que se puede ver ya (sin próximos estrenos)
@@ -1966,8 +1985,10 @@ export default function Home() {
       });
   };
 
-  type CatalogOp = { type: "upsert"; movie: Movie } | { type: "delete"; id: number | string } | { type: "upsertMany"; movies: Movie[] };
+  type CatalogOp = { type: "upsert"; movie: Movie } | { type: "delete"; id: number | string } | { type: "upsertMany"; movies: Movie[] } | { type: "patchMany"; patches: { id: number | string; fields: Partial<Movie> }[] };
   const applyOp = (list: Movie[], op: CatalogOp): Movie[] => {
+    // Cambia solo algunos datos (por ejemplo la saga) sin tocar el resto de cada película
+    if (op.type === "patchMany") return list.map((m) => { const p = op.patches.find((x) => String(x.id) === String(m.id)); return p ? { ...m, ...p.fields } : m; });
     if (op.type === "delete") return list.filter((m) => String(m.id) !== String(op.id));
     if (op.type === "upsertMany") return op.movies.reduce((acc, mv) => applyOp(acc, { type: "upsert", movie: mv }), list);
     const exists = list.some((m) => String(m.id) === String(op.movie.id));
@@ -2833,6 +2854,25 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [nextUp]);
   useEffect(() => { if (!isPlaying) { setNextUp(null); } skipModeRef.current = ""; setSkipMode(""); }, [isPlaying, currentEpisode]);
+  // Sagas: al llegar a los créditos (o al terminar) se ofrece la siguiente parte
+  const [nextSaga, setNextSaga] = useState<{ m: Movie; secs: number } | null>(null);
+  const nextSagaDismissed = useRef("");
+  useEffect(() => { if (!isPlaying) setNextSaga(null); nextSagaDismissed.current = ""; }, [isPlaying, selectedMovie && selectedMovie.id]);
+  const offerNextSaga = (secs: number) => {
+    if (!selectedMovie || currentEpisode || nextSaga) return false;
+    if (nextSagaDismissed.current === String(selectedMovie.id)) return false;
+    const nx = nextInSaga(selectedMovie);
+    if (!nx) return false;
+    setNextSaga({ m: nx, secs });
+    return true;
+  };
+  useEffect(() => { if (skipMode === "credits" && isPlaying) offerNextSaga(15); }, [skipMode, isPlaying]);
+  useEffect(() => {
+    if (!nextSaga) return;
+    if (nextSaga.secs <= 0) { const m = nextSaga.m; setNextSaga(null); startPlayback(m); return; }
+    const t = setTimeout(() => setNextSaga((n) => (n ? { m: n.m, secs: n.secs - 1 } : n)), 1000);
+    return () => clearTimeout(t);
+  }, [nextSaga]);
   // En TV, cuando aparece "Saltar intro" el control remoto lo puede pulsar con OK al instante
   useEffect(() => {
     if (!skipMode || !tvMode) return;
@@ -3043,6 +3083,8 @@ export default function Home() {
             production: tmdbExtra.production || m.production,
             originalLanguage: tmdbExtra.originalLanguage || m.originalLanguage,
             backdrop: tmdbExtra.backdrop || m.backdrop,
+            tmdbId: tmdbExtra.tmdbId || m.tmdbId,
+            sagaId: newMovieSaga.trim() ? tmdbExtra.sagaId || m.sagaId : undefined,
           } : {}),
           genres: tmdbExtra && tmdbExtra.genres && tmdbExtra.genres.length
             ? [newMovieCategory].concat(tmdbExtra.genres.filter((g) => g !== newMovieCategory))
@@ -3084,7 +3126,7 @@ export default function Home() {
         comingSoon: newComingSoon || undefined,
         releaseDate: newComingSoon ? newReleaseDate || undefined : undefined,
         originalLanguage: (tmdbExtra && tmdbExtra.originalLanguage) || "ES",
-        ...(tmdbExtra ? { rating: tmdbExtra.rating || "8.0", production: tmdbExtra.production, backdrop: tmdbExtra.backdrop } : {}),
+        ...(tmdbExtra ? { rating: tmdbExtra.rating || "8.0", production: tmdbExtra.production, backdrop: tmdbExtra.backdrop, tmdbId: tmdbExtra.tmdbId, sagaId: newMovieSaga.trim() ? tmdbExtra.sagaId : undefined } : {}),
       };
 
       saveChange({ type: "upsert", movie: createdMovie }, "¡Película agregada!");
@@ -3194,8 +3236,13 @@ export default function Home() {
         const gs: string[] = Array.isArray(d.genres) ? d.genres : [];
         const main = gs.find((g) => genresList.indexOf(g) !== -1);
         if (main) setNewMovieCategory(main);
-        setTmdbExtra({ genres: gs, rating: d.rating, production: d.production, originalLanguage: d.originalLanguage, backdrop: d.backdrop });
-        showToast("✔ Ficha completada. Revisa los datos y pulsa Guardar.", 5000);
+        setTmdbExtra({ genres: gs, rating: d.rating, production: d.production, originalLanguage: d.originalLanguage, backdrop: d.backdrop, tmdbId: d.tmdbId || undefined, sagaId: d.sagaId || undefined });
+        // Saga y número automáticos (si la película es parte de una colección en TMDB)
+        if (d.saga) {
+          setNewMovieSaga(sagaNameFor(d.saga, d.sagaId));
+          if (d.sagaOrder) setNewMovieSagaOrder(String(d.sagaOrder));
+        }
+        showToast(d.saga ? "✔ Ficha completada. Saga «" + sagaNameFor(d.saga, d.sagaId) + "» · parte " + (d.sagaOrder || "?") + (d.sagaTotal ? " de " + d.sagaTotal : "") + ". Revisa y pulsa Guardar." : "✔ Ficha completada. Revisa los datos y pulsa Guardar.", 6000);
       })
       .catch(() => { setTmdbBusy(false); showToast("No se pudo conectar con TMDB."); });
   };
@@ -4265,6 +4312,8 @@ export default function Home() {
             bgImage: d.poster || base.bgImage, img: d.poster || base.img, backdrop: d.backdrop || undefined, rating: d.rating || "8.0",
             production: d.production || undefined, originalLanguage: d.originalLanguage || "ES", tag: main,
             genres: [main].concat(gs.filter((g) => g !== main)),
+            tmdbId: d.tmdbId || undefined,
+            ...(d.saga ? { saga: sagaNameFor(d.saga, d.sagaId), sagaOrder: d.sagaOrder || undefined, sagaId: d.sagaId || undefined } : {}),
           };
           items[idx] = { ...it, status: "listo", include: true, movie: mv };
         })
@@ -4852,6 +4901,49 @@ export default function Home() {
     fetch("/api/community?polls=1&all=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => { if (d && Array.isArray(d.polls)) setAdminPolls(d.polls); }).catch(() => {});
   };
   useEffect(() => { if (activeTab === "admin" && isAdmin) loadAdminPolls(); }, [activeTab, isAdmin]);
+  // ---------- Ordenar sagas con TMDB (administrador) ----------
+  type SagaHit = { id: string; title: string; year: string; saga: string; sagaOrder: number; sagaId: number; tmdbId: number; prev: string; prevOrder: number; include: boolean };
+  const [sagaScan, setSagaScan] = useState<{ busy: boolean; done: number; total: number; hits: SagaHit[]; noKey?: boolean } | null>(null);
+  const scanSagas = () => {
+    if (sagaScan && sagaScan.busy) return;
+    const movies = customMovies.filter((m) => m.type !== "serie" && m.title);
+    if (!movies.length) { showToast("No hay películas para revisar."); return; }
+    const hits: SagaHit[] = [];
+    let i = 0, stop = false;
+    setSagaScan({ busy: true, done: 0, total: movies.length, hits: [] });
+    const nameById: Record<number, string> = {};
+    const step = (): Promise<void> => {
+      if (stop || i >= movies.length) return Promise.resolve();
+      const m = movies[i++];
+      const url = "/api/tmdb?type=movie&saga=1&" + (m.tmdbId ? "id=" + m.tmdbId : "q=" + encodeURIComponent(m.title) + "&year=" + encodeURIComponent(String(m.year || "").slice(0, 4)));
+      return fetch(url, { cache: "no-store" })
+        .then((r) => { if (r.status === 503 || r.status === 401) { stop = true; return null; } return r.ok ? r.json() : null; })
+        .catch(() => null)
+        .then((d: any) => {
+          if (d && d.found && d.saga) {
+            // Todas las partes de una misma colección quedan con el mismo nombre
+            const name = nameById[d.sagaId] || sagaNameFor(d.saga, d.sagaId);
+            nameById[d.sagaId] = name;
+            const changed = (m.saga || "") !== name || (m.sagaOrder || 0) !== (d.sagaOrder || 0);
+            if (changed) hits.push({ id: String(m.id), title: m.title, year: m.year, saga: name, sagaOrder: d.sagaOrder || 0, sagaId: d.sagaId, tmdbId: d.tmdbId, prev: m.saga || "", prevOrder: m.sagaOrder || 0, include: true });
+          }
+          setSagaScan({ busy: true, done: i, total: movies.length, hits: hits.slice() });
+          return new Promise<void>((res) => setTimeout(res, 120)).then(step);
+        });
+    };
+    step().then(() => {
+      setSagaScan({ busy: false, done: i, total: movies.length, hits: hits.slice(), noKey: stop });
+      if (stop) showToast("Falta la clave de TMDB en Vercel (TMDB_API_KEY). Sin ella no se pueden buscar las sagas.", 8000);
+      else if (!hits.length) showToast("✔ Revisé " + movies.length + " películas: tus sagas ya están completas y en orden.", 6000);
+    });
+  };
+  const saveSagaScan = () => {
+    if (!sagaScan) return;
+    const sel = sagaScan.hits.filter((h) => h.include);
+    if (!sel.length) { showToast("No marcaste ninguna."); return; }
+    saveChange({ type: "patchMany", patches: sel.map((h) => ({ id: h.id, fields: { saga: h.saga, sagaOrder: h.sagaOrder || undefined, sagaId: h.sagaId, tmdbId: h.tmdbId } })) }, "🎞️ ¡Listo! " + sel.length + " película" + (sel.length === 1 ? "" : "s") + " ordenada" + (sel.length === 1 ? "" : "s") + " en su saga.");
+    setSagaScan(null);
+  };
   const pollFromRequests = () => {
     const counts: Record<string, { title: string; n: number }> = {};
     adminReqs.filter((r) => r.status === "nueva").forEach((r) => {
@@ -5428,10 +5520,10 @@ export default function Home() {
           )}
           <button
             onClick={surpriseMe}
-            className="flex items-center gap-1.5 p-2 xl:px-3 xl:py-1.5 rounded-full xl:rounded-lg text-sm text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="flex items-center gap-1.5 p-2 2xl:px-3 2xl:py-1.5 rounded-full 2xl:rounded-lg text-sm text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
             aria-label="Sorpréndeme"
           >
-            <Shuffle className="w-5 h-5 xl:w-4 xl:h-4" /> <span className="hidden xl:inline">Sorpréndeme</span>
+            <Shuffle className="w-5 h-5 2xl:w-4 2xl:h-4" /> <span className="hidden 2xl:inline">Sorpréndeme</span>
           </button>
           <button 
             onClick={() => setActiveTab("explorar")}
@@ -6322,6 +6414,41 @@ export default function Home() {
                     <button onClick={() => removeSched(it.id)} className="text-xs text-red-400 hover:underline cursor-pointer px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500">Quitar</button>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* SAGAS AUTOMÁTICAS */}
+          <div className="bg-[#0f0f0f] border border-green-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-bold text-white">🎞️ Ordenar mis sagas</h3>
+                <p className="text-xs text-gray-500">Busca en TMDB a qué saga pertenece cada película que ya subiste y le pone su número (1, 2, 3…) según su fecha de estreno. Las nuevas se completan solas al usar «Autocompletar».</p>
+              </div>
+              <button onClick={scanSagas} disabled={!!(sagaScan && sagaScan.busy)} className="text-sm font-black text-black bg-green-500 hover:bg-green-400 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-300">{sagaScan && sagaScan.busy ? "Revisando " + sagaScan.done + " de " + sagaScan.total + "…" : "🪄 Revisar todo el catálogo"}</button>
+            </div>
+            {sagaScan && sagaScan.busy && (
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-green-500" style={{ width: Math.round((sagaScan.done / Math.max(1, sagaScan.total)) * 100) + "%", transition: "width .3s" }} /></div>
+            )}
+            {sagaScan && sagaScan.hits.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400">{sagaScan.busy ? "Encontradas hasta ahora:" : "Encontré " + sagaScan.hits.length + " película" + (sagaScan.hits.length === 1 ? "" : "s") + " para ordenar. Desmarca las que no quieras cambiar:"}</p>
+                <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
+                  {Array.from(new Set(sagaScan.hits.map((h) => h.saga))).map((sg) => (
+                    <div key={"ss-" + sg} className="rounded-xl border border-gray-800 bg-[#050505] p-3">
+                      <p className="text-sm font-black text-green-400 mb-2">🎞️ {sg}</p>
+                      {sagaScan.hits.filter((h) => h.saga === sg).sort((a, b) => a.sagaOrder - b.sagaOrder).map((h) => (
+                        <label key={"sh-" + h.id} className="flex items-center gap-3 py-1 text-sm cursor-pointer">
+                          <input type="checkbox" checked={h.include} onChange={(e) => { const v = e.target.checked; setSagaScan((sc) => (sc ? { ...sc, hits: sc.hits.map((x) => (x.id === h.id ? { ...x, include: v } : x)) } : sc)); }} className="w-4 h-4 accent-green-500" />
+                          <span className="w-14 shrink-0 text-xs font-black text-white bg-white/10 rounded px-1.5 py-0.5 text-center">Parte {h.sagaOrder || "?"}</span>
+                          <span className="flex-1 min-w-0 truncate text-gray-200">{h.title} <span className="text-gray-500">({h.year})</span></span>
+                          {(h.prev || h.prevOrder) ? <span className="text-[10px] text-gray-500 shrink-0">antes: {h.prev || "sin saga"}{h.prevOrder ? " #" + h.prevOrder : ""}</span> : null}
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {!sagaScan.busy && <button onClick={saveSagaScan} className="text-sm font-black text-black bg-white hover:bg-gray-200 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">💾 Guardar el orden de las sagas</button>}
               </div>
             )}
           </div>
@@ -7832,6 +7959,7 @@ export default function Home() {
                 recordProgress(e.currentTarget, selectedMovie, true);
                 const nx = nextEpisodeOf(selectedMovie, currentEpisode);
                 if (nx) setNextUp({ ep: nx, secs: 8 });
+                else if (!nextSaga) offerNextSaga(10);
               }}
               onError={(e) => {
                 const err = e.currentTarget.error;
@@ -7852,7 +7980,20 @@ export default function Home() {
             >
               Tu navegador no soporta el reproductor.
             </video>
-            {skipMode && !nextUp && !playerError && (
+            {nextSaga && !playerError && (
+              <div style={{ position: "absolute", right: 20, bottom: 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-3 shadow-2xl flex gap-3 items-center max-w-[340px]" data-tv-modal>
+                <img src={posterSrc(nextSaga.m)} alt="" className="w-14 h-20 rounded-lg object-cover bg-gray-900 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-green-400 uppercase font-black">🎞️ Sigue la saga · en {nextSaga.secs} s</p>
+                  <p className="text-sm font-bold text-white mt-0.5 truncate">{nextSaga.m.sagaOrder ? "Parte " + nextSaga.m.sagaOrder + " · " : ""}{nextSaga.m.title}</p>
+                  <div className="flex gap-2 mt-2">
+                    <button data-autofocus onClick={() => { const m = nextSaga.m; setNextSaga(null); startPlayback(m); }} className="bg-white text-black font-bold text-xs px-3 py-2 rounded-lg cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">▶ Ver ahora</button>
+                    <button data-close-on-back onClick={() => { if (selectedMovie) nextSagaDismissed.current = String(selectedMovie.id); setNextSaga(null); }} className="bg-[#262626] text-white font-bold text-xs px-3 py-2 rounded-lg border border-gray-700 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {skipMode && !nextUp && !nextSaga && !playerError && (
               <button
                 data-skip-btn
                 onClick={() => {

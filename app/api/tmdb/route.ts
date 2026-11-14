@@ -35,6 +35,33 @@ async function tmdb(path: string, params: Record<string, string> = {}) {
   return res.json();
 }
 
+// Saga (colección de TMDB): nombre limpio y número de esta película según la fecha de estreno
+const cleanSagaName = (n: string) =>
+  String(n || "")
+    .replace(/\s*[-–:]\s*colecci[oó]n\s*$/i, "")
+    .replace(/^colecci[oó]n\s+(de\s+)?/i, "")
+    .replace(/\s*\(colecci[oó]n\)\s*/i, " ")
+    .replace(/\s+collection$/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+async function sagaInfo(movieId: number, col: any): Promise<{ saga: string; sagaId: number; sagaOrder: number; sagaTotal: number } | null> {
+  if (!col || !col.id) return null;
+  try {
+    const c: any = await tmdb("/collection/" + col.id, { language: "es-MX" });
+    const parts: any[] = (c.parts || []).slice().sort((a: any, b: any) => {
+      const x = a.release_date || "9999", y = b.release_date || "9999";
+      return x < y ? -1 : x > y ? 1 : 0;
+    });
+    const idx = parts.findIndex((p) => p.id === movieId);
+    const saga = cleanSagaName(c.name || col.name || "");
+    if (!saga) return null;
+    return { saga, sagaId: Number(col.id), sagaOrder: idx >= 0 ? idx + 1 : 0, sagaTotal: parts.length };
+  } catch {
+    return null;
+  }
+}
+
 const fmtRuntime = (min: number) => (min > 0 ? (min >= 60 ? Math.floor(min / 60) + " h " + (min % 60) + " min" : min + " min") : "");
 
 export async function GET(req: Request) {
@@ -48,6 +75,24 @@ export async function GET(req: Request) {
   const id = (sp.get("id") || "").replace(/[^0-9]/g, "");
 
   try {
+    // 0) Solo la saga de una película (para ordenar el catálogo ya subido): ?saga=1&q=Título&year=2023  o  ?saga=1&id=123
+    if (sp.get("saga") && type === "movie") {
+      let mid = Number(id) || 0;
+      if (!mid) {
+        if (!q) return NextResponse.json({ error: "Falta el título" }, { status: 400, headers: noStore });
+        const year = (sp.get("year") || "").replace(/[^0-9]/g, "").slice(0, 4);
+        const d: any = await tmdb("/search/movie", { query: q, language: "es-MX", include_adult: "false", ...(year ? { year } : {}) });
+        let list: any[] = d.results || [];
+        if (!list.length && year) { const d2: any = await tmdb("/search/movie", { query: q, language: "es-MX", include_adult: "false" }); list = d2.results || []; }
+        const best = list.find((r: any) => year && String(r.release_date || "").slice(0, 4) === year) || list[0];
+        if (!best) return NextResponse.json({ found: false }, { headers: noStore });
+        mid = best.id;
+      }
+      const m: any = await tmdb("/movie/" + mid, { language: "es-MX" });
+      const info = await sagaInfo(mid, m.belongs_to_collection);
+      return NextResponse.json({ found: true, tmdbId: mid, title: m.title || "", ...(info || { saga: "", sagaId: 0, sagaOrder: 0, sagaTotal: 0 }) }, { headers: noStore });
+    }
+
     // 1) Buscar por título
     if (!id) {
       if (!q) return NextResponse.json({ results: [] }, { headers: noStore });
@@ -102,6 +147,7 @@ export async function GET(req: Request) {
     const trailerUrl = pick ? "https://www.youtube.com/watch?v=" + pick.key : "";
 
     const runtime = type === "movie" ? d.runtime : (d.episode_run_time || [])[0];
+    const saga = type === "movie" ? await sagaInfo(Number(id), d.belongs_to_collection) : null;
     const lang = String(d.original_language || "").toUpperCase();
 
     return NextResponse.json(
@@ -120,6 +166,11 @@ export async function GET(req: Request) {
         rating: d.vote_average ? (Math.round(d.vote_average * 10) / 10).toFixed(1) : "",
         originalLanguage: lang,
         production: (d.production_companies || []).map((p: any) => p.name).slice(0, 2).join(", "),
+        tmdbId: Number(id),
+        saga: saga ? saga.saga : "",
+        sagaId: saga ? saga.sagaId : 0,
+        sagaOrder: saga ? saga.sagaOrder : 0,
+        sagaTotal: saga ? saga.sagaTotal : 0,
       },
       { headers: noStore }
     );
