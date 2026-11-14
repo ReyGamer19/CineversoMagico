@@ -6,6 +6,7 @@ import {
   Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark, Shuffle, ThumbsUp, ThumbsDown
 } from "lucide-react";
 import Hls from "hls.js";
+import { preconnect, preload } from "react-dom";
 
 interface Profile {
   id: string;
@@ -443,6 +444,8 @@ export default function Home() {
   const [follows, setFollows] = useState<{ sagas: string[]; genres: string[] }>({ sagas: [], genres: [] });
   const [seasonBadges, setSeasonBadges] = useState<string[]>([]);
   const [challengesDone, setChallengesDone] = useState<string[]>([]);
+  // Avisos personales: reacciones a mis reseñas
+  const [inbox, setInbox] = useState<{ at: number; from: string; avatar: string; emoji: string; movieId: string }[]>([]);
 
   // CANALES DE TV EN VIVO COMPLETO
   const [liveChannels] = useState<Channel[]>([
@@ -1542,11 +1545,35 @@ export default function Home() {
       if (c && (c.saveData || /(^|-)2g$/.test(String(c.effectiveType || "")))) setDataSaver(true);
     } catch (e) {}
   }, []);
+  // ---------- Imágenes livianas ----------
+  // Las imágenes de TMDB se piden del tamaño justo para cada pantalla (y más chicas con Ahorro de datos).
+  const [smallScreen, setSmallScreen] = useState(false);
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia("(max-width: 767px)");
+      const upd = () => setSmallScreen(mq.matches);
+      upd();
+      if (mq.addEventListener) mq.addEventListener("change", upd); else if ((mq as any).addListener) (mq as any).addListener(upd);
+      return () => { try { if (mq.removeEventListener) mq.removeEventListener("change", upd); else if ((mq as any).removeListener) (mq as any).removeListener(upd); } catch (e) {} };
+    } catch (e) {}
+  }, []);
+  const tmdbSized = (url: string | undefined, size: string) => {
+    const u = url || "";
+    return /^https:\/\/image\.tmdb\.org\/t\/p\/(w\d+|original)\//.test(u) ? u.replace(/\/t\/p\/(w\d+|original)\//, "/t/p/" + size + "/") : u;
+  };
+  // Póster (tarjetas y miniaturas)
+  const posterSrc = (m: { bgImage?: string } | null | undefined) => tmdbSized(m ? m.bgImage : "", dataSaver ? "w185" : "w342");
+  // Imagen ancha (portada, ficha, Continuar viendo)
+  const wideSrc = (m: { backdrop?: string; bgImage?: string } | null | undefined, big?: boolean) => {
+    if (!m) return "";
+    if (m.backdrop) return tmdbSized(m.backdrop, !big || dataSaver || smallScreen ? "w780" : "w1280");
+    return tmdbSized(m.bgImage, dataSaver ? "w342" : "w780");
+  };
   const toggleDataSaver = () => {
     const v = !dataSaver;
     setDataSaver(v);
     try { localStorage.setItem("cv_datasaver", v ? "1" : "0"); } catch (e) {}
-    showToast(v ? "📶 Ahorro de datos activado: no se reproducirán tráileres automáticos." : "Ahorro de datos desactivado.");
+    showToast(v ? "📶 Ahorro de datos activado: sin tráileres automáticos e imágenes más livianas." : "Ahorro de datos desactivado.");
   };
   // Compartir
   const [shareTarget, setShareTarget] = useState<Movie | null>(null);
@@ -2232,6 +2259,19 @@ export default function Home() {
     production: "Nostromo Pictures",
     originalLanguage: "ES"
   };
+  // Carga rápida: conexión anticipada al servidor de imágenes y la imagen de portada primero
+  try {
+    preconnect("https://image.tmdb.org");
+    const heroImg = wideSrc(heroMovie, true);
+    if (heroImg && catalogReady) preload(heroImg, { as: "image", fetchPriority: "high" });
+  } catch (e) {}
+  // La siguiente imagen de la portada se descarga antes de que llegue su turno
+  useEffect(() => {
+    if (heroList.length < 2) return;
+    const next = heroList[(heroIndex + 1) % heroList.length];
+    const t = setTimeout(() => { try { const im = new Image(); im.decoding = "async"; im.src = wideSrc(next, true); } catch (e) {} }, 2500);
+    return () => clearTimeout(t);
+  }, [heroIndex, heroList.length, smallScreen, dataSaver]);
 
 
   // ================================================================
@@ -3718,7 +3758,7 @@ export default function Home() {
     }).catch(() => {});
   };
   useEffect(() => { loadCommTop(); }, []);
-  const [revData, setRevData] = useState<{ avg: number; count: number; reviews: { name: string; avatar: string; badge: string; stars: number; text: string; at: number; mine: boolean }[] } | null>(null);
+  const [revData, setRevData] = useState<{ avg: number; count: number; reviews: { name: string; avatar: string; badge: string; stars: number; text: string; at: number; mine: boolean; reacts?: Record<string, number>; myReact?: string }[] } | null>(null);
   const [revStars, setRevStars] = useState(0);
   const [revHover, setRevHover] = useState(0);
   const [revText, setRevText] = useState("");
@@ -3751,6 +3791,55 @@ export default function Home() {
         }
         return res;
       });
+  // ---------- Reacciones a reseñas ----------
+  const REACTS = ["❤️", "😂", "😮", "👏"];
+  const reactReview = (at: number, emoji: string) => {
+    if (!selectedMovie) return;
+    if (!accountUser) { showToast("Inicia sesión para reaccionar a las reseñas."); return; }
+    const movieId = String(selectedMovie.id);
+    const apply = (reacts: Record<string, number>, myReact: string) =>
+      setRevData((d) => (d ? { ...d, reviews: d.reviews.map((x) => (x.at === at ? { ...x, reacts, myReact } : x)) } : d));
+    const cur = revData && revData.reviews.find((x) => x.at === at);
+    if (cur) {
+      // Se ve al instante; luego el servidor confirma
+      const reacts = { ...(cur.reacts || {}) };
+      if (cur.myReact) reacts[cur.myReact] = Math.max(0, (reacts[cur.myReact] || 1) - 1);
+      const mine = cur.myReact === emoji ? "" : emoji;
+      if (mine) reacts[mine] = (reacts[mine] || 0) + 1;
+      apply(reacts, mine);
+    }
+    commPost({ action: "react", movieId, at, emoji, name: activeProfile.name, avatar: activeProfile.avatar }).then(({ ok, d }) => {
+      if (!ok) { showToast((d && d.error) || "No se pudo reaccionar."); loadReviews(movieId); return; }
+      apply(d.reacts || {}, d.myReact || "");
+    });
+  };
+  const loadInbox = () => {
+    if (!accountUser) return;
+    fetch("/api/community?inbox=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => {
+      if (!d || !Array.isArray(d.items)) return;
+      setInbox(d.items);
+      // Aviso emergente de la reacción más nueva que aún no vio
+      let seen = 0;
+      try { seen = Number(localStorage.getItem("cv_inbox_seen") || 0); } catch (e) {}
+      const fresh = d.items.filter((x: any) => x.at > seen);
+      if (fresh.length) {
+        const x = fresh[0];
+        const mv = catalogAll.find((m) => String(m.id) === x.movieId);
+        const verb = x.emoji === "👏" ? x.from + " aplaudió" : "A " + x.from + " " + ({ "❤️": "le encantó", "😂": "le hizo reír", "😮": "le sorprendió" } as Record<string, string>)[x.emoji];
+        if (seen) showToast(x.emoji + " " + verb + " tu reseña" + (mv ? " de «" + mv.title + "»" : "") + (fresh.length > 1 ? " (y " + (fresh.length - 1) + " más)" : ""), 7000);
+        try { localStorage.setItem("cv_inbox_seen", String(x.at)); } catch (e) {}
+      } else if (!seen) {
+        try { localStorage.setItem("cv_inbox_seen", String(Date.now())); } catch (e) {}
+      }
+    }).catch(() => {});
+  };
+  useEffect(() => {
+    setInbox([]);
+    if (!accountUser) return;
+    const t0 = setTimeout(loadInbox, 3000);
+    const t = setInterval(() => { if (!document.hidden) loadInbox(); }, 90000);
+    return () => { clearTimeout(t0); clearInterval(t); };
+  }, [accountUser && accountUser.id]);
   const submitReview = () => {
     if (!selectedMovie || revBusy) return;
     if (!accountUser) { showToast("Inicia sesión para dejar tu reseña."); return; }
@@ -4828,7 +4917,7 @@ export default function Home() {
             return (
               <button key={o.id} disabled={!p.open || !!pollBusy} onClick={() => votePoll(p, o.id)} className={"relative text-left rounded-2xl overflow-hidden border flex items-center gap-3 p-2.5 pr-4 cursor-pointer disabled:cursor-default focus:outline-none focus:ring-4 focus:ring-purple-400 transition " + (mine ? "border-green-400 bg-green-500/10" : win ? "border-yellow-400 bg-yellow-400/10" : "border-white/10 bg-black/30 hover:border-purple-300/60")}>
                 {showRes && <span className="absolute inset-y-0 left-0 rounded-2xl" style={{ width: pct + "%", background: win ? "rgba(250,204,21,.18)" : mine ? "rgba(34,197,94,.18)" : "rgba(168,85,247,.16)", transition: "width .6s cubic-bezier(.2,.7,.2,1)" }} />}
-                {o.img ? <img src={o.img} alt="" loading="lazy" className="relative w-10 h-14 rounded-lg object-cover shrink-0" /> : <span className="relative w-10 h-14 rounded-lg bg-white/5 flex items-center justify-center text-xl shrink-0">🎬</span>}
+                {o.img ? <img decoding="async" src={o.img} alt="" loading="lazy" className="relative w-10 h-14 rounded-lg object-cover shrink-0" /> : <span className="relative w-10 h-14 rounded-lg bg-white/5 flex items-center justify-center text-xl shrink-0">🎬</span>}
                 <span className="relative flex-1 min-w-0">
                   <span className="block text-sm sm:text-base font-bold text-white truncate">{win ? "🏆 " : ""}{o.label}</span>
                   <span className="block text-[11px] text-gray-400">{mine ? "✔ Tu voto" : win ? "¡Ganadora!" : mv ? "Ya está en Cineverso" : p.open ? "Votar" : ""}</span>
@@ -4901,6 +4990,14 @@ export default function Home() {
           out.push({ key: "e-" + m.id + "-" + ep.id, title: m.title, text: "Nuevo episodio: T" + ep.season + ":E" + ep.number + " · " + ep.title, time: ep.addedAt, movie: m });
         }
       });
+    });
+    // Reacciones a mis reseñas
+    const REACT_TEXT: Record<string, string> = { "❤️": "le encantó", "😂": "le hizo reír", "😮": "le sorprendió", "👏": "aplaudió" };
+    inbox.forEach((x) => {
+      const mv = catalogAll.find((m) => String(m.id) === x.movieId);
+      if (!mv) return;
+      const t = x.emoji === "👏" ? x.emoji + " " + x.from + " aplaudió tu reseña" : x.emoji + " A " + x.from + " " + (REACT_TEXT[x.emoji] || "le gustó") + " tu reseña";
+      out.push({ key: "r-" + x.at + "-" + x.from, title: mv.title, text: t, time: x.at, movie: mv });
     });
     return out.sort((a, b) => b.time - a.time).slice(0, 20);
   })();
@@ -5245,7 +5342,7 @@ export default function Home() {
           style={{ left: preview.left, top: preview.top, width: 320, animation: "cvPreview .18s ease-out" }}
         >
           <div className="relative cursor-pointer" style={{ height: 180 }} onClick={() => { setSelectedMovie(preview.m); setPreview(null); }}>
-            <img src={preview.m.backdrop || preview.m.bgImage} alt={preview.m.title} className="w-full h-full object-cover" />
+            <img decoding="async" loading="lazy" src={wideSrc(preview.m)} alt={preview.m.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#181818] via-transparent to-transparent" />
             <p className="absolute left-3 bottom-2 right-3 text-base font-black text-white truncate">{preview.m.title}</p>
           </div>
@@ -5419,7 +5516,7 @@ export default function Home() {
                           onClick={() => { setShowNotif(false); setSelectedMovie(n.movie); }}
                           className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[#1c1c1c] border-b border-gray-900 focus:outline-none focus:bg-[#1c1c1c] focus:ring-2 focus:ring-inset focus:ring-green-500"
                         >
-                          <img src={n.movie.backdrop || n.movie.bgImage} alt="" loading="lazy" className="shrink-0 rounded-lg object-cover bg-gray-900" style={{ width: 96, height: 54 }} />
+                          <img decoding="async" src={wideSrc(n.movie)} alt="" loading="lazy" className="shrink-0 rounded-lg object-cover bg-gray-900" style={{ width: 96, height: 54 }} />
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-bold text-white line-clamp-2 leading-snug">{n.title}</span>
                             <span className="block text-xs text-gray-400 line-clamp-2">{n.text}</span>
@@ -5457,7 +5554,7 @@ export default function Home() {
             style={{ width: 160 }}
           >
             <div className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 group-hover:border-green-500" style={{ width: 160, height: 240 }}>
-              <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+              <img decoding="async" src={posterSrc(m)} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
               {m.tag && <span className="absolute top-2 left-2 text-[10px] text-green-400 font-bold uppercase bg-black/70 px-2 py-0.5 rounded">{m.tag}</span>}
               {inMyList(m) && <span className="absolute top-2 right-2 bg-green-500 text-black rounded-full p-0.5"><Check className="w-3 h-3" /></span>}
               {commStars[String(m.id)] && commStars[String(m.id)].count > 0 && <span className={"absolute right-2 bg-black/80 " + (inMyList(m) ? "top-8" : "top-2") + " text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded"}>★ {commStars[String(m.id)].avg.toFixed(1)}</span>}
@@ -5508,7 +5605,7 @@ export default function Home() {
             {/* Portada */}
             <div
               className="relative w-full bg-cover bg-center flex items-end overflow-hidden"
-              style={{ backgroundImage: `url(${heroMovie.backdrop || heroMovie.bgImage})`, minHeight: "68vh" }}
+              style={{ backgroundImage: `url(${wideSrc(heroMovie, true)})`, minHeight: "68vh" }}
               onMouseEnter={() => setHeroPaused(true)}
               onMouseLeave={() => { if (!heroTrailerOn) setHeroPaused(false); }}
             >
@@ -5672,7 +5769,7 @@ export default function Home() {
                           className="group shrink-0 relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
                           style={{ width: 300, height: 168 }}
                         >
-                          <img src={m.backdrop || m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                          <img decoding="async" src={wideSrc(m)} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                           <div className="absolute left-3 right-3 bottom-4">
                             <p className="text-sm font-bold text-white truncate">{m.title}</p>
@@ -5734,7 +5831,7 @@ export default function Home() {
                           className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
                           style={{ width: 300, height: 168 }}
                         >
-                          <img src={m.backdrop || m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                          <img decoding="async" src={wideSrc(m)} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                           <span className="absolute top-2 left-2 bg-green-500 text-black text-[11px] font-black px-2 py-0.5 rounded">ESTRENO {fmtRelease(m.releaseDate).toUpperCase()}</span>
                           <p className="absolute left-3 right-3 bottom-3 text-sm font-bold text-white truncate">{m.title}</p>
@@ -5794,7 +5891,7 @@ export default function Home() {
                           className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"
                           style={{ width: 130, height: 195 }}
                         >
-                          <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                          <img decoding="async" src={posterSrc(m)} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
                         </div>
                       </div>
                     ))}
@@ -5819,7 +5916,7 @@ export default function Home() {
                     {commLists.slice(0, 20).map((l) => (
                       <div key={"cl-" + l.id} onClick={() => setViewList(l)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setViewList(l); }} className="shrink-0 w-[240px] cursor-pointer rounded-2xl bg-[#111] border border-gray-800 hover:border-green-500 overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500">
                         <div className="grid grid-cols-4 h-[96px] bg-gray-900">
-                          {listCover(l).map((m) => <img key={"lc-" + l.id + m.id} src={m.bgImage} alt="" loading="lazy" className="w-full h-full object-cover" />)}
+                          {listCover(l).map((m) => <img decoding="async" key={"lc-" + l.id + m.id} src={posterSrc(m)} alt="" loading="lazy" className="w-full h-full object-cover" />)}
                         </div>
                         <div className="p-3">
                           <p className="text-sm font-bold text-white truncate">{l.name}</p>
@@ -5938,7 +6035,7 @@ export default function Home() {
                   className="group relative cursor-pointer flex flex-col space-y-2 focus:outline-none focus:ring-4 focus:ring-green-500 rounded-2xl p-1"
                 >
                   <div className="aspect-[2/3] w-full rounded-2xl overflow-hidden bg-gray-900 border border-gray-900 group-hover:border-green-500 group-hover:scale-105 transition duration-300 shadow-xl relative">
-                    <img src={movie.bgImage} alt={movie.title} className="w-full h-full object-cover" />
+                    <img decoding="async" loading="lazy" src={posterSrc(movie)} alt={movie.title} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                       <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
                         <Play className="w-6 h-6 text-black fill-black ml-0.5" />
@@ -6091,7 +6188,7 @@ export default function Home() {
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {myLists.map((l) => (
                     <div key={"myl-" + l.id} onClick={() => setViewList(l)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") setViewList(l); }} className="shrink-0 w-[200px] cursor-pointer rounded-2xl bg-[#111] border border-gray-800 hover:border-green-500 overflow-hidden focus:outline-none focus:ring-4 focus:ring-green-500">
-                      <div className="grid grid-cols-4 h-[72px] bg-gray-900">{listCover(l).map((m) => <img key={"mlc-" + l.id + m.id} src={m.bgImage} alt="" loading="lazy" className="w-full h-full object-cover" />)}</div>
+                      <div className="grid grid-cols-4 h-[72px] bg-gray-900">{listCover(l).map((m) => <img decoding="async" key={"mlc-" + l.id + m.id} src={posterSrc(m)} alt="" loading="lazy" className="w-full h-full object-cover" />)}</div>
                       <div className="p-2.5">
                         <p className="text-sm font-bold text-white truncate">{l.name}</p>
                         <p className="text-[11px] text-gray-400">{l.mine ? "Tuya" : "de " + l.owner} · {l.movieIds.length} títulos</p>
@@ -6125,7 +6222,7 @@ export default function Home() {
                       className="group cursor-pointer rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500"
                     >
                       <div className="relative overflow-hidden rounded-xl bg-gray-900 border border-gray-800 group-hover:border-green-500" style={{ width: 160, height: 240 }}>
-                        <img src={m.bgImage} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
+                        <img decoding="async" src={posterSrc(m)} alt={m.title} loading="lazy" className="w-full h-full object-cover" />
                       </div>
                       <h4 className="text-xs sm:text-sm font-semibold mt-2 text-gray-200 truncate">{m.title}</h4>
                     </div>
@@ -6339,7 +6436,7 @@ export default function Home() {
                 {bulkItems.map((it, i) => (
                   <label key={"bk-" + i} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2 cursor-pointer">
                     <input type="checkbox" checked={it.include} disabled={!it.movie} onChange={(e) => setBulkItems((list) => list.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} className="w-4 h-4 accent-green-500 shrink-0" />
-                    {it.movie ? <img src={it.movie.bgImage} alt="" className="w-9 h-12 rounded object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-12 rounded bg-gray-900 shrink-0" />}
+                    {it.movie ? <img decoding="async" loading="lazy" src={posterSrc(it.movie)} alt="" className="w-9 h-12 rounded object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-12 rounded bg-gray-900 shrink-0" />}
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm text-white font-bold truncate">{it.movie ? it.movie.title + " (" + it.movie.year + ")" : it.title || it.line}</span>
                       <span className="block text-[11px] text-gray-500 truncate">{it.url || "Falta el enlace del video"}</span>
@@ -6575,7 +6672,7 @@ export default function Home() {
                         onClick={() => applyTmdb(r.id)}
                         className="w-full text-left flex items-center gap-3 p-2 rounded-lg hover:bg-[#181818] focus:outline-none focus:bg-[#181818] focus:ring-2 focus:ring-green-500 cursor-pointer"
                       >
-                        {r.poster ? <img src={r.poster} alt="" className="rounded object-cover shrink-0" style={{ width: 40, height: 60 }} /> : <span className="rounded bg-gray-800 shrink-0" style={{ width: 40, height: 60 }} />}
+                        {r.poster ? <img decoding="async" loading="lazy" src={r.poster} alt="" className="rounded object-cover shrink-0" style={{ width: 40, height: 60 }} /> : <span className="rounded bg-gray-800 shrink-0" style={{ width: 40, height: 60 }} />}
                         <span className="min-w-0">
                           <span className="block text-sm font-bold text-white truncate">{r.title}</span>
                           <span className="block text-[11px] text-gray-400 truncate">{r.year || "Sin año"}{r.original && r.original !== r.title ? " · " + r.original : ""}</span>
@@ -6820,7 +6917,7 @@ export default function Home() {
               {customMovies.map((movie) => (
                 <div key={movie.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#050505] p-3.5 rounded-2xl border border-gray-900 hover:border-gray-800 transition gap-3">
                   <div className="flex items-center gap-3 truncate">
-                    <img src={movie.bgImage} alt={movie.title} className="w-12 h-16 object-cover rounded-xl border border-gray-800 shrink-0" />
+                    <img decoding="async" loading="lazy" src={posterSrc(movie)} alt={movie.title} className="w-12 h-16 object-cover rounded-xl border border-gray-800 shrink-0" />
                     <div className="truncate">
                       <h4 className="text-sm font-bold text-white truncate">{movie.title}</h4>
                       <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
@@ -6888,7 +6985,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#0f0f0f] p-6 rounded-2xl border border-gray-900 gap-4">
             <div className="flex items-center gap-4">
               <div className="relative shrink-0">
-                <img src={activeProfile.avatar} alt={activeProfile.name} className="w-16 h-16 rounded-2xl object-cover bg-gray-900 border-2 border-green-500" />
+                <img decoding="async" loading="lazy" src={activeProfile.avatar} alt={activeProfile.name} className="w-16 h-16 rounded-2xl object-cover bg-gray-900 border-2 border-green-500" />
                 {canEditProfile(activeProfile) && (
                   <button onClick={() => openEditProfile(activeProfile)} aria-label="Editar perfil" className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shadow-lg border-2 border-[#0f0f0f] hover:scale-110 transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
                 )}
@@ -6913,7 +7010,7 @@ export default function Home() {
               {profiles.map((p) => (
                 <div key={p.id} className="flex items-center justify-between bg-[#050505] p-3 rounded-xl border border-gray-900">
                   <div className="flex items-center gap-3 truncate">
-                    <img src={p.avatar} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-gray-900 shrink-0" />
+                    <img decoding="async" loading="lazy" src={p.avatar} alt={p.name} className="w-10 h-10 rounded-lg object-cover bg-gray-900 shrink-0" />
                     <div className="truncate">
                       <div className="flex items-center gap-2 truncate">
                         <span className="text-sm font-bold text-white truncate">{p.name}</span>
@@ -7323,7 +7420,7 @@ export default function Home() {
             {/* Imagen / tráiler (16:9 en celular, más alto en PC y TV) */}
             <div className="relative w-full bg-black overflow-hidden shrink-0" style={{ height: "min(56.25vw, 64vh)", minHeight: 200 }}>
               <img
-                src={selectedMovie.backdrop || selectedMovie.bgImage}
+                src={wideSrc(selectedMovie, true)}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover"
                 style={{ opacity: modalTrailerReady ? 0 : 1, transition: "opacity .8s" }}
@@ -7492,7 +7589,7 @@ export default function Home() {
                           >
                             <span className="text-2xl font-black text-gray-500 w-8 text-center shrink-0">{ep.number}</span>
                             <div className="relative shrink-0 rounded-lg overflow-hidden bg-gray-900" style={{ width: 120, height: 68 }}>
-                              <img src={selectedMovie.bgImage} alt="" className="w-full h-full object-cover opacity-80" />
+                              <img decoding="async" loading="lazy" src={posterSrc(selectedMovie)} alt="" className="w-full h-full object-cover opacity-80" />
                               <span className="absolute inset-0 flex items-center justify-center"><Play className="w-6 h-6 text-white fill-white" /></span>
                               {isSaved && saved && (
                                 <span className="absolute left-0 right-0 bottom-0 h-1 bg-gray-700"><span className="block h-full bg-green-500" style={{ width: Math.min(100, Math.round((saved.time / saved.duration) * 100)) + "%" }} /></span>
@@ -7520,7 +7617,7 @@ export default function Home() {
                         className={"shrink-0 w-28 sm:w-32 text-left rounded-xl overflow-hidden border-2 cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (String(x.id) === String(selectedMovie.id) ? "border-green-500" : "border-gray-800 hover:border-white/60")}
                       >
                         <div className="relative aspect-[2/3] bg-gray-900">
-                          <img src={x.bgImage} alt={x.title} loading="lazy" className="w-full h-full object-cover" />
+                          <img decoding="async" src={posterSrc(x)} alt={x.title} loading="lazy" className="w-full h-full object-cover" />
                           <span className="absolute top-1 left-1 bg-black/75 text-white text-[10px] font-black px-1.5 py-0.5 rounded">{x.sagaOrder || i + 1}</span>
                         </div>
                         <p className="text-[11px] text-gray-300 font-semibold truncate px-1.5 py-1">{x.title}</p>
@@ -7569,7 +7666,7 @@ export default function Home() {
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {revData.reviews.map((r, i) => (
                         <div key={"rv-" + i} className="flex gap-3 bg-black/30 rounded-xl p-3">
-                          {r.avatar ? <img src={r.avatar} alt="" className="w-9 h-9 rounded-lg object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-9 rounded-lg bg-gray-700 shrink-0" />}
+                          {r.avatar ? <img decoding="async" loading="lazy" src={r.avatar} alt="" className="w-9 h-9 rounded-lg object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-9 rounded-lg bg-gray-700 shrink-0" />}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-bold text-white">{r.name}</span>
@@ -7578,7 +7675,19 @@ export default function Home() {
                               <span className="text-[10px] text-gray-500 ml-auto">{new Date(r.at).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}</span>
                             </div>
                             {r.text && <p className="text-sm text-gray-300 mt-0.5 break-words">{r.text}</p>}
-                            {r.mine && <button onClick={deleteMyReview} className="text-[11px] text-red-400 hover:underline mt-1 cursor-pointer">Borrar mi reseña</button>}
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              {REACTS.map((em) => {
+                                const n = (r.reacts && r.reacts[em]) || 0;
+                                const on = r.myReact === em;
+                                if (r.mine && !n) return null;
+                                return (
+                                  <button key={em} disabled={r.mine} onClick={() => reactReview(r.at, em)} aria-pressed={on} aria-label={"Reaccionar " + em} className={"flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full border transition " + (r.mine ? "border-white/10 bg-white/5 text-gray-300 cursor-default" : on ? "border-green-400 bg-green-500/20 text-white cursor-pointer" : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30 cursor-pointer") + " focus:outline-none focus:ring-2 focus:ring-green-500"} style={on ? { animation: "cvPick .35s ease-out" } : undefined}>
+                                    <span className="text-sm leading-none">{em}</span>{n > 0 && <span>{n}</span>}
+                                  </button>
+                                );
+                              })}
+                              {r.mine && <button onClick={deleteMyReview} className="text-[11px] text-red-400 hover:underline cursor-pointer ml-1">Borrar mi reseña</button>}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -7678,7 +7787,7 @@ export default function Home() {
                     return others.map((m) => ({ m, sc: score(m) })).sort((a, b) => b.sc - a.sc).slice(0, 8).map((x) => x.m);
                   })().map(sim => (
                     <div key={sim.id} onClick={() => setSelectedMovie(sim)} tabIndex={0} className="cursor-pointer group focus:outline-none focus:ring-4 focus:ring-green-500 rounded-xl">
-                      <img src={sim.bgImage} alt={sim.title} className="w-full h-44 object-cover rounded-xl group-hover:border border-green-500 transition shadow-lg" />
+                      <img decoding="async" loading="lazy" src={posterSrc(sim)} alt={sim.title} className="w-full h-44 object-cover rounded-xl group-hover:border border-green-500 transition shadow-lg" />
                       <h5 className="text-xs font-bold mt-2 text-gray-200 truncate">{sim.title}</h5>
                     </div>
                   ))}
@@ -7898,7 +8007,7 @@ export default function Home() {
       {(activeTab === "inicio" || activeTab === "explorar") && (
         <footer className="px-4 sm:px-6 md:px-12 pb-28 lg:pb-10 pt-4 border-t border-gray-900 text-[11px] text-gray-500 space-y-1">
           <p className="flex items-center gap-2 flex-wrap">
-            <img src="/icons/icon-192.png" alt="" className="w-5 h-5 rounded" />
+            <img decoding="async" loading="lazy" src="/icons/icon-192.png" alt="" className="w-5 h-5 rounded" />
             <span className="font-bold text-gray-400">Cineverso Mágico</span>
           </p>
           <p>
@@ -8054,7 +8163,7 @@ export default function Home() {
             title: <>Un perfil para <span className="cv-ob-grad">cada quien</span></>,
             text: "Cada persona con su lista, sus recomendaciones y su avatar.",
             bullets: ["Hasta 5 perfiles por cuenta", "Avatares originales de Cineverso", "Perfil Niños protegido con PIN"],
-            badge: <div className="cv-ob-card"><div className="flex -space-x-3">{["zorro", "gato3d", "robot", "unicornio"].map((a) => <img key={a} src={"/avatares/cv/" + a + ".svg"} alt="" className="w-9 h-9 rounded-xl border-2 border-[#111]" />)}</div><p className="text-sm font-bold text-white">¿Quién está viendo?</p></div>,
+            badge: <div className="cv-ob-card"><div className="flex -space-x-3">{["zorro", "gato3d", "robot", "unicornio"].map((a) => <img decoding="async" loading="lazy" key={a} src={"/avatares/cv/" + a + ".svg"} alt="" className="w-9 h-9 rounded-xl border-2 border-[#111]" />)}</div><p className="text-sm font-bold text-white">¿Quién está viendo?</p></div>,
           },
           {
             kicker: "Comunidad", accent: "#facc15", glow: "rgba(250,204,21,.28)",
@@ -8091,7 +8200,7 @@ export default function Home() {
               <div className="absolute inset-[-20%] flex gap-3 sm:gap-4 justify-center" style={{ transform: "rotate(-9deg)" }}>
                 {cols.map((col, c) => (
                   <div key={"obc-" + c} className="flex flex-col gap-3 sm:gap-4 w-[26%] lg:w-[22%]" style={{ animation: "cvWall " + (38 + c * 7) + "s linear infinite", animationDirection: c % 2 ? "reverse" : "normal" }}>
-                    {col.map((src, k) => <img key={"obp-" + c + "-" + k} src={src} alt="" loading="lazy" className="w-full aspect-[2/3] object-cover rounded-xl sm:rounded-2xl bg-gray-900 opacity-80" />)}
+                    {col.map((src, k) => <img decoding="async" key={"obp-" + c + "-" + k} src={src} alt="" loading="lazy" className="w-full aspect-[2/3] object-cover rounded-xl sm:rounded-2xl bg-gray-900 opacity-80" />)}
                   </div>
                 ))}
               </div>
@@ -8186,7 +8295,7 @@ export default function Home() {
             {chatMsgs.length === 0 && <p className="text-center text-xs text-gray-500 py-10">Todavía no hay mensajes. ¡Sé el primero en saludar! 👋</p>}
             {chatMsgs.map((m) => (
               <div key={m.id} className="group flex gap-2.5 px-1.5 py-2 rounded-xl hover:bg-white/[0.03]">
-                {m.avatar ? <img src={m.avatar} alt="" className="w-8 h-8 rounded-lg object-cover bg-gray-900 shrink-0 mt-0.5" /> : <span className="w-8 h-8 rounded-lg shrink-0 mt-0.5 flex items-center justify-center text-sm font-black text-black" style={{ background: nameColor(m.name) }}>{(m.name || "?").charAt(0).toUpperCase()}</span>}
+                {m.avatar ? <img decoding="async" loading="lazy" src={m.avatar} alt="" className="w-8 h-8 rounded-lg object-cover bg-gray-900 shrink-0 mt-0.5" /> : <span className="w-8 h-8 rounded-lg shrink-0 mt-0.5 flex items-center justify-center text-sm font-black text-black" style={{ background: nameColor(m.name) }}>{(m.name || "?").charAt(0).toUpperCase()}</span>}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
                     <span className="text-[13px] font-bold truncate" style={{ color: m.admin ? "#22c55e" : nameColor(m.name) }}>{m.name}</span>
@@ -8202,7 +8311,7 @@ export default function Home() {
                         <p className="text-[13px] text-gray-200 leading-snug break-words whitespace-pre-wrap">{mm ? m.text.replace(mm[0], "").replace(/Míralo aquí:\s*$/, "").trim() : m.text}</p>
                         {mv && (
                           <button onClick={() => { setChatOpen(false); setSelectedMovie(mv); }} className="mt-1.5 flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-gray-800 rounded-xl p-1.5 pr-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
-                            <img src={mv.bgImage} alt="" className="w-8 h-11 rounded object-cover bg-gray-900" />
+                            <img decoding="async" loading="lazy" src={posterSrc(mv)} alt="" className="w-8 h-11 rounded object-cover bg-gray-900" />
                             <span className="text-xs font-bold text-white">▶ Ver ahora</span>
                           </button>
                         )}
@@ -8253,7 +8362,7 @@ export default function Home() {
             <p className="text-[11px] font-black tracking-widest text-green-400 uppercase">🎲 Sorpréndeme</p>
             <p className="text-lg font-black text-white mt-1">{surprise.phase === "spin" ? "Buscando algo para ti…" : "¡Esta es para ti, " + activeProfile.name + "!"}</p>
             <div className="relative mx-auto mt-4 rounded-2xl overflow-hidden bg-gray-900" style={{ width: 190, height: 285, boxShadow: surprise.phase === "done" ? "0 0 0 3px #22c55e, 0 0 60px rgba(34,197,94,.45)" : "0 0 0 2px rgba(255,255,255,.12)", transition: "box-shadow .4s" }}>
-              {surprise.reel[surprise.idx] && <img key={"sr-" + surprise.idx} src={surprise.reel[surprise.idx].bgImage} alt={surprise.phase === "done" ? surprise.pick.title : ""} className="w-full h-full object-cover" style={{ animation: surprise.phase === "spin" ? "cvSpin .14s ease-out" : "cvPick .55s cubic-bezier(.2,.9,.3,1.3)" }} />}
+              {surprise.reel[surprise.idx] && <img key={"sr-" + surprise.idx} src={posterSrc(surprise.reel[surprise.idx])} alt={surprise.phase === "done" ? surprise.pick.title : ""} className="w-full h-full object-cover" style={{ animation: surprise.phase === "spin" ? "cvSpin .14s ease-out" : "cvPick .55s cubic-bezier(.2,.9,.3,1.3)" }} />}
             </div>
             {surprise.phase === "done" && (
               <div style={{ animation: "cvRise .4s ease-out both" }}>
@@ -8316,7 +8425,7 @@ export default function Home() {
           { bg: "linear-gradient(160deg,#2b1a05,#050505 60%,#0b2a17)", body: st.top ? (
             <>
               <p className="text-lg text-gray-300 mb-4">Lo que más viste</p>
-              <img src={st.top.bgImage} alt="" className="w-40 sm:w-48 aspect-[2/3] object-cover rounded-2xl mx-auto shadow-2xl border border-white/10" />
+              <img decoding="async" loading="lazy" src={posterSrc(st.top)} alt="" className="w-40 sm:w-48 aspect-[2/3] object-cover rounded-2xl mx-auto shadow-2xl border border-white/10" />
               <p className="text-2xl sm:text-3xl font-black text-white mt-5">{st.top.title}</p>
             </>) : (<><p className="text-3xl font-black text-white">Aún no viste ninguna película completa</p><p className="text-gray-300 mt-3">¡Empieza hoy y tu resumen se llenará solo!</p></>) },
           { bg: "linear-gradient(160deg,#3a2a05,#050505 55%,#2a1748)", body: (
@@ -8388,7 +8497,7 @@ export default function Home() {
           <div data-tv-modal className="fixed inset-0 z-[75] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={(ev) => { if (ev.target === ev.currentTarget) setShareTarget(null); }}>
             <div className="w-full sm:max-w-md bg-[#141414] border border-gray-800 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 space-y-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)", animation: "cvFade .2s ease-out both" }}>
               <div className="flex items-center gap-3">
-                <img src={shareTarget.bgImage} alt="" className="w-12 h-16 rounded-lg object-cover bg-gray-900 shrink-0" />
+                <img decoding="async" loading="lazy" src={posterSrc(shareTarget)} alt="" className="w-12 h-16 rounded-lg object-cover bg-gray-900 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-gray-400">Compartir</p>
                   <p className="text-base font-bold text-white truncate">{shareTarget.title}</p>
@@ -8425,7 +8534,7 @@ export default function Home() {
                 <h3 className="text-2xl sm:text-3xl font-black text-white break-words">{viewList.name}</h3>
                 {viewList.desc && <p className="text-sm text-gray-400 mt-1">{viewList.desc}</p>}
                 <div className="flex items-center gap-2 mt-2">
-                  {viewList.avatar && <img src={viewList.avatar} alt="" className="w-6 h-6 rounded-md object-cover" />}
+                  {viewList.avatar && <img decoding="async" loading="lazy" src={viewList.avatar} alt="" className="w-6 h-6 rounded-md object-cover" />}
                   <span className="text-xs text-gray-400">de <b className="text-gray-200">{viewList.owner}</b> · {viewList.movieIds.length} títulos · {viewList.followers} seguidor{viewList.followers === 1 ? "" : "es"}</span>
                 </div>
               </div>
@@ -8451,7 +8560,7 @@ export default function Home() {
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
               {viewList.movieIds.map((id) => catalogAll.find((x) => String(x.id) === id)).filter(Boolean).map((m) => (
                 <div key={"vl-" + (m as Movie).id} onClick={() => { setViewList(null); setSelectedMovie(m as Movie); }} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") { setViewList(null); setSelectedMovie(m as Movie); } }} className="cursor-pointer rounded-xl focus:outline-none focus:ring-4 focus:ring-green-500">
-                  <img src={(m as Movie).bgImage} alt={(m as Movie).title} loading="lazy" className="w-full aspect-[2/3] object-cover rounded-xl bg-gray-900 border border-gray-800 hover:border-green-500" />
+                  <img decoding="async" src={posterSrc(m as Movie)} alt={(m as Movie).title} loading="lazy" className="w-full aspect-[2/3] object-cover rounded-xl bg-gray-900 border border-gray-800 hover:border-green-500" />
                   <p className="text-[11px] text-gray-300 font-semibold truncate mt-1">{(m as Movie).title}</p>
                 </div>
               ))}
@@ -8465,7 +8574,7 @@ export default function Home() {
         <div data-tv-modal className="fixed inset-0 z-[74] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={(e) => { if (e.target === e.currentTarget) setListPickFor(null); }}>
           <div className="w-full sm:max-w-md bg-[#141414] border border-gray-800 rounded-t-3xl sm:rounded-3xl p-5 space-y-4" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)", animation: "cvFade .2s ease-out both" }}>
             <div className="flex items-center gap-3">
-              <img src={listPickFor.bgImage} alt="" className="w-10 h-14 rounded-lg object-cover bg-gray-900" />
+              <img decoding="async" loading="lazy" src={posterSrc(listPickFor)} alt="" className="w-10 h-14 rounded-lg object-cover bg-gray-900" />
               <div className="flex-1 min-w-0"><p className="text-xs text-gray-400">Añadir a una lista</p><p className="text-sm font-bold text-white truncate">{listPickFor.title}</p></div>
               <button data-close-on-back onClick={() => setListPickFor(null)} aria-label="Cerrar" className="w-9 h-9 rounded-full bg-[#222] text-gray-300 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500"><X className="w-4 h-4" /></button>
             </div>
@@ -8497,7 +8606,7 @@ export default function Home() {
               <div className="flex flex-wrap gap-2">
                 {listEdit.movieIds.map((id) => { const m = catalogAll.find((x) => String(x.id) === id); return m ? (
                   <button key={"le-" + id} onClick={() => setListEdit({ ...listEdit, movieIds: listEdit.movieIds.filter((x) => x !== id) })} className="flex items-center gap-2 bg-[#181818] border border-gray-800 rounded-lg pl-1 pr-2 py-1 text-xs text-gray-200 cursor-pointer hover:border-red-700">
-                    <img src={m.bgImage} alt="" className="w-6 h-9 rounded object-cover" /> <span className="max-w-[120px] truncate">{m.title}</span> <span className="text-red-400">✕</span>
+                    <img decoding="async" loading="lazy" src={posterSrc(m)} alt="" className="w-6 h-9 rounded object-cover" /> <span className="max-w-[120px] truncate">{m.title}</span> <span className="text-red-400">✕</span>
                   </button>
                 ) : null; })}
                 {myList.length > 0 && listEdit.movieIds.length === 0 && (
@@ -8522,7 +8631,7 @@ export default function Home() {
 
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
               <div className="relative shrink-0">
-                <img src={editAvatar} alt="" className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl object-cover bg-gray-900 border-4 border-white/10" />
+                <img decoding="async" loading="lazy" src={editAvatar} alt="" className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl object-cover bg-gray-900 border-4 border-white/10" />
                 {editIsKid && <span className="absolute bottom-1 left-1 right-1 text-center text-[10px] font-black text-black bg-yellow-400 rounded">NIÑOS</span>}
               </div>
               <div className="flex-1 w-full space-y-4">
@@ -8596,7 +8705,7 @@ export default function Home() {
                           title={a.name}
                           className={"relative aspect-square rounded-xl overflow-hidden border-4 transition cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500 " + (editAvatar === a.file ? "border-green-500 scale-105" : "border-transparent hover:border-white/60")}
                         >
-                          <img src={a.file} alt="" loading="lazy" className="w-full h-full object-cover bg-gray-900" />
+                          <img decoding="async" src={a.file} alt="" loading="lazy" className="w-full h-full object-cover bg-gray-900" />
                           {editAvatar === a.file && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 text-black text-[11px] font-black flex items-center justify-center">✓</span>}
                         </button>
                       ))}
@@ -8636,7 +8745,7 @@ export default function Home() {
                 style={{ width: 140 }}
               >
                 <div className="relative rounded-2xl overflow-hidden border-4 border-transparent group-hover:border-white bg-gray-900" style={{ width: 120, height: 120 }}>
-                  <img src={p.avatar} alt={p.name} className="w-full h-full object-cover object-top" />
+                  <img decoding="async" loading="lazy" src={p.avatar} alt={p.name} className="w-full h-full object-cover object-top" />
                   {p.isKid && <span className="absolute bottom-1 left-1 right-1 text-center text-[10px] font-black text-black bg-yellow-400 rounded">NIÑOS</span>}
                   {whoManage && canEditProfile(p) && (
                     <div className="absolute inset-0 bg-black/55 flex items-center justify-center">
@@ -8811,7 +8920,7 @@ export default function Home() {
                       className={`flex flex-col items-center p-2 rounded-xl cursor-pointer border-2 transition focus:outline-none focus:ring-2 focus:ring-green-500 ${newProfileAvatar === item.file ? "border-emerald-400 bg-emerald-500/10 scale-105" : "border-transparent hover:bg-gray-900"}`}
                     >
                       <div className="w-14 h-14 bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center border border-gray-800 shadow-md">
-                        <img src={item.file} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                        <img decoding="async" loading="lazy" src={item.file} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition" />
                       </div>
                       <span className="text-[10px] text-gray-300 mt-1.5 text-center font-medium truncate w-full">{item.name}</span>
                     </div>

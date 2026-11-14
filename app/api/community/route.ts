@@ -18,7 +18,11 @@ const ROW_POLLS = 10; // { polls: Poll[] } — votaciones de la comunidad
 const ROW_OWNER = 9; // { ownerUid } — la cuenta del dueño de la web (la registra el admin con su clave)
 const noStore = { "Cache-Control": "no-store, max-age=0" };
 
-type Review = { uid: string; name: string; avatar: string; badge?: string; stars: number; text: string; at: number };
+type Review = { uid: string; name: string; avatar: string; badge?: string; stars: number; text: string; at: number; re?: Record<string, string> };
+// Avisos personales ("A Ana le encantó tu reseña"): fila 11 → { box: { [uid]: InboxItem[] } }
+type InboxItem = { at: number; from: string; avatar: string; emoji: string; movieId: string; fromUid: string };
+const ROW_INBOX = 11;
+const REACTS = ["❤️", "😂", "😮", "👏"];
 type PollOpt = { id: string; label: string; img?: string; movieId?: string };
 type Poll = { id: string; q: string; opts: PollOpt[]; votes: Record<string, string>; open: boolean; at: number; closedAt?: number; winner?: string };
 type List = { id: string; uid: string; owner: string; avatar: string; name: string; desc: string; movieIds: string[]; followers: string[]; at: number; updated: number };
@@ -131,7 +135,11 @@ export async function GET(req: Request) {
       const { data } = await readRow(ROW_REVIEWS);
       const list: Review[] = data && data.byMovie && Array.isArray(data.byMovie[movie]) ? data.byMovie[movie] : [];
       const u = await currentUser().catch(() => null);
-      const reviews = list.slice().sort((a, b) => b.at - a.at).slice(0, 30).map((r) => ({ name: r.name, avatar: r.avatar, badge: r.badge || "", stars: r.stars, text: r.text, at: r.at, mine: !!u && r.uid === u.id }));
+      const reviews = list.slice().sort((a, b) => b.at - a.at).slice(0, 30).map((r) => {
+        const reacts: Record<string, number> = {};
+        for (const k of Object.keys(r.re || {})) { const e = (r.re as Record<string, string>)[k]; reacts[e] = (reacts[e] || 0) + 1; }
+        return { name: r.name, avatar: r.avatar, badge: r.badge || "", stars: r.stars, text: r.text, at: r.at, mine: !!u && r.uid === u.id, reacts, myReact: u && r.re ? r.re[u.id] || "" : "" };
+      });
       return NextResponse.json({ ...summary(list), reviews }, { headers: noStore });
     }
     // Ranking: lo mejor valorado por la comunidad (promedio ponderado)
@@ -171,6 +179,14 @@ export async function GET(req: Request) {
         .slice(0, sp.get("all") ? 20 : 3)
         .map((p) => pollOut(p, u ? u.id : ""));
       return NextResponse.json({ polls: out }, { headers: noStore });
+    }
+    // Avisos personales de la cuenta
+    if (sp.get("inbox")) {
+      const u = await currentUser();
+      if (!u) return NextResponse.json({ items: [] }, { headers: noStore });
+      const { data } = await readRow(ROW_INBOX);
+      const items: InboxItem[] = data && data.box && Array.isArray(data.box[u.id]) ? data.box[u.id] : [];
+      return NextResponse.json({ items: items.slice(-30).reverse().map((x) => ({ at: x.at, from: x.from, avatar: x.avatar, emoji: x.emoji, movieId: x.movieId })) }, { headers: noStore });
     }
     // Para los logros: cuántas reseñas y listas tiene el usuario
     if (sp.get("me")) {
@@ -280,11 +296,46 @@ export async function POST(req: Request) {
       if (badge === "👑" && (await ownerUid()) !== u.id) badge = "";
       const { data } = await updateRow(ROW_REVIEWS, () => ({ byMovie: {} }), (d) => {
         const list: Review[] = Array.isArray(d.byMovie[movie]) ? d.byMovie[movie] : [];
+        const prev = list.find((r) => r.uid === u.id);
         const rest = list.filter((r) => r.uid !== u.id);
-        rest.push({ uid: u.id, name, avatar: avatarOk(b.avatar), badge, stars, text: clean(text), at: Date.now() });
+        // Si solo edita su reseña, conserva las reacciones que ya tenía
+        rest.push({ uid: u.id, name, avatar: avatarOk(b.avatar), badge, stars, text: clean(text), at: Date.now(), ...(prev && prev.re ? { re: prev.re } : {}) });
         d.byMovie[movie] = rest.slice(-200);
       });
       return NextResponse.json({ ok: true, ...summary(data.byMovie[movie]) }, { headers: noStore });
+    }
+    // Reaccionar a la reseña de otra persona (tocar la misma reacción la quita)
+    if (action === "react") {
+      const movie = str(b.movieId, 40), at = Number(b.at), emoji = str(b.emoji, 8);
+      if (!movie || !isFinite(at)) return fail("Reseña inválida", 400);
+      if (emoji && REACTS.indexOf(emoji) === -1) return fail("Reacción inválida", 400);
+      let owner = "", now = "", reacts: Record<string, number> = {};
+      const { error } = await updateRow(ROW_REVIEWS, () => ({ byMovie: {} }), (d) => {
+        const list: Review[] = Array.isArray(d.byMovie[movie]) ? d.byMovie[movie] : [];
+        const r = list.find((x) => x.at === at);
+        if (!r) return "La reseña ya no existe";
+        if (r.uid === u.id) return "No puedes reaccionar a tu propia reseña";
+        r.re = r.re || {};
+        if (!emoji || r.re[u.id] === emoji) delete r.re[u.id]; else r.re[u.id] = emoji;
+        now = r.re[u.id] || ""; owner = r.uid;
+        reacts = {};
+        for (const k of Object.keys(r.re)) reacts[r.re[k]] = (reacts[r.re[k]] || 0) + 1;
+      });
+      if (error) return fail(error, 400);
+      // Aviso para el autor de la reseña (uno por persona y película; se reemplaza si cambia la reacción)
+      if (owner) {
+        const from = str(b.name, 24) || u.email.split("@")[0].slice(0, 20);
+        await updateRow(ROW_INBOX, () => ({ box: {} }), (d) => {
+          d.box = d.box || {};
+          const box: InboxItem[] = (Array.isArray(d.box[owner]) ? d.box[owner] : []).filter((x: InboxItem) => !(x.fromUid === u.id && x.movieId === movie));
+          if (now) box.push({ at: Date.now(), from, avatar: avatarOk(b.avatar), emoji: now, movieId: movie, fromUid: u.id });
+          d.box[owner] = box.slice(-30);
+          // Mantiene la fila liviana: como mucho 3000 cuentas con avisos
+          const keys = Object.keys(d.box);
+          if (keys.length > 3000) for (const k of keys.slice(0, keys.length - 3000)) delete d.box[k];
+        }).catch(() => null);
+      }
+      return NextResponse.json({ ok: true, reacts, myReact: now }, { headers: noStore });
     }
     if (action === "deleteReview") {
       const movie = str(b.movieId, 40);
