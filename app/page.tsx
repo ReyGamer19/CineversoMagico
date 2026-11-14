@@ -14,6 +14,7 @@ interface Profile {
   isKid: boolean;
   pin?: string;
   pinHash?: string;
+  birthday?: string; // "MM-DD"
 }
 
 interface Episode {
@@ -213,6 +214,7 @@ const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGA
   "@media (max-width: 1023px) { input, select, textarea { font-size: 16px !important; } }" +
   "@keyframes cvWall{from{transform:translateY(0)}to{transform:translateY(-50%)}}@keyframes cvObPop{0%{opacity:0;transform:translateY(12px) scale(.85)}100%{opacity:1;transform:none}}.cv-ob-grad{background:linear-gradient(90deg,var(--ob),#fff 140%);-webkit-background-clip:text;background-clip:text;color:transparent}.cv-ob-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:18px;background:rgba(17,17,17,.82);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 20px 50px -10px rgba(0,0,0,.8);white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden}@media (prefers-reduced-motion:reduce){[style*=cvWall]{animation:none!important}}" +
   "@media (orientation:portrait) and (max-width:900px){.cv-pstage{flex:0 0 auto!important;padding:0!important}.cv-pstage>div{height:56.25vw!important;max-height:70vh;border-radius:0!important}}" + "@media (max-height:520px){.cv-ppanel{padding-top:6px!important;column-gap:12px!important}.cv-ppanel>button{font-size:14px!important}.cv-pstage{padding:0!important}}" +
+  "@keyframes cvRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}.cv-home>section,.cv-home>.cv-greet{animation:cvRise .55s cubic-bezier(.2,.7,.2,1) both}.cv-home>section:nth-of-type(2){animation-delay:.06s}.cv-home>section:nth-of-type(3){animation-delay:.12s}.cv-home>section:nth-of-type(4){animation-delay:.18s}.cv-home>section:nth-of-type(n+5){animation-delay:.24s}@keyframes cvConf{0%{transform:translateY(-20px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}.cv-conf{position:fixed;top:-20px;width:10px;height:16px;border-radius:2px;z-index:95;pointer-events:none;animation:cvConf linear forwards}@keyframes cvStory{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}@media (prefers-reduced-motion:reduce){.cv-home>section,.cv-home>.cv-greet,.cv-conf{animation:none!important}}" +
   ".cv-chat{position:fixed;top:0;left:0;right:0;bottom:0}@media (min-width:1024px){.cv-chat{top:auto;left:auto;right:24px;bottom:24px;width:400px;height:min(640px,calc(100vh - 110px))}}" +
   ".cv-rail{position:relative}.cv-rail-btn{display:none;position:absolute;top:4px;bottom:16px;width:56px;z-index:6;align-items:center;justify-content:center;border:0;cursor:pointer;color:#fff;opacity:.55;transition:opacity .2s,transform .2s}.cv-rail-l{left:0;background:linear-gradient(90deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:12px 0 0 12px}.cv-rail-r{right:0;background:linear-gradient(270deg,rgba(5,5,5,.92),rgba(5,5,5,0));border-radius:0 12px 12px 0}.cv-rail:hover .cv-rail-btn{opacity:1}.cv-rail-btn:hover svg{transform:scale(1.25)}.cv-rail-btn svg{transition:transform .2s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.8))}@media (hover:hover) and (pointer:fine){.cv-rail-btn{display:flex}}";
 
@@ -4218,6 +4220,234 @@ export default function Home() {
   const [showNotif, setShowNotif] = useState(false);
   // Hora actual leída en el navegador (Next.js no permite leerla al compilar)
   const [nowTs, setNowTs] = useState(0);
+  // ---------- Saludos con personalidad, cumpleaños y fechas especiales ----------
+  const [greetHidden, setGreetHidden] = useState(false);
+  const special = (() => {
+    if (!todayStr) return null;
+    const d = new Date(todayStr + "T12:00:00");
+    const md = todayStr.slice(5);
+    const dow = d.getDay(), dom = d.getDate(), mon = d.getMonth() + 1;
+    const nthSunday = (n: number) => dow === 0 && Math.ceil(dom / 7) === n;
+    if (md === "01-01") return { icon: "🎆", text: "¡Feliz Año Nuevo! Que este año venga lleno de buenas películas.", genre: "", tone: "#facc15" };
+    if (md === "02-14") return { icon: "💘", text: "¡Feliz San Valentín! Hoy toca algo romántico.", genre: "Romance", tone: "#f472b6" };
+    if (mon === 5 && nthSunday(2)) return { icon: "💐", text: "¡Feliz Día de la Madre! Una película para ver juntos hoy.", genre: "Familia", tone: "#f9a8d4" };
+    if (mon === 6 && nthSunday(3)) return { icon: "👔", text: "¡Feliz Día del Padre! Elige una de acción para papá.", genre: "Acción", tone: "#60a5fa" };
+    if (md === "07-28" || md === "07-29") return { icon: "🇵🇪", text: "¡Felices Fiestas Patrias! Celebra con una buena maratón.", genre: "", tone: "#ef4444" };
+    if (md === "10-31") return { icon: "🎃", text: "¡Feliz Halloween! ¿Te atreves con una de terror?", genre: "Terror", tone: "#fb923c" };
+    if (md === "12-24" || md === "12-25") return { icon: "🎄", text: "¡Feliz Navidad! Películas para ver en familia.", genre: "Familia", tone: "#22c55e" };
+    if (md === "12-31") return { icon: "🥂", text: "¡Último día del año! Mira tu resumen: «Tu año en Cineverso».", genre: "", tone: "#facc15" };
+    return null;
+  })();
+  const isBirthday = !!(todayStr && activeProfile.birthday && activeProfile.birthday === todayStr.slice(5) && activeProfile.id !== "invitado");
+  const greetText = (() => {
+    const h = nowTs ? new Date(nowTs).getHours() : 12;
+    const hi = h < 5 ? "¡Buenas noches" : h < 12 ? "¡Buenos días" : h < 19 ? "¡Buenas tardes" : "¡Buenas noches";
+    const name = activeProfile.id === "invitado" ? "" : ", " + activeProfile.name;
+    const extra = h < 5 ? " Trasnochando, ¿eh? 🌙" : h < 12 ? " ☀️" : h < 19 ? " 🍿" : " 🌙";
+    return hi + name + "!" + extra;
+  })();
+  const resumeItem = continueWatchingList.find((p) => p.duration > 0 && p.time / p.duration < 0.92);
+  const resumeMovie = resumeItem ? catalogAll.find((x) => String(x.id) === String(resumeItem.id)) : undefined;
+  const specialRow = special && special.genre ? catalog.filter((m) => m.tag === special.genre || (m.genres || []).indexOf(special.genre) !== -1).slice(0, 15) : [];
+
+  // ---------- Tu año en Cineverso ----------
+  const [wrapOpen, setWrapOpen] = useState(false);
+  const [wrapStep, setWrapStep] = useState(0);
+  const [wrapBusy, setWrapBusy] = useState(false);
+  const wrapYear = todayStr ? Number(todayStr.slice(0, 4)) : 2026;
+  const wrapStats = (() => {
+    const items = continueWatchingList.filter((p) => p.duration > 0 && p.time / p.duration > 0.15);
+    const seen = new Map<string, { m: Movie; secs: number }>();
+    items.forEach((p) => {
+      const m = catalogAll.find((x) => String(x.id) === String(p.id));
+      if (!m) return;
+      const cur = seen.get(String(m.id));
+      const secs = Math.min(p.time, p.duration);
+      seen.set(String(m.id), { m, secs: (cur ? cur.secs : 0) + secs });
+    });
+    const list = Array.from(seen.values());
+    const minutes = Math.round(list.reduce((a, x) => a + x.secs, 0) / 60);
+    const gcount: Record<string, number> = {};
+    list.forEach((x) => { const g = x.m.tag; if (g) gcount[g] = (gcount[g] || 0) + 1; });
+    const topGenres = Object.keys(gcount).sort((a, b) => gcount[b] - gcount[a]).slice(0, 3);
+    const top = list.slice().sort((a, b) => b.secs - a.secs)[0];
+    const PERS: Record<string, { t: string; d: string }> = {
+      "Terror": { t: "Alma valiente 🎃", d: "No le temes a nada: la oscuridad es tu zona de confort." },
+      "Acción": { t: "Pura adrenalina 💥", d: "Explosiones, persecuciones y héroes: tu combustible." },
+      "Comedia": { t: "Rey de las risas 😂", d: "Para ti, una buena película es la que te hace reír." },
+      "Romance": { t: "Corazón de cine 💘", d: "Las historias de amor siempre te atrapan." },
+      "Animación": { t: "Niño interior ✨", d: "La animación te recuerda que la magia existe." },
+      "Ciencia ficción": { t: "Viajero del futuro 🚀", d: "Otros mundos y otras épocas son tu hogar." },
+      "Drama": { t: "Alma profunda 🎭", d: "Te quedas con las historias que te hacen sentir." },
+      "Aventura": { t: "Explorador nato 🧭", d: "Siempre listo para una nueva expedición." },
+      "Suspenso": { t: "Detective de sofá 🔎", d: "Nadie adivina los giros finales como tú." },
+      "Familia": { t: "Corazón de hogar 🏡", d: "Lo mejor del cine es compartirlo con los tuyos." },
+      "Fantasía": { t: "Soñador épico 🐉", d: "Dragones, magia y reinos lejanos: lo tuyo." },
+    };
+    const pers = topGenres[0] && PERS[topGenres[0]] ? PERS[topGenres[0]] : { t: "Cinéfilo todoterreno 🍿", d: "Te gusta un poco de todo: el cine es tu casa." };
+    return { titles: list.length, minutes, hours: Math.round(minutes / 6) / 10, topGenres, gcount, top: top ? top.m : undefined, pers, badges: unlocked.length + (isOwner ? 1 : 0) };
+  })();
+  const loadImg = (src: string) => new Promise<HTMLImageElement | null>((resolve) => {
+    if (!src) { resolve(null); return; }
+    const im = new Image();
+    im.crossOrigin = "anonymous";
+    const t = setTimeout(() => resolve(null), 5000);
+    im.onload = () => { clearTimeout(t); resolve(im); };
+    im.onerror = () => { clearTimeout(t); resolve(null); };
+    im.src = src;
+  });
+  // Dibuja la tarjeta para historias (1080 x 1920), estilo "boleto de cine", y la devuelve como PNG
+  const makeWrapCard = async (withImages: boolean): Promise<Blob | null> => {
+    const W = 1080, H = 1920;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    if (!g) return null;
+    const rr = (x: number, y: number, w: number, h: number, r: number) => {
+      g.beginPath();
+      g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+      g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+      g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+    };
+    const txt = (t: string, x: number, y: number, size: number, color: string, weight = "800", align: CanvasTextAlign = "left", spacing = 0) => {
+      g.font = weight + " " + size + "px Arial, Helvetica, sans-serif"; g.fillStyle = color; g.textAlign = align;
+      if (spacing && align === "left") { let cx = x; for (const ch of t) { g.fillText(ch, cx, y); cx += g.measureText(ch).width + spacing; } }
+      else g.fillText(t, x, y);
+    };
+    const glow = (x: number, y: number, r: number, col: string) => {
+      const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, col); gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    };
+    // fondo con luces
+    g.fillStyle = "#07060d"; g.fillRect(0, 0, W, H);
+    glow(120, 260, 760, "rgba(34,197,94,.45)");
+    glow(980, 1650, 900, "rgba(168,85,247,.45)");
+    glow(900, 420, 520, "rgba(250,204,21,.22)");
+    // año gigante de fondo
+    g.save(); g.globalAlpha = 0.06; txt(String(wrapYear), W / 2, 1180, 430, "#ffffff", "900", "center"); g.restore();
+    // tiras de película a los lados
+    for (const sx of [0, W - 46]) {
+      g.fillStyle = "#030303"; g.fillRect(sx, 0, 46, H);
+      g.fillStyle = "rgba(255,255,255,.14)";
+      for (let yy = 18; yy < H; yy += 58) { rr(sx + 11, yy, 24, 34, 6); g.fill(); }
+    }
+    const L = 96, R = W - 96, CW = R - L;
+    // encabezado
+    const lg = g.createLinearGradient(L, 110, L + 96, 206); lg.addColorStop(0, "#22c55e"); lg.addColorStop(1, "#a3e635");
+    g.fillStyle = lg; rr(L, 110, 96, 96, 26); g.fill();
+    txt("CV", L + 48, 176, 44, "#04130a", "900", "center");
+    txt("Cineverso Mágico", L + 124, 152, 40, "#ffffff", "800");
+    txt("TU AÑO EN CINEVERSO " + wrapYear, L + 124, 196, 26, "#4ade80", "900", "left", 4);
+    // nombre
+    let y = 330;
+    const nm = activeProfile.name.length > 14 ? activeProfile.name.slice(0, 13) + "…" : activeProfile.name;
+    txt(nm, L, y + 40, 112, "#ffffff", "900");
+    if (isOwner) {
+      g.font = "900 112px Arial"; const nw = g.measureText(nm).width;
+      const gx = Math.min(L + nw + 26, R - 230);
+      const gold = g.createLinearGradient(gx, 0, gx + 230, 0); gold.addColorStop(0, "#facc15"); gold.addColorStop(1, "#f59e0b");
+      g.fillStyle = gold; rr(gx, y - 22, 230, 64, 32); g.fill();
+      txt("FUNDADOR", gx + 115, y + 22, 30, "#1a1200", "900", "center");
+    }
+    y += 110;
+    // póster de lo más visto (inclinado, con brillo)
+    if (withImages && wrapStats.top) {
+      const im = await loadImg(wrapStats.top.bgImage || wrapStats.top.backdrop || "");
+      if (im) {
+        const pw = 366, ph = 540, cx = W / 2, cy = y + ph / 2 + 20;
+        g.save(); g.translate(cx, cy); g.rotate(-0.05);
+        g.shadowColor = "rgba(250,204,21,.55)"; g.shadowBlur = 90;
+        g.fillStyle = "#ffffff"; rr(-pw / 2 - 10, -ph / 2 - 10, pw + 20, ph + 20, 34); g.fill();
+        g.shadowBlur = 0;
+        g.save(); rr(-pw / 2, -ph / 2, pw, ph, 26); g.clip();
+        const r = Math.max(pw / im.width, ph / im.height);
+        g.drawImage(im, -im.width * r / 2, -im.height * r / 2, im.width * r, im.height * r);
+        g.restore(); g.restore();
+        // etiqueta
+        g.fillStyle = "#ffffff"; rr(cx - 150, y + ph + 30, 300, 64, 32); g.fill();
+        txt("LO MÁS VISTO", cx, y + ph + 74, 28, "#000000", "900", "center");
+        const tt = wrapStats.top.title.length > 28 ? wrapStats.top.title.slice(0, 27) + "…" : wrapStats.top.title;
+        txt(tt, cx, y + ph + 140, 44, "#ffffff", "900", "center");
+        y += ph + 185;
+      } else y += 30;
+    } else y += 30;
+    // boleto
+    const ty = Math.max(y, 1130), th = 520;
+    g.save();
+    g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 60;
+    const tk = g.createLinearGradient(L, ty, R, ty + th); tk.addColorStop(0, "rgba(255,255,255,.14)"); tk.addColorStop(1, "rgba(255,255,255,.05)");
+    g.fillStyle = tk; rr(L, ty, CW, th, 40); g.fill();
+    g.restore();
+    g.strokeStyle = "rgba(255,255,255,.18)"; g.lineWidth = 3; rr(L, ty, CW, th, 40); g.stroke();
+    // números
+    const stats: [string, string, string][] = [[String(wrapStats.titles), "títulos", "#4ade80"], [String(wrapStats.hours), "horas", "#7dd3fc"], [String(wrapStats.badges), "logros", "#f9a8d4"]];
+    const bw = (CW - 80 - 40) / 3;
+    stats.forEach(([v, l, col], i) => {
+      const bx = L + 40 + i * (bw + 20);
+      g.fillStyle = "rgba(0,0,0,.35)"; rr(bx, ty + 40, bw, 176, 26); g.fill();
+      g.strokeStyle = "rgba(255,255,255,.12)"; g.lineWidth = 2; rr(bx, ty + 40, bw, 176, 26); g.stroke();
+      txt(v, bx + bw / 2, ty + 140, 80, col, "900", "center");
+      txt(l, bx + bw / 2, ty + 188, 30, "#cbd5e1", "700", "center");
+    });
+    // línea punteada con muescas
+    const dy = ty + 262;
+    g.fillStyle = "#07060d"; g.beginPath(); g.arc(L, dy, 30, 0, Math.PI * 2); g.fill(); g.beginPath(); g.arc(R, dy, 30, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "rgba(255,255,255,.25)"; g.lineWidth = 4; g.setLineDash([16, 14]); g.beginPath(); g.moveTo(L + 50, dy); g.lineTo(R - 50, dy); g.stroke(); g.setLineDash([]);
+    // personalidad + géneros
+    txt("PERSONALIDAD CINÉFILA", L + 40, dy + 62, 26, "#94a3b8", "800", "left", 3);
+    const pers = wrapStats.pers.t.replace(/[^\u0000-ɏ\s]/g, "").trim();
+    txt(pers, L + 40, dy + 128, 58, "#facc15", "900");
+    let gx = L + 40;
+    (wrapStats.topGenres.length ? wrapStats.topGenres : ["Por descubrir"]).forEach((gn, i) => {
+      g.font = "800 28px Arial"; const w = g.measureText(gn).width + 44;
+      if (gx + w > R - 40) return;
+      g.fillStyle = i === 0 ? "rgba(34,197,94,.28)" : "rgba(255,255,255,.1)"; rr(gx, dy + 160, w, 56, 28); g.fill();
+      txt(gn, gx + 22, dy + 198, 28, i === 0 ? "#86efac" : "#e2e8f0", "800");
+      gx += w + 14;
+    });
+    // llamado final
+    const cy2 = H - 150;
+    const cg = g.createLinearGradient(L, cy2, R, cy2); cg.addColorStop(0, "#22c55e"); cg.addColorStop(1, "#a3e635");
+    g.fillStyle = cg; rr(L + 40, cy2, CW - 80, 92, 46); g.fill();
+    txt("¿Y tú? Descubre tu año en cineversomagico.com", W / 2, cy2 + 58, 32, "#04130a", "900", "center");
+    return await new Promise<Blob | null>((resolve) => { try { c.toBlob((b) => resolve(b), "image/png"); } catch (e) { resolve(null); } });
+  };
+  const wrapCard = async (): Promise<Blob | null> => {
+    let b: Blob | null = null;
+    try { b = await makeWrapCard(true); } catch (e) { b = null; }
+    if (!b) { try { b = await makeWrapCard(false); } catch (e) { b = null; } }
+    return b;
+  };
+  const shareWrap = async (target: "share" | "download" | "whatsapp" | "facebook") => {
+    if (wrapBusy) return;
+    // Enlace con vista previa: WhatsApp y Facebook muestran la tarjeta como IMAGEN al pegar este enlace
+    const q = new URLSearchParams({
+      n: activeProfile.name, t: String(wrapStats.titles), h: String(wrapStats.hours), g: wrapStats.topGenres.join(","),
+      p: wrapStats.pers.t.replace(/[^\u0000-\u024F\s]/g, "").trim(), b: String(wrapStats.badges), f: isOwner ? "1" : "0", y: String(wrapYear),
+      i: wrapStats.top && /^https:\/\//.test(wrapStats.top.bgImage || "") ? wrapStats.top.bgImage : "",
+    });
+    const url = window.location.origin + "/resumen?" + q.toString();
+    const text = "🍿 Mi año en Cineverso Mágico: " + wrapStats.titles + " títulos, " + wrapStats.hours + " horas de cine y mi personalidad es «" + wrapStats.pers.t + "». ¿Y tú?";
+    if (target === "whatsapp") { window.open("https://wa.me/?text=" + encodeURIComponent(text + " " + url), "_blank", "noopener"); return; }
+    if (target === "facebook") { window.open("https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url), "_blank", "noopener"); return; }
+    setWrapBusy(true);
+    const blob = await wrapCard();
+    setWrapBusy(false);
+    if (!blob) { showToast("No se pudo crear la imagen en este dispositivo."); return; }
+    const file = new File([blob], "mi-año-en-cineverso-" + wrapYear + ".png", { type: "image/png" });
+    const nav: any = navigator;
+    if (target === "share" && nav.canShare && nav.canShare({ files: [file] })) {
+      try { await nav.share({ files: [file], title: "Mi año en Cineverso", text }); return; } catch (e) { return; }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    showToast(target === "share" ? "📥 Imagen descargada. Súbela a tus historias de Instagram, TikTok, Facebook o WhatsApp." : "📥 ¡Imagen descargada!", 6000);
+  };
+
   useEffect(() => {
     setNowTs(Date.now());
     const t = setInterval(() => setNowTs(Date.now()), 60000);
@@ -4490,6 +4720,7 @@ export default function Home() {
   const [editError, setEditError] = useState("");
   const [editConfirmDelete, setEditConfirmDelete] = useState(false);
   const [editSearch, setEditSearch] = useState("");
+  const [editBirthday, setEditBirthday] = useState("");
   const [whoManage, setWhoManage] = useState(false);
   useEffect(() => {
     if (!editProfile) return;
@@ -4514,6 +4745,7 @@ export default function Home() {
     setEditError("");
     setEditConfirmDelete(false);
     setEditSearch("");
+    setEditBirthday(p.birthday || "");
   };
   const saveEditProfile = () => {
     if (!editProfile) return;
@@ -4529,7 +4761,8 @@ export default function Home() {
         pinHash = pinHashOf(editPin);
       } else if (!pinHash) { setEditError("El perfil Niños necesita un PIN de 4 números."); return; }
     } else pinHash = undefined;
-    const upd: Profile = { ...editProfile, name, avatar: editAvatar || editProfile.avatar, isKid: editIsKid, pinHash };
+    const bd = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(editBirthday) ? editBirthday : undefined;
+    const upd: Profile = { ...editProfile, name, avatar: editAvatar || editProfile.avatar, isKid: editIsKid, pinHash, birthday: bd };
     delete (upd as any).auto;
     setProfiles((list) => list.map((x) => (x.id === upd.id ? upd : x)));
     if (activeProfile.id === upd.id) setActiveProfile(upd);
@@ -4933,7 +5166,49 @@ export default function Home() {
               )}
             </div>
 
-            <div className="px-4 sm:px-6 md:px-12 space-y-8 relative z-20 pb-20 w-full overflow-x-hidden mt-2">
+            <div className="cv-home px-4 sm:px-6 md:px-12 space-y-8 relative z-20 pb-20 w-full overflow-x-hidden mt-2">
+              {/* Saludo con personalidad / cumpleaños / fecha especial */}
+              {!greetHidden && nowTs > 0 && (
+                <div className="cv-greet relative flex items-center gap-4 rounded-2xl px-4 sm:px-5 py-3.5 border border-white/10 overflow-hidden" style={{ background: isBirthday ? "linear-gradient(110deg, rgba(244,114,182,.25), rgba(250,204,21,.18))" : special ? "linear-gradient(110deg, " + special.tone + "33, rgba(255,255,255,.03))" : "linear-gradient(110deg, rgba(34,197,94,.14), rgba(255,255,255,.02))" }}>
+                  <span className="text-3xl sm:text-4xl leading-none shrink-0">{isBirthday ? "🎂" : special ? special.icon : "👋"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm sm:text-base font-black text-white">{isBirthday ? "¡Feliz cumpleaños, " + activeProfile.name + "! 🎉" : greetText}</p>
+                    <p className="text-xs sm:text-sm text-gray-300 truncate">
+                      {isBirthday ? "Hoy es tu día: la película la eliges tú. ¡Que lo disfrutes!" : special ? special.text : resumeMovie ? "¿Seguimos con «" + resumeMovie.title + "»?" : "¿Qué te provoca ver hoy?"}
+                    </p>
+                  </div>
+                  {resumeMovie && !isBirthday && !special && (
+                    <button onClick={() => setSelectedMovie(resumeMovie)} className="shrink-0 bg-white text-black font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">▶ Seguir</button>
+                  )}
+                  {todayStr.slice(5, 7) === "12" && accountUser && !resumeMovie && (
+                    <button onClick={() => { setWrapStep(0); setWrapOpen(true); }} className="shrink-0 bg-green-500 text-black font-bold text-xs sm:text-sm px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60">🎁 Mi año</button>
+                  )}
+                  <button onClick={() => setGreetHidden(true)} aria-label="Cerrar saludo" className="shrink-0 w-8 h-8 rounded-full text-gray-400 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">✕</button>
+                </div>
+              )}
+              {/* Diciembre: invitación al resumen anual */}
+              {todayStr.slice(5, 7) === "12" && accountUser && wrapStats.titles > 0 && (
+                <section>
+                  <button onClick={() => { setWrapStep(0); setWrapOpen(true); }} className="w-full text-left rounded-3xl p-5 sm:p-7 flex items-center gap-5 cursor-pointer border border-green-500/30 focus:outline-none focus:ring-4 focus:ring-green-500" style={{ background: "linear-gradient(115deg, #0b2a17 0%, #101010 55%, #2a1748 100%)" }}>
+                    <span className="text-5xl">🎁</span>
+                    <span className="flex-1">
+                      <span className="block text-xs font-black tracking-widest text-green-400 uppercase">Ya está listo</span>
+                      <span className="block text-xl sm:text-3xl font-black text-white">Tu año en Cineverso {wrapYear}</span>
+                      <span className="block text-sm text-gray-300">{wrapStats.titles} títulos · {wrapStats.hours} horas · descubre tu personalidad cinéfila</span>
+                    </span>
+                    <span className="hidden sm:inline-block bg-white text-black font-black px-5 py-3 rounded-2xl">Ver mi resumen ›</span>
+                  </button>
+                </section>
+              )}
+              {/* Fila especial del día (Halloween, San Valentín, Navidad…) */}
+              {special && specialRow.length > 0 && (
+                <section>
+                  <h2 className="text-lg sm:text-2xl font-bold mb-3 text-white">{special.icon} Especial de hoy: {special.genre}</h2>
+                  <Rail className="flex gap-4 overflow-x-auto pb-4 pt-1 px-1 scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {specialRow.map((m) => posterCard(m, "sp-" + m.id))}
+                  </Rail>
+                </section>
+              )}
               {/* Continuar viendo (tarjetas horizontales con progreso) */}
               {continueItems.length > 0 && (
                 <section>
@@ -6297,6 +6572,7 @@ export default function Home() {
                   <h3 className="text-lg font-bold text-white">🏅 Mis logros</h3>
                   <p className="text-xs text-gray-500">{unlocked.length} de {BADGES.length} desbloqueados{topBadge ? " · Tu insignia en las reseñas y el chat: " + topBadge.icon + " " + topBadge.name : ""}</p>
                 </div>
+                <button onClick={() => { setWrapStep(0); setWrapOpen(true); }} className="shrink-0 text-xs font-black text-black px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/60" style={{ background: "linear-gradient(90deg,#22c55e,#a3e635)" }}>🎁 Tu año en Cineverso</button>
               </div>
               {isOwner && (
                 <div className="flex items-center gap-4 rounded-2xl p-4 border border-yellow-400/50" style={{ background: "linear-gradient(120deg, rgba(250,204,21,.18), rgba(34,197,94,.10) 60%, rgba(0,0,0,0))" }}>
@@ -7375,6 +7651,91 @@ export default function Home() {
         </div>
       )}
 
+      {/* CONFETI DE CUMPLEAÑOS */}
+      {isBirthday && !greetHidden && activeTab === "inicio" && nowTs > 0 && (
+        <div aria-hidden className="fixed inset-0 pointer-events-none z-[95] overflow-hidden">
+          {Array.from({ length: 36 }).map((_, i) => (
+            <span key={"cf-" + i} className="cv-conf" style={{ left: ((i * 37) % 100) + "%", background: ["#22c55e", "#facc15", "#f472b6", "#60a5fa", "#fb923c"][i % 5], animationDuration: 2.8 + (i % 7) * 0.35 + "s", animationDelay: (i % 9) * 0.18 + "s" }} />
+          ))}
+        </div>
+      )}
+
+      {/* TU AÑO EN CINEVERSO */}
+      {wrapOpen && (() => {
+        const st = wrapStats;
+        const slides = [
+          { bg: "linear-gradient(160deg,#0b2a17,#050505 60%,#1d1236)", body: (
+            <>
+              <p className="text-sm font-black tracking-[0.3em] text-green-400 uppercase mb-4">Tu año en Cineverso {wrapYear}</p>
+              <p className="text-4xl sm:text-6xl font-black text-white leading-tight">¡Hola, {activeProfile.name}!</p>
+              <p className="text-lg text-gray-300 mt-4">Preparamos un resumen de todo lo que viviste este año en Cineverso. 🍿</p>
+            </>) },
+          { bg: "linear-gradient(160deg,#0c2440,#050505 60%,#0b2a17)", body: (
+            <>
+              <p className="text-lg text-gray-300">Este año viste</p>
+              <p className="text-7xl sm:text-8xl font-black text-white my-2">{st.titles}</p>
+              <p className="text-2xl font-black text-sky-300">título{st.titles === 1 ? "" : "s"}</p>
+              <p className="text-lg text-gray-300 mt-6">y pasaste <b className="text-white">{st.hours} horas</b> frente a la pantalla.</p>
+            </>) },
+          { bg: "linear-gradient(160deg,#3b0d2e,#050505 60%,#2a1748)", body: (
+            <>
+              <p className="text-lg text-gray-300 mb-4">Tus géneros favoritos</p>
+              {(st.topGenres.length ? st.topGenres : ["¡Aún por descubrir!"]).map((gn, i) => (
+                <p key={"wg-" + i} className={"font-black " + (i === 0 ? "text-5xl sm:text-6xl text-pink-300" : "text-3xl text-white/80")} style={{ animation: "cvRise .5s ease-out both", animationDelay: i * 0.15 + "s" }}>{i + 1}. {gn}</p>
+              ))}
+            </>) },
+          { bg: "linear-gradient(160deg,#2b1a05,#050505 60%,#0b2a17)", body: st.top ? (
+            <>
+              <p className="text-lg text-gray-300 mb-4">Lo que más viste</p>
+              <img src={st.top.bgImage} alt="" className="w-40 sm:w-48 aspect-[2/3] object-cover rounded-2xl mx-auto shadow-2xl border border-white/10" />
+              <p className="text-2xl sm:text-3xl font-black text-white mt-5">{st.top.title}</p>
+            </>) : (<><p className="text-3xl font-black text-white">Aún no viste ninguna película completa</p><p className="text-gray-300 mt-3">¡Empieza hoy y tu resumen se llenará solo!</p></>) },
+          { bg: "linear-gradient(160deg,#3a2a05,#050505 55%,#2a1748)", body: (
+            <>
+              <p className="text-lg text-gray-300">Tu personalidad cinéfila es…</p>
+              <p className="text-4xl sm:text-5xl font-black text-yellow-300 my-4 leading-tight">{st.pers.t}</p>
+              <p className="text-lg text-gray-200">{st.pers.d}</p>
+              <p className="text-sm text-gray-400 mt-6">🏅 {st.badges} logro{st.badges === 1 ? "" : "s"} desbloqueado{st.badges === 1 ? "" : "s"}{isOwner ? " · 👑 Fundador" : ""}</p>
+            </>) },
+          { bg: "linear-gradient(160deg,#0b2a17,#050505 60%,#1d1236)", body: (
+            <>
+              <p className="text-3xl sm:text-4xl font-black text-white">¡Compártelo!</p>
+              <p className="text-gray-300 mt-2 mb-6">Tu tarjeta se comparte como imagen en Instagram, TikTok, Facebook y WhatsApp.</p>
+              <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
+                <button data-autofocus onClick={() => shareWrap("share")} disabled={wrapBusy} className="col-span-2 bg-gradient-to-r from-green-500 to-lime-400 text-black font-black py-4 rounded-2xl cursor-pointer disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-white/70">{wrapBusy ? "Creando tu tarjeta…" : "📸 Compartir mi tarjeta"}</button>
+                <button onClick={() => shareWrap("whatsapp")} className="bg-[#25D366] text-white font-bold py-3 rounded-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/70">WhatsApp<span className="block text-[10px] font-semibold opacity-90">con tu tarjeta</span></button>
+                <button onClick={() => shareWrap("facebook")} className="bg-[#1877F2] text-white font-bold py-3 rounded-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/70">Facebook<span className="block text-[10px] font-semibold opacity-90">con tu tarjeta</span></button>
+                <button onClick={() => shareWrap("download")} disabled={wrapBusy} className="col-span-2 bg-white/10 text-white font-bold py-3 rounded-2xl cursor-pointer disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-white/70">📥 Descargar imagen (para Instagram y TikTok)</button>
+              </div>
+            </>) },
+        ];
+        const last = slides.length - 1;
+        const sl = slides[Math.min(wrapStep, last)];
+        return (
+          <div data-tv-modal className="fixed inset-0 z-[92] flex items-center justify-center bg-black/90 select-none" onKeyDown={(e) => { if (e.key === "ArrowRight") setWrapStep((n) => Math.min(last, n + 1)); if (e.key === "ArrowLeft") setWrapStep((n) => Math.max(0, n - 1)); }}>
+            <div className="relative w-full h-full sm:w-[440px] sm:h-[min(820px,94vh)] sm:rounded-[32px] overflow-hidden flex flex-col" style={{ background: sl.bg, transition: "background .6s" }}>
+              <div className="flex gap-1.5 px-4 pt-4" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)" }}>
+                {slides.map((_, i) => <span key={"wb-" + i} className="flex-1 h-1 rounded-full bg-white/20 overflow-hidden"><span className="block h-full bg-white transition-all duration-500" style={{ width: i <= wrapStep ? "100%" : "0%" }} /></span>)}
+              </div>
+              <div className="flex items-center justify-between px-4 pt-3">
+                <span className="text-xs font-black text-white/80">Cineverso Mágico</span>
+                <button data-close-on-back onClick={() => setWrapOpen(false)} aria-label="Cerrar" className="w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center cursor-pointer focus:outline-none focus:ring-4 focus:ring-white/70"><X className="w-4 h-4" /></button>
+              </div>
+              <div key={"ws-" + wrapStep} className="flex-1 flex flex-col items-center justify-center text-center px-7" style={{ animation: "cvStory .45s ease-out both" }}>{sl.body}</div>
+              {wrapStep < last && (
+                <>
+                  <button aria-label="Anterior" onClick={() => setWrapStep((n) => Math.max(0, n - 1))} className="absolute left-0 top-20 bottom-24 w-1/3 cursor-pointer focus:outline-none" tabIndex={-1} />
+                  <button aria-label="Siguiente" onClick={() => setWrapStep((n) => Math.min(last, n + 1))} className="absolute right-0 top-20 bottom-24 w-2/3 cursor-pointer focus:outline-none" tabIndex={-1} />
+                  <div className="px-6 pb-6 relative z-10" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
+                    <button data-autofocus onClick={() => setWrapStep((n) => Math.min(last, n + 1))} className="w-full bg-white text-black font-black py-3.5 rounded-2xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Siguiente ›</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* COMPARTIR */}
       {shareTarget && (() => {
         const url = shareUrlOf(shareTarget);
@@ -7546,6 +7907,23 @@ export default function Home() {
                     className="w-full bg-[#121212] border border-gray-800 rounded-xl px-4 py-3 text-base font-bold text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                   <span className="block text-right text-[10px] text-gray-600 mt-1">{editName.length}/20</span>
+                </div>
+                <div className="bg-[#121212] border border-gray-800 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                  <span>
+                    <span className="block text-sm font-bold text-white">🎂 Cumpleaños</span>
+                    <span className="block text-[11px] text-gray-400">Ese día te saludamos con una sorpresa.</span>
+                  </span>
+                  <span className="flex gap-2">
+                    <select value={editBirthday.slice(3)} onChange={(e) => setEditBirthday((editBirthday.slice(0, 2) || "01") + "-" + e.target.value)} className="bg-[#050505] border border-gray-800 rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Día">
+                      <option value="">Día</option>
+                      {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => <option key={"bd-" + d} value={d}>{Number(d)}</option>)}
+                    </select>
+                    <select value={editBirthday.slice(0, 2)} onChange={(e) => setEditBirthday(e.target.value + "-" + (editBirthday.slice(3) || "01"))} className="bg-[#050505] border border-gray-800 rounded-lg px-2 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" aria-label="Mes">
+                      <option value="">Mes</option>
+                      {["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"].map((m, i) => <option key={"bm-" + i} value={String(i + 1).padStart(2, "0")}>{m}</option>)}
+                    </select>
+                    {editBirthday && <button type="button" onClick={() => setEditBirthday("")} className="text-xs text-gray-400 hover:text-white px-1 cursor-pointer">✕</button>}
+                  </span>
                 </div>
                 <div className="bg-[#121212] border border-gray-800 rounded-xl p-3 space-y-3">
                   <label className="flex items-center justify-between cursor-pointer gap-3">
