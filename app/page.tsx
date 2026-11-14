@@ -5502,7 +5502,28 @@ export default function Home() {
   const [listening, setListening] = useState(false);
   const voiceRef = useRef<any>(null);
   const exploreInputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => { try { const w = window as any; setVoiceOk(!!(w.SpeechRecognition || w.webkitSpeechRecognition)); } catch (e) {} }, []);
+  // En iPhone/iPad no se muestra: el teclado ya trae su propio micrófono (dictado) y Safari deja el micrófono encendido
+  useEffect(() => {
+    try {
+      const w = window as any;
+      const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1);
+      setVoiceOk(!ios && !tvMode && !!(w.SpeechRecognition || w.webkitSpeechRecognition));
+    } catch (e) {}
+  }, [tvMode]);
+  // El micrófono se apaga solo: al terminar de hablar, a los 8 s, al salir de Explorar o al cambiar de app
+  const stopVoice = () => {
+    const r = voiceRef.current;
+    voiceRef.current = null;
+    setListening(false);
+    if (r) { try { r.onresult = null; r.onend = null; r.onerror = null; } catch (e) {} try { r.abort(); } catch (e) { try { r.stop(); } catch (e2) {} } }
+  };
+  useEffect(() => { if (activeTab !== "explorar") stopVoice(); }, [activeTab]);
+  useEffect(() => {
+    const onHide = () => { if (document.hidden) stopVoice(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", stopVoice);
+    return () => { document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", stopVoice); stopVoice(); };
+  }, []);
   useEffect(() => {
     if (activeTab !== "explorar" || tvMode) return;
     const t = setTimeout(() => { try { if (exploreInputRef.current && !exploreSearch) exploreInputRef.current.focus({ preventScroll: true } as any); } catch (e) {} }, 250);
@@ -5512,17 +5533,23 @@ export default function Home() {
     const w = window as any;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) { showToast("Tu navegador no permite buscar por voz."); return; }
-    if (listening && voiceRef.current) { try { voiceRef.current.stop(); } catch (e) {} return; }
+    if (listening || voiceRef.current) { stopVoice(); return; }
     try {
       const r = new SR();
-      r.lang = "es-PE"; r.interimResults = true; r.maxAlternatives = 1;
-      r.onresult = (ev: any) => { let txt = ""; for (let i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript; setExploreSearch(txt.replace(/[.¿?¡!]+$/g, "").trim()); };
-      r.onerror = (ev: any) => { setListening(false); if (ev && ev.error === "not-allowed") showToast("Permite el micrófono para buscar por voz 🎤", 6000); };
-      r.onend = () => setListening(false);
+      r.lang = "es-PE"; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+      const limit = setTimeout(() => { if (voiceRef.current === r) stopVoice(); }, 8000);
+      r.onresult = (ev: any) => {
+        let txt = "", final = false;
+        for (let i = 0; i < ev.results.length; i++) { txt += ev.results[i][0].transcript; if (ev.results[i].isFinal) final = true; }
+        setExploreSearch(txt.replace(/[.¿?¡!]+$/g, "").trim());
+        if (final) { clearTimeout(limit); stopVoice(); try { exploreInputRef.current && exploreInputRef.current.blur(); } catch (e) {} }
+      };
+      r.onerror = (ev: any) => { clearTimeout(limit); stopVoice(); if (ev && ev.error === "not-allowed") showToast("Permite el micrófono para buscar por voz 🎤", 6000); };
+      r.onend = () => { clearTimeout(limit); if (voiceRef.current === r) { voiceRef.current = null; setListening(false); } };
       voiceRef.current = r;
       setListening(true);
       r.start();
-    } catch (e) { setListening(false); showToast("No se pudo usar el micrófono."); }
+    } catch (e) { stopVoice(); showToast("No se pudo usar el micrófono."); }
   };
 
   const filteredExploreMovies = catalog.filter((movie) => {
@@ -6162,7 +6189,7 @@ export default function Home() {
               type="search"
               enterKeyHint="search"
               autoComplete="off"
-              placeholder="Título, actor, director, saga o año…"
+              placeholder={listening ? "Te escucho… di una película o actor" : "Buscar títulos, actores, sagas…"}
               value={exploreSearch}
               onChange={(e) => setExploreSearch(e.target.value)}
               onFocus={() => setSearchFocus(true)}
@@ -6178,7 +6205,6 @@ export default function Home() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v1a7 7 0 0 0 14 0v-1" /><line x1="12" y1="18" x2="12" y2="22" /></svg>
               </button>
             )}
-            {listening && <p className="absolute left-12 -bottom-6 text-xs font-bold text-red-400">🎤 Te escucho… di el nombre de una película o actor</p>}
             {searchFocus && searchSuggest.length > 0 && (
               <div className="absolute left-0 right-0 top-full mt-2 bg-[#141414] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden" role="listbox">
                 {searchSuggest.map((m) => {
@@ -6269,8 +6295,8 @@ export default function Home() {
             ))}
           </div>
 
-          <h2 className={"text-xl font-black text-white pt-2 " + (searchQ ? "" : "capitalize")}>
-            {searchQ ? (filteredExploreMovies.length ? "Resultados para «" + exploreSearch.trim() + "»" : "") : exploreGenreFilter === "Todos" ? "Todas las Películas y Series" : exploreGenreFilter === "Novedades" ? "🆕 Novedades (últimos 30 días)" : exploreGenreFilter}
+          <h2 className="text-xl font-black text-white pt-2">
+            {searchQ ? (filteredExploreMovies.length ? "Resultados para «" + exploreSearch.trim() + "»" : "") : exploreGenreFilter === "Todos" ? "Todas las películas y series" : exploreGenreFilter === "Novedades" ? "🆕 Novedades (últimos 30 días)" : exploreGenreFilter}
           </h2>
 
           {filteredExploreMovies.length === 0 ? (
