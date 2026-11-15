@@ -224,6 +224,19 @@ const LEGACY_CSS = LEGACY_RULES + "@supports not (aspect-ratio: 1 / 1) {" + LEGA
 // Se ejecuta antes que todo. Si el navegador es antiguo o la app no arranca,
 // manda a la versión TV ultraligera (/tv.html), que funciona en cualquier Smart TV.
 const TV_GUARD_JS = [
+  // Pequeños complementos para navegadores de celular algo antiguos (Huawei, Samsung, etc.)
+  "(function(){try{var AP=Array.prototype;",
+  "if(!AP.at)AP.at=function(n){n=Math.trunc(n)||0;if(n<0)n+=this.length;return this[n];};",
+  "if(!AP.findLast)AP.findLast=function(f,t){for(var i=this.length-1;i>=0;i--)if(f.call(t,this[i],i,this))return this[i];};",
+  "if(!AP.findLastIndex)AP.findLastIndex=function(f,t){for(var i=this.length-1;i>=0;i--)if(f.call(t,this[i],i,this))return i;return -1;};",
+  "if(!AP.toSorted)AP.toSorted=function(c){return this.slice().sort(c);};",
+  "if(!AP.toReversed)AP.toReversed=function(){return this.slice().reverse();};",
+  "if(!String.prototype.at)String.prototype.at=function(n){n=Math.trunc(n)||0;if(n<0)n+=this.length;return this.charAt(n)||undefined;};",
+  "if(!String.prototype.replaceAll)String.prototype.replaceAll=function(a,b){return typeof a==='string'?this.split(a).join(b):this.replace(a,b);};",
+  "if(!Object.hasOwn)Object.hasOwn=function(o,k){return Object.prototype.hasOwnProperty.call(o,k);};",
+  "if(typeof Promise!=='undefined'&&!Promise.withResolvers)Promise.withResolvers=function(){var r,j;var p=new Promise(function(a,b){r=a;j=b;});return{promise:p,resolve:r,reject:j};};",
+  "if(typeof structuredClone==='undefined')window.structuredClone=function(v){return v===undefined?v:JSON.parse(JSON.stringify(v));};",
+  "}catch(e){}})();",
   "(function(){try{",
   "var s=location.search;",
   "if(/[?&](completa|admin)\\b/.test(s)){try{sessionStorage.setItem('cv_full','1')}catch(e){}return;}",
@@ -2869,6 +2882,13 @@ export default function Home() {
     const savedAny = progressRef.current.find((p) => String(p.id) === String(selectedMovie.id));
     const saved = savedAny && (!ep || savedAny.episodeId === ep.id) ? savedAny : undefined;
     const onMeta = () => {
+      // Enviado desde el celular: empieza en el mismo minuto
+      const cs = castStartRef.current;
+      if (cs && cs.id === String(selectedMovie.id)) {
+        castStartRef.current = null;
+        if (cs.time > 3) { try { video.currentTime = cs.time; } catch (e) {} }
+        return;
+      }
       if (saved && saved.time > 5 && (!video.duration || saved.time < video.duration - 60)) {
         try { video.currentTime = saved.time; } catch (e) {}
       }
@@ -3155,7 +3175,24 @@ export default function Home() {
   };
 
   // TRANSMITIR a TV: AirPlay (iPhone/iPad/Mac) o Chromecast / TV compatible (Chrome, Android)
-  const handleCast = () => {
+  // "Transmitir": abre una guía con TODAS las formas de ver en la TV (Chromecast, AirPlay,
+  // duplicar pantalla o abrir la web en la TV) según el teléfono que se use
+  const [castSheet, setCastSheet] = useState(false);
+  const [castErr, setCastErr] = useState("");
+  const castInfo = (() => {
+    if (typeof navigator === "undefined") return { ios: false, android: false, huawei: false, samsung: false, remote: false, airplay: false };
+    const ua = navigator.userAgent || "";
+    const v: any = playerRef.current;
+    return {
+      ios: /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1),
+      android: /Android/i.test(ua),
+      huawei: /HUAWEI|Honor|HarmonyOS|HuaweiBrowser|HMSCore/i.test(ua),
+      samsung: /SamsungBrowser|SM-[A-Z0-9]/i.test(ua),
+      remote: !!(v && v.remote && typeof v.remote.prompt === "function"),
+      airplay: !!(v && typeof v.webkitShowPlaybackTargetPicker === "function"),
+    };
+  })();
+  const doCast = () => {
     const v: any = playerRef.current;
     if (!v) return;
     try {
@@ -3166,17 +3203,19 @@ export default function Home() {
       if (v.remote && typeof v.remote.prompt === "function") {
         v.remote
           .prompt()
-          .then(() => showToast("Conectando con tu TV..."))
+          .then(() => { setCastSheet(false); showToast("Conectando con tu TV..."); })
           .catch((err: any) => {
             const n = err && err.name;
-            if (n === "NotFoundError") showToast("No se encontró ninguna TV o Chromecast. Revisa que estén en la misma red Wi-Fi.", 7000);
-            else if (n === "NotSupportedError") showToast("Este video no se puede transmitir desde aquí. En Chrome usa el menú ⋮ → Transmitir.", 7000);
-            else if (n !== "AbortError" && n !== "NotAllowedError") showToast("No se pudo transmitir. Inténtalo de nuevo.", 5000);
+            if (n === "NotFoundError" || n === "NotSupportedError") setCastSheet(true);
+            if (n === "NotFoundError") setCastErr("No apareció ninguna TV compatible con Chromecast. Eso NO significa que estén en otra red: casi siempre es porque tu TV no tiene Chromecast (por ejemplo LG, Samsung o Hisense sin Google TV). Usa una de las otras opciones de abajo 👇");
+            else if (n === "NotSupportedError") setCastErr("Este video no se puede enviar con Chromecast desde aquí. Usa «Duplicar pantalla» o abre Cineverso en la TV 👇");
+            else if (n !== "AbortError" && n !== "NotAllowedError") { setCastErr("No se pudo transmitir. Prueba otra opción de abajo 👇"); setCastSheet(true); }
           });
         return;
       }
     } catch (e) {}
-    showToast("Tu navegador no permite transmitir desde la página. En Chrome usa el menú ⋮ → Transmitir; en iPhone usa AirPlay.", 8000);
+    setCastErr("");
+    setCastSheet(true);
   };
 
   // Avisos cuando la TV se conecta o se desconecta
@@ -4099,6 +4138,96 @@ export default function Home() {
         return res;
       });
   // ---------- Reacciones a reseñas ----------
+  // ---------- Enviar a mi TV (como Netflix): la TV con Cineverso abierto y la misma cuenta aparece sola ----------
+  const castStartRef = useRef<{ id: string; time: number } | null>(null);
+  const [castTvs, setCastTvs] = useState<{ id: string; name: string }[] | null>(null);
+  const [castBusy, setCastBusy] = useState(false);
+  const [castOn, setCastOn] = useState("");
+  const deviceName = () => {
+    const ua = navigator.userAgent || "";
+    if (/Web0S|webOS|NetCast/i.test(ua)) return "TV LG";
+    if (/Tizen/i.test(ua)) return "TV Samsung";
+    if (/AFT[A-Z]/.test(ua)) return "Fire TV";
+    if (/BRAVIA|SonyCEBrowser/i.test(ua)) return "TV Sony";
+    if (/VIDAA|Hisense/i.test(ua)) return "TV Hisense";
+    if (/Android TV|GoogleTV|CrKey/i.test(ua)) return "Google TV";
+    if (tvMode) return "Smart TV";
+    if (/Windows/.test(ua)) return "PC (Windows)";
+    if (/Macintosh/.test(ua)) return "Mac";
+    return "Computadora";
+  };
+  // Esta pantalla (TV o PC) se anuncia a los celulares de la misma cuenta y espera órdenes
+  const [castPc, setCastPc] = useState(false);
+  useEffect(() => { try { setCastPc(window.matchMedia("(hover: hover) and (pointer: fine)").matches && window.innerWidth >= 1000); } catch (e) {} }, []);
+  const isCastTarget = !!accountUser && (tvMode || castPc);
+  useEffect(() => {
+    if (!isCastTarget) return;
+    let tvId = "";
+    try { tvId = localStorage.getItem("cv_tv_id") || ""; if (!tvId) { tvId = "tv-" + Math.random().toString(36).slice(2, 12); localStorage.setItem("cv_tv_id", tvId); } } catch (e) { return; }
+    let since = Date.now();
+    const ping = (action: string) => { try { fetch("/api/community", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", keepalive: action === "tvOff", body: JSON.stringify({ action, tvId, name: deviceName() }) }).catch(() => {}); } catch (e) {} };
+    const poll = () => {
+      if (document.hidden) return;
+      fetch("/api/community?castPoll=" + encodeURIComponent(tvId) + "&since=" + since, { cache: "no-store", credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: any) => {
+          const cmd = d && d.cmd;
+          if (!cmd || cmd.at <= since) return;
+          since = cmd.at;
+          const mv = customMovies.find((m) => String(m.id) === String(cmd.movieId));
+          if (!mv) { showToast("Tu celular envió una película que esta TV no encuentra. Recarga la página."); return; }
+          castStartRef.current = { id: String(mv.id), time: Number(cmd.time) || 0 };
+          showToast("📲 Reproduciendo desde tu celular: " + mv.title, 5000);
+          const eps = sortedEpisodes(mv);
+          const ep = cmd.ep && cmd.ep.id ? eps.find((x) => x.id === cmd.ep.id) : null;
+          if (ep) playEpisode(mv, ep);
+          else { setNextUp(null); setCurrentEpisode(null); setUsingBackup(false); setPlayerError(""); setSelectedMovie(mv); setIsPlaying(true); }
+        })
+        .catch(() => {});
+    };
+    ping("tvPing");
+    const tp = setInterval(() => { if (!document.hidden) ping("tvPing"); }, 30000);
+    const tq = setInterval(poll, 3000);
+    const onVis = () => { if (document.hidden) ping("tvOff"); else { ping("tvPing"); poll(); } };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(tp); clearInterval(tq); document.removeEventListener("visibilitychange", onVis); ping("tvOff"); };
+  }, [isCastTarget, accountUser && accountUser.id, customMovies.length]);
+  const sendToTv = (tv: { id: string; name: string }) => {
+    const v = playerRef.current;
+    if (!selectedMovie) return;
+    setCastBusy(true);
+    commPost({ action: "castTo", tvId: tv.id, movieId: String(selectedMovie.id), time: v ? Math.floor(v.currentTime || 0) : 0, ep: currentEpisode ? { id: currentEpisode.id } : null, from: activeProfile.name }).then(({ ok, d }) => {
+      setCastBusy(false);
+      if (!ok) { setCastErr((d && d.error) || "No se pudo enviar a la TV."); setCastSheet(true); return; }
+      try { if (v) v.pause(); } catch (e) {}
+      setCastSheet(false);
+      setCastOn(tv.name);
+      showToast("📺 Reproduciendo en tu " + tv.name, 5000);
+    });
+  };
+  // Un toque: si hay UNA TV con tu cuenta, se envía directo. Si no, se usa AirPlay / Chromecast del teléfono.
+  const handleCast = () => {
+    setCastErr("");
+    const native = () => {
+      if (castInfo.airplay || (castInfo.remote && !castInfo.huawei)) { doCast(); return; }
+      setCastTvs([]);
+      setCastSheet(true);
+    };
+    if (!accountUser) { native(); return; }
+    setCastBusy(true);
+    fetch("/api/community?tvs=1", { cache: "no-store", credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: any) => {
+        setCastBusy(false);
+        const tvs = d && Array.isArray(d.tvs) ? d.tvs : [];
+        setCastTvs(tvs);
+        if (tvs.length === 1) sendToTv(tvs[0]);
+        else if (tvs.length > 1) setCastSheet(true);
+        else native();
+      })
+      .catch(() => { setCastBusy(false); native(); });
+  };
+  useEffect(() => { if (!isPlaying) setCastOn(""); }, [isPlaying]);
   const REACTS = ["❤️", "😂", "😮", "👏"];
   const reactReview = (at: number, emoji: string) => {
     if (!selectedMovie) return;
@@ -8531,6 +8660,75 @@ export default function Home() {
                 onNext={nextEpisodeOf(selectedMovie, currentEpisode) ? () => { const nx = nextEpisodeOf(selectedMovie, currentEpisode); if (nx) playEpisode(selectedMovie, nx); } : null}
                 loading={videoLoading}
               />
+            )}
+            {castOn && (
+              <div className="absolute inset-0 z-[40] bg-black/85 flex flex-col items-center justify-center gap-3 text-center px-6">
+                <span className="text-5xl">📺</span>
+                <p className="text-lg font-black text-white">Se está viendo en tu {castOn}</p>
+                <p className="text-xs text-gray-400">Usa el control de la TV para pausar o adelantar.</p>
+                <button onClick={() => { setCastOn(""); try { const v = playerRef.current; if (v) { const r: any = v.play(); if (r && r.catch) r.catch(() => {}); } } catch (e) {} }} className="mt-1 bg-white text-black font-bold text-sm px-5 py-2.5 rounded-xl cursor-pointer">▶ Seguir viendo aquí</button>
+              </div>
+            )}
+            {castSheet && (
+              <div className="fixed inset-0 z-[70] bg-black/80 flex items-end sm:items-center justify-center" onClick={() => setCastSheet(false)} role="dialog" aria-modal="true" aria-label="Ver en la TV">
+                <div onClick={(e) => e.stopPropagation()} className="w-full sm:max-w-lg max-h-[92%] overflow-y-auto bg-[#141414] border border-gray-800 rounded-t-3xl sm:rounded-3xl p-5 space-y-3" style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-lg font-black text-white">📺 Ver en tu TV</p>
+                    <button onClick={() => setCastSheet(false)} aria-label="Cerrar" className="w-9 h-9 rounded-full bg-white/10 text-white cursor-pointer">✕</button>
+                  </div>
+                  {castErr && <p className="text-sm text-yellow-200 bg-yellow-500/10 border border-yellow-500/40 rounded-xl px-3 py-2.5">{castErr}</p>}
+                  {castTvs && castTvs.length > 1 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-gray-400">¿En cuál pantalla?</p>
+                      {castTvs.map((tv) => (
+                        <button key={"tv-" + tv.id} disabled={castBusy} onClick={() => sendToTv(tv)} className="w-full flex items-center gap-3 text-left bg-green-500/10 hover:bg-green-500/20 border border-green-500/40 rounded-2xl p-3.5 cursor-pointer disabled:opacity-60">
+                          <span className="text-2xl">{/PC|Mac|Computadora/.test(tv.name) ? "💻" : "📺"}</span>
+                          <span className="flex-1 font-black text-white">{tv.name}</span>
+                          <span className="text-xs font-bold text-green-300">Enviar ›</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {(!castTvs || castTvs.length === 0) && (
+                    <div className="bg-green-500/10 border border-green-500/40 rounded-2xl p-3.5">
+                      <p className="font-black text-white">✨ Conéctala en un toque (recomendado)</p>
+                      <p className="text-xs text-gray-200 mt-1 leading-relaxed">
+                        {accountUser
+                          ? "Abre cineversomagico.com en tu Smart TV e inicia sesión con tu misma cuenta. Luego vuelve a tocar 📺 aquí: la película pasa sola a la TV, en el mismo minuto."
+                          : "Inicia sesión aquí y en tu Smart TV (cineversomagico.com) con la misma cuenta. Desde ahí, tocar 📺 envía la película directo a la TV."}
+                      </p>
+                    </div>
+                  )}
+                  {castInfo.airplay && (
+                    <button onClick={() => { setCastSheet(false); doCast(); }} className="w-full text-left bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-3.5 cursor-pointer">
+                      <p className="font-black text-white">🍎 AirPlay</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Para Apple TV y Smart TV compatibles con AirPlay (Samsung, LG y otras recientes).</p>
+                    </button>
+                  )}
+                  {castInfo.remote && !castInfo.huawei && (
+                    <button onClick={doCast} className="w-full text-left bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-3.5 cursor-pointer">
+                      <p className="font-black text-white">📡 Chromecast / Google TV</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Solo para TVs con Chromecast integrado (Google TV, Android TV) o con un Chromecast conectado, en el mismo Wi-Fi.</p>
+                    </button>
+                  )}
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5">
+                    <p className="font-black text-white">📱 Otra opción: duplicar la pantalla</p>
+                    <p className="text-xs text-gray-300 mt-1 leading-relaxed">
+                      {castInfo.ios
+                        ? "Abre el Centro de control (desliza desde la esquina superior derecha) → «Duplicar pantalla» → elige tu TV."
+                        : castInfo.huawei
+                        ? "Desliza desde arriba para abrir los accesos rápidos → «Proyección inalámbrica» (o «Huawei Share» / «Proyectar») → elige tu TV. En la TV activa «Screen Mirroring» o «Miracast» si te lo pide."
+                        : castInfo.samsung
+                        ? "Desliza desde arriba → «Smart View» → elige tu TV."
+                        : castInfo.android
+                        ? "Desliza desde arriba → «Transmitir pantalla», «Smart View», «Proyectar» o «Duplicar pantalla» (el nombre cambia según la marca) → elige tu TV."
+                        : "En Windows pulsa Windows + K y elige tu TV. En Mac usa «Duplicar pantalla» en el Centro de control."}
+                    </p>
+                    <p className="text-[11px] text-gray-500 mt-1.5">Después pon el video en pantalla completa y gira el celular.</p>
+                  </div>
+                  <p className="text-[11px] text-gray-500">El celular y la TV deben estar en el mismo Wi-Fi para Chromecast, AirPlay y duplicar pantalla.</p>
+                </div>
+              </div>
             )}
             {nextSaga && !playerError && (
               <div style={{ position: "absolute", right: 20, bottom: touchUi ? 118 : 70, zIndex: 35 }} className="bg-[#141414]/95 border border-gray-700 rounded-2xl p-3 shadow-2xl flex gap-3 items-center max-w-[340px]" data-tv-modal>

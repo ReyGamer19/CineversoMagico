@@ -14,6 +14,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_HASH = "29c7b21d3cde1ccfca37823fe7bb9eed806a4e2d145df2a531f1be576ee26031";
 const ROW_REVIEWS = 7;
 const ROW_LISTS = 8;
+const ROW_REMOTE = 13; // { byUser: { [uid]: { tvs: {id,name,at}[], cmd?: {...} } } } — "Enviar a mi TV"
 const ROW_POLLS = 10; // { polls: Poll[] } — votaciones de la comunidad
 const ROW_OWNER = 9; // { ownerUid } — la cuenta del dueño de la web (la registra el admin con su clave)
 const noStore = { "Cache-Control": "no-store, max-age=0" };
@@ -190,6 +191,20 @@ export async function GET(req: Request) {
       const mine = u ? lists.filter((l) => l.uid === u.id || l.followers.indexOf(u.id) !== -1).map((l) => listOut(l, u.id)) : [];
       return NextResponse.json({ lists: pub, mine }, { headers: noStore });
     }
+    // Enviar a mi TV: TVs conectadas de esta cuenta, y órdenes pendientes para una TV
+    if (sp.get("tvs") || sp.get("castPoll")) {
+      const u = await currentUser().catch(() => null);
+      if (!u) return NextResponse.json({ tvs: [], cmd: null }, { headers: noStore });
+      const { data } = await readRow(ROW_REMOTE);
+      const me = data && data.byUser && data.byUser[u.id] ? data.byUser[u.id] : { tvs: [] };
+      if (sp.get("castPoll")) {
+        const tvId = (sp.get("castPoll") || "").slice(0, 40), since = Number(sp.get("since") || 0);
+        const cmd = me.cmd && me.cmd.tvId === tvId && me.cmd.at > since && Date.now() - me.cmd.at < 120000 ? me.cmd : null;
+        return NextResponse.json({ cmd }, { headers: noStore });
+      }
+      const fresh = (Array.isArray(me.tvs) ? me.tvs : []).filter((t: any) => Date.now() - t.at < 75000);
+      return NextResponse.json({ tvs: fresh.map((t: any) => ({ id: t.id, name: t.name })) }, { headers: noStore });
+    }
     // Votaciones: la abierta y las cerradas de los últimos 7 días
     if (sp.get("polls")) {
       const u = await currentUser().catch(() => null);
@@ -281,6 +296,42 @@ export async function POST(req: Request) {
 
     const u = await currentUser();
     if (!u) return fail("Inicia sesión para participar", 401);
+
+    // La TV avisa que está encendida con Cineverso abierto (cada ~30 s)
+    if (action === "tvPing" || action === "tvOff") {
+      const id = str(b.tvId, 40), name = str(b.name, 40) || "TV";
+      if (!/^[a-z0-9-]{6,40}$/i.test(id)) return fail("TV inválida", 400);
+      await updateRow(ROW_REMOTE, () => ({ byUser: {} }), (d) => {
+        d.byUser = d.byUser || {};
+        const now = Date.now();
+        // limpieza: cuentas sin actividad en 2 días
+        for (const k of Object.keys(d.byUser)) { const e = d.byUser[k]; const last = Math.max(0, ...((e.tvs || []).map((t: any) => t.at)), e.cmd ? e.cmd.at : 0); if (now - last > 2 * 86400000) delete d.byUser[k]; }
+        const me = d.byUser[u.id] || { tvs: [] };
+        me.tvs = (me.tvs || []).filter((t: any) => t.id !== id && now - t.at < 86400000);
+        if (action === "tvPing") me.tvs.unshift({ id, name, at: now });
+        me.tvs = me.tvs.slice(0, 5);
+        d.byUser[u.id] = me;
+      });
+      return NextResponse.json({ ok: true }, { headers: noStore });
+    }
+    // El celular le pide a una TV que reproduzca una película desde cierto minuto
+    if (action === "castTo") {
+      const tvId = str(b.tvId, 40), movieId = str(b.movieId, 60);
+      const time = Math.max(0, Math.min(86400, Number(b.time) || 0));
+      const ep = b.ep && typeof b.ep === "object" ? { id: str(b.ep.id, 60) } : null;
+      if (!tvId || !movieId) return fail("Datos incompletos", 400);
+      let found = false;
+      const cmd = { id: Math.random().toString(36).slice(2, 10), tvId, movieId, time, ep, at: Date.now(), from: str(b.from, 30) };
+      await updateRow(ROW_REMOTE, () => ({ byUser: {} }), (d) => {
+        d.byUser = d.byUser || {};
+        const me = d.byUser[u.id];
+        if (!me || !(me.tvs || []).some((t: any) => t.id === tvId && Date.now() - t.at < 120000)) return;
+        found = true;
+        me.cmd = cmd;
+      });
+      if (!found) return fail("Tu TV ya no está conectada. Abre Cineverso en la TV.", 404);
+      return NextResponse.json({ ok: true }, { headers: noStore });
+    }
 
     // Votar (se puede cambiar el voto mientras la votación siga abierta)
     if (action === "pollVote") {
