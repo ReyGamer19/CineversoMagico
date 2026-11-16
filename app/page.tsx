@@ -1687,7 +1687,10 @@ export default function Home() {
   ]);
   // Canales de TV en vivo que el administrador agrega (se guardan en el servidor y se ven en todos los dispositivos)
   const [extraLiveChannels, setExtraLiveChannels] = useState<Channel[]>([]);
-  const shownChannels = useMemo(() => liveChannels.concat(extraLiveChannels), [liveChannels, extraLiveChannels]);
+  const [channelLogos, setChannelLogos] = useState<Record<string, string>>({});
+  // Aplica el logo real que el admin haya puesto para cada canal
+  const withLogo = (ch: Channel): Channel => (channelLogos[ch.id] ? { ...ch, logo: channelLogos[ch.id] } : ch);
+  const shownChannels = useMemo(() => liveChannels.concat(extraLiveChannels).map(withLogo), [liveChannels, extraLiveChannels, channelLogos]);
 
   const [activeChannel, setActiveChannel] = useState<Channel>(liveChannels[0]);
   const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>("Todos");
@@ -5350,7 +5353,7 @@ export default function Home() {
   const loadLiveChannels = () => {
     fetch("/api/community?tvlive=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: any) => { if (d && Array.isArray(d.channels)) setExtraLiveChannels(d.channels as Channel[]); })
+      .then((d: any) => { if (d) { if (Array.isArray(d.channels)) setExtraLiveChannels(d.channels as Channel[]); if (d.logos && typeof d.logos === "object") setChannelLogos(d.logos); } })
       .catch(() => {});
   };
   useEffect(() => { loadLiveChannels(); }, []);
@@ -5371,6 +5374,19 @@ export default function Home() {
   const deleteLiveChannel = (ch: Channel) => {
     if (!window.confirm("¿Quitar el canal «" + ch.name + "» de TV en vivo?")) return;
     adminPollCall("tvDelete", { id: ch.id }).then((res) => { if (res && res.ok) { showToast("Canal quitado."); loadLiveChannels(); } });
+  };
+  // Editor de logos de canales
+  const [logoSearch, setLogoSearch] = useState("");
+  const [logoDraft, setLogoDraft] = useState<Record<string, string>>({});
+  const saveChannelLogo = (ch: Channel) => {
+    const url = (logoDraft[ch.id] ?? channelLogos[ch.id] ?? "").trim();
+    adminPollCall("tvLogo", { id: ch.id, logo: url }).then((res) => {
+      if (!res) return;
+      if (!res.ok) { showToast((res.d && res.d.error) || "No se pudo guardar el logo."); return; }
+      setChannelLogos((m) => { const n = { ...m }; if (url) n[ch.id] = url; else delete n[ch.id]; return n; });
+      setLogoDraft((d) => { const n = { ...d }; delete n[ch.id]; return n; });
+      showToast(url ? "🖼️ Logo actualizado." : "Logo quitado (vuelve al automático).");
+    });
   };
 
   // ---------- Ordenar sagas con TMDB (administrador) ----------
@@ -6854,7 +6870,7 @@ export default function Home() {
             <div className="px-3 py-2.5 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex items-center justify-between z-20 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg border border-gray-800 shrink-0 overflow-hidden">
-                  <ChannelLogo ch={activeChannel} big />
+                  <ChannelLogo ch={withLogo(activeChannel)} big />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
@@ -7200,6 +7216,31 @@ export default function Home() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* EDITOR DE LOGOS DE CANALES */}
+          <div className="bg-[#0f0f0f] border border-indigo-900/40 p-4 sm:p-6 rounded-3xl space-y-3">
+            <div>
+              <h3 className="text-lg font-bold text-white">🖼️ Logos de los canales</h3>
+              <p className="text-xs text-gray-500">Ponle a cada canal su logo real pegando el enlace de una imagen (termina en .png, .jpg, .svg o .webp). Si lo dejas vacío, se usa el logo automático con sus iniciales.</p>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-500 absolute left-3 top-3" />
+              <input type="text" value={logoSearch} onChange={(e) => setLogoSearch(e.target.value)} placeholder="Buscar canal…" className="w-full bg-[#050505] border border-gray-800 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+              {shownChannels.filter((ch) => !logoSearch.trim() || (ch.name + " " + (ch.shortCode || "")).toLowerCase().includes(logoSearch.trim().toLowerCase())).slice(0, 120).map((ch) => (
+                <div key={"lg-" + ch.id} className="flex items-center gap-2.5 rounded-xl border border-gray-800 bg-[#050505] px-2.5 py-2">
+                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-800 shrink-0"><ChannelLogo ch={logoDraft[ch.id] !== undefined ? { ...ch, logo: logoDraft[ch.id] } : ch} big /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{ch.name}</p>
+                    <input type="text" value={logoDraft[ch.id] ?? channelLogos[ch.id] ?? ""} onChange={(e) => setLogoDraft((d) => ({ ...d, [ch.id]: e.target.value }))} placeholder="https://…/logo.png" className="mt-1 w-full bg-[#0c0c0c] border border-gray-800 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                  </div>
+                  <button onClick={() => saveChannelLogo(ch)} className="text-[11px] font-bold px-2.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shrink-0">Guardar</button>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-500">💡 ¿De dónde saco los logos? Busca en <b className="text-gray-300">Wikimedia Commons</b> el nombre del canal + «logo» (muchos son de uso libre), o usa el logo de la web oficial del canal. Haz clic derecho en la imagen → «Copiar dirección de la imagen».</p>
           </div>
 
           {/* SAGAS AUTOMÁTICAS */}

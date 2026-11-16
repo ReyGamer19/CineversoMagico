@@ -206,7 +206,8 @@ export async function GET(req: Request) {
     if (sp.get("tvlive")) {
       const { data } = await readRow(ROW_TVLIVE);
       const list = data && Array.isArray(data.channels) ? data.channels : [];
-      return NextResponse.json({ channels: list }, { headers: noStore });
+      const logos = data && data.logos && typeof data.logos === "object" ? data.logos : {};
+      return NextResponse.json({ channels: list, logos }, { headers: noStore });
     }
     // Enviar a mi TV: TVs conectadas de esta cuenta, y órdenes pendientes para una TV
     if (sp.get("tvs") || sp.get("castPoll")) {
@@ -309,7 +310,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, channel: ch }, { headers: noStore });
       }
       const id = str(b.id, 40);
-      await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.channels = (Array.isArray(d.channels) ? d.channels : []).filter((x: any) => x.id !== id); });
+      await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.channels = (Array.isArray(d.channels) ? d.channels : []).filter((x: any) => x.id !== id); if (d.logos) delete d.logos[id]; });
+      return NextResponse.json({ ok: true }, { headers: noStore });
+    }
+    // Poner o quitar el logo real de un canal (por su id)
+    if (action === "tvLogo") {
+      if (!(await passwordOk(b?.password))) { await new Promise((r) => setTimeout(r, 700)); return fail("Clave incorrecta", 401); }
+      const id = str(b.id, 60), url = str(b.logo, 500).trim();
+      if (!id) return fail("Canal inválido", 400);
+      if (url && !/^https:\/\/[^\s"']+\.(png|jpe?g|webp|svg|gif)(\?[^\s"']*)?$/i.test(url)) return fail("Pega el enlace de una imagen (https…png, jpg, svg o webp).", 400);
+      await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.logos = d.logos && typeof d.logos === "object" ? d.logos : {}; if (url) d.logos[id] = url; else delete d.logos[id]; });
       return NextResponse.json({ ok: true }, { headers: noStore });
     }
     // Administrador: crear, cerrar o borrar votaciones
