@@ -80,6 +80,27 @@ interface AccountUser {
   isAdmin: boolean;
 }
 
+// Logo de canal: usa la imagen real si hay una válida; si no, dibuja un logo con las iniciales y un color propio.
+function ChannelLogo({ ch, big }: { ch: { name: string; shortCode?: string; logo?: string }; big?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const real = !!ch.logo && /^https:\/\//.test(ch.logo) && !/unsplash\.com|images\.unsplash/.test(ch.logo);
+  const mono = (
+    ch.shortCode ||
+    ch.name.replace(/[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("") ||
+    ch.name.slice(0, 2)
+  ).toUpperCase().slice(0, 4);
+  let n = 0; for (let i = 0; i < ch.name.length; i++) n = (n * 31 + ch.name.charCodeAt(i)) >>> 0;
+  const hue = n % 360, hue2 = (hue + 45) % 360;
+  if (real && !failed) {
+    return <img src={ch.logo} alt={ch.name} loading="lazy" decoding="async" onError={() => setFailed(true)} className="w-full h-full object-contain bg-white/5" />;
+  }
+  return (
+    <div className="w-full h-full flex items-center justify-center font-black text-white" style={{ background: `linear-gradient(135deg, hsl(${hue} 62% 45%), hsl(${hue2} 68% 32%))`, fontSize: (big ? 15 : 12) - Math.max(0, mono.length - 2) * 2, letterSpacing: "0.01em", textShadow: "0 1px 2px rgba(0,0,0,.35)" }}>
+      {mono}
+    </div>
+  );
+}
+
 interface Channel {
   id: string;
   name: string;
@@ -6832,8 +6853,8 @@ export default function Home() {
             {/* INFO DEL CANAL (con EN VIVO al lado del nombre) */}
             <div className="px-3 py-2.5 sm:p-4 bg-[#0a0a0a] border-t border-gray-900 flex items-center justify-between z-20 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gray-900 border border-gray-800 shrink-0 flex items-center justify-center text-[10px] font-black text-gray-200 overflow-hidden">
-                  {activeChannel.shortCode || activeChannel.name.slice(0, 2).toUpperCase()}
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg border border-gray-800 shrink-0 overflow-hidden">
+                  <ChannelLogo ch={activeChannel} big />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
@@ -6899,8 +6920,8 @@ export default function Home() {
                         tabIndex={0}
                         className={`p-2.5 rounded-xl flex items-center gap-3 cursor-pointer select-none touch-manipulation [-webkit-tap-highlight-color:transparent] active:bg-[#222] transition border focus:outline-none focus:ring-2 focus:ring-green-500 ${activeChannel.id === ch.id ? "bg-[#1c1c1c] border-green-500/80 shadow-md shadow-green-950/30" : "hover:bg-[#151515] border-transparent"}`}
                       >
-                        <div className="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center font-black text-xs text-gray-200 border border-gray-800 shrink-0 overflow-hidden">
-                          <span>{ch.shortCode || ch.name.slice(0, 2).toUpperCase()}</span>
+                        <div className="w-9 h-9 rounded-lg border border-gray-800 shrink-0 overflow-hidden">
+                          <ChannelLogo ch={ch} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h5 className="text-xs font-bold text-gray-200 truncate">{ch.name}</h5>
