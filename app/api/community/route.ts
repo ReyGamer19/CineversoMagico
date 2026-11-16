@@ -14,6 +14,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_HASH = "29c7b21d3cde1ccfca37823fe7bb9eed806a4e2d145df2a531f1be576ee26031";
 const ROW_REVIEWS = 7;
 const ROW_LISTS = 8;
+const ROW_TVLIVE = 14; // { channels: [{id,name,shortCode,embedUrl,logo,currentShow}] } — TV en vivo (YouTube oficial) que agrega el admin
 const ROW_REMOTE = 13; // { byUser: { [uid]: { tvs: {id,name,at}[], cmd?: {...} } } } — "Enviar a mi TV"
 const ROW_POLLS = 10; // { polls: Poll[] } — votaciones de la comunidad
 const ROW_OWNER = 9; // { ownerUid } — la cuenta del dueño de la web (la registra el admin con su clave)
@@ -143,6 +144,16 @@ const pollOut = (p: Poll, uid: string) => {
   return { id: p.id, q: p.q, open: p.open, at: p.at, closedAt: p.closedAt || 0, winner: p.winner || "", total, mine: uid && p.votes ? p.votes[uid] || "" : "",
     opts: p.opts.map((o) => ({ id: o.id, label: o.label, img: o.img || "", movieId: o.movieId || "", count: counts[o.id] || 0 })) };
 };
+// Convierte un enlace de YouTube (canal o video en vivo) en una URL para incrustar.
+// Acepta: youtube.com/channel/UC..., un ID de canal UC..., un enlace de video o un ID de 11 caracteres.
+function ytEmbed(raw: string): { embedUrl: string; kind: "channel" | "video" } | null {
+  const u = (raw || "").trim();
+  let m = u.match(/channel\/(UC[0-9A-Za-z_-]{20,})/) || u.match(/^(UC[0-9A-Za-z_-]{20,})$/);
+  if (m) return { embedUrl: "https://www.youtube.com/embed/live_stream?channel=" + m[1], kind: "channel" };
+  m = u.match(/[?&]v=([0-9A-Za-z_-]{11})/) || u.match(/youtu\.be\/([0-9A-Za-z_-]{11})/) || u.match(/\/(?:live|embed|shorts)\/([0-9A-Za-z_-]{11})/) || u.match(/^([0-9A-Za-z_-]{11})$/);
+  if (m) return { embedUrl: "https://www.youtube.com/embed/" + m[1], kind: "video" };
+  return null;
+}
 const listOut = (l: List, uid?: string) => ({
   id: l.id, owner: l.owner, avatar: l.avatar, name: l.name, desc: l.desc, movieIds: l.movieIds,
   followers: l.followers.length, mine: !!uid && l.uid === uid, following: !!uid && l.followers.indexOf(uid) !== -1, updated: l.updated,
@@ -190,6 +201,12 @@ export async function GET(req: Request) {
         .slice(0, 40).map((l) => listOut(l, u ? u.id : undefined));
       const mine = u ? lists.filter((l) => l.uid === u.id || l.followers.indexOf(u.id) !== -1).map((l) => listOut(l, u.id)) : [];
       return NextResponse.json({ lists: pub, mine }, { headers: noStore });
+    }
+    // TV en vivo (YouTube oficial) agregada por el admin — pública
+    if (sp.get("tvlive")) {
+      const { data } = await readRow(ROW_TVLIVE);
+      const list = data && Array.isArray(data.channels) ? data.channels : [];
+      return NextResponse.json({ channels: list }, { headers: noStore });
     }
     // Enviar a mi TV: TVs conectadas de esta cuenta, y órdenes pendientes para una TV
     if (sp.get("tvs") || sp.get("castPoll")) {
@@ -263,6 +280,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true }, { headers: noStore });
     }
 
+    // Administrador: agregar o quitar canales de TV en vivo (YouTube oficial)
+    if (action === "tvAdd" || action === "tvDelete") {
+      if (!(await passwordOk(b?.password))) { await new Promise((r) => setTimeout(r, 700)); return fail("Clave incorrecta", 401); }
+      if (action === "tvAdd") {
+        const parsed = ytEmbed(str(b.url, 300));
+        if (!parsed) return fail("Pega el enlace del CANAL de YouTube (youtube.com/channel/UC…) o de un video en vivo.", 400);
+        const name = clean(str(b.name, 50).trim());
+        if (!name) return fail("Escribe el nombre del canal", 400);
+        const ch = {
+          id: "ytlive-" + Math.random().toString(36).slice(2, 9),
+          name,
+          shortCode: clean(str(b.shortCode, 6).trim()) || name.slice(0, 3).toUpperCase(),
+          country: "Internacional 🌍",
+          category: "Noticias",
+          logo: /^https:\/\/[^\s"']+$/.test(str(b.logo, 400)) ? str(b.logo, 400) : "",
+          currentShow: clean(str(b.currentShow, 60).trim()) || "En vivo",
+          embedUrl: parsed.embedUrl,
+        };
+        await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.channels = (Array.isArray(d.channels) ? d.channels : []).filter((x: any) => x.embedUrl !== ch.embedUrl).concat(ch).slice(0, 60); });
+        return NextResponse.json({ ok: true, channel: ch }, { headers: noStore });
+      }
+      const id = str(b.id, 40);
+      await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.channels = (Array.isArray(d.channels) ? d.channels : []).filter((x: any) => x.id !== id); });
+      return NextResponse.json({ ok: true }, { headers: noStore });
+    }
     // Administrador: crear, cerrar o borrar votaciones
     if (action === "adminPollCreate" || action === "adminPollClose" || action === "adminPollDelete") {
       if (!await passwordOk(b?.password)) { await new Promise((r) => setTimeout(r, 800)); return fail("Clave incorrecta", 401); }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { 
   Play, Info, Plus, Search, Bell, Sparkles, Check, 
   Tv, Shield, User, PlusCircle, Trash2, ChevronRight, X, AlertCircle, FileText, LogOut, Lock, Sparkle, Settings, Film, Radio, Globe, ChevronDown, Edit3, Share2, Cast, Maximize2, RefreshCw, ArrowLeft, SkipForward, SkipBack, Download, Home as HomeIcon, Bookmark, Shuffle, ThumbsUp, ThumbsDown
@@ -1630,8 +1630,43 @@ export default function Home() {
       logo: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=200&auto=format&fit=crop",
       currentShow: "Telemundo Ecuador",
       videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+    },
+
+    // INTERNACIONAL 🌍 — señales oficiales y gratuitas en YouTube (legales para retransmitir)
+    {
+      id: "intl-france24-es",
+      name: "France 24 Español",
+      shortCode: "F24",
+      country: "Internacional 🌍",
+      category: "Noticias",
+      logo: "/logos/france24.png",
+      currentShow: "Noticias internacionales 24/7",
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UCUdOoVWuWmgo1wByzcsyKDQ",
+    },
+    {
+      id: "intl-dw-es",
+      name: "DW Español",
+      shortCode: "DW",
+      country: "Internacional 🌍",
+      category: "Noticias",
+      logo: "/logos/dw.png",
+      currentShow: "Noticias y análisis en vivo",
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UCT4Jg8h03dD0iN3Pb5L0PMA",
+    },
+    {
+      id: "intl-euronews-es",
+      name: "Euronews Español",
+      shortCode: "EN",
+      country: "Internacional 🌍",
+      category: "Noticias",
+      logo: "/logos/euronews.png",
+      currentShow: "Noticias de Europa y el mundo",
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UCyoGb3SMlTlB8CLGVH4c8Rw",
     }
   ]);
+  // Canales de TV en vivo que el administrador agrega (se guardan en el servidor y se ven en todos los dispositivos)
+  const [extraLiveChannels, setExtraLiveChannels] = useState<Channel[]>([]);
+  const shownChannels = useMemo(() => liveChannels.concat(extraLiveChannels), [liveChannels, extraLiveChannels]);
 
   const [activeChannel, setActiveChannel] = useState<Channel>(liveChannels[0]);
   const [selectedCountryFilter, setSelectedCountryFilter] = useState<string>("Todos");
@@ -1671,10 +1706,10 @@ export default function Home() {
   const countryOrder = ["Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽", "Internacional 🌍"];
   
   const channelsGroupedByCountry = countryOrder.reduce((acc, countryName) => {
-    const matchingChannels = liveChannels.filter(ch => {
+    const matchingChannels = shownChannels.filter(ch => {
       const matchesC = ch.country === countryName;
       const matchesSearch = searchGuide === "" ? true : ch.name.toLowerCase().includes(searchGuide.toLowerCase()) || (ch.shortCode && ch.shortCode.toLowerCase().includes(searchGuide.toLowerCase()));
-      const matchesCountryTab = selectedCountryFilter === "Todos" ? true : selectedCountryFilter === "Deportes" ? ch.category === "Deportes" || ch.country.includes("Deportes") : ch.country.toLowerCase().includes(selectedCountryFilter.toLowerCase());
+      const matchesCountryTab = selectedCountryFilter === "Todos" ? true : selectedCountryFilter === "Deportes" ? ch.category === "Deportes" || ch.country.includes("Deportes") : selectedCountryFilter === "Internacional" ? ch.country.includes("Internacional") : ch.country.toLowerCase().includes(selectedCountryFilter.toLowerCase());
       return matchesC && matchesSearch && matchesCountryTab;
     });
     if (matchingChannels.length > 0) {
@@ -5290,6 +5325,33 @@ export default function Home() {
     fetch("/api/community?polls=1&all=1", { cache: "no-store", credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((d: any) => { if (d && Array.isArray(d.polls)) setAdminPolls(d.polls); }).catch(() => {});
   };
   useEffect(() => { if (activeTab === "admin" && isAdmin) loadAdminPolls(); }, [activeTab, isAdmin]);
+  // ---------- TV en vivo (YouTube oficial) ----------
+  const loadLiveChannels = () => {
+    fetch("/api/community?tvlive=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: any) => { if (d && Array.isArray(d.channels)) setExtraLiveChannels(d.channels as Channel[]); })
+      .catch(() => {});
+  };
+  useEffect(() => { loadLiveChannels(); }, []);
+  const [tvForm, setTvForm] = useState({ url: "", name: "", shortCode: "", currentShow: "" });
+  const [tvBusy, setTvBusy] = useState(false);
+  const addLiveChannel = () => {
+    if (!tvForm.url.trim() || !tvForm.name.trim()) { showToast("Pega el enlace del canal y escribe su nombre."); return; }
+    setTvBusy(true);
+    adminPollCall("tvAdd", { ...tvForm }).then((res) => {
+      setTvBusy(false);
+      if (!res) return;
+      if (!res.ok) { showToast((res.d && res.d.error) || "No se pudo agregar."); return; }
+      showToast("📡 ¡Canal agregado! Ya aparece en TV en vivo → Internacional.");
+      setTvForm({ url: "", name: "", shortCode: "", currentShow: "" });
+      loadLiveChannels();
+    });
+  };
+  const deleteLiveChannel = (ch: Channel) => {
+    if (!window.confirm("¿Quitar el canal «" + ch.name + "» de TV en vivo?")) return;
+    adminPollCall("tvDelete", { id: ch.id }).then((res) => { if (res && res.ok) { showToast("Canal quitado."); loadLiveChannels(); } });
+  };
+
   // ---------- Ordenar sagas con TMDB (administrador) ----------
   type SagaHit = { id: string; title: string; year: string; saga: string; sagaOrder: number; sagaId: number; tmdbId: number; prev: string; prevOrder: number; include: boolean };
   const [sagaScan, setSagaScan] = useState<{ busy: boolean; done: number; total: number; hits: SagaHit[]; noKey?: boolean } | null>(null);
@@ -6809,7 +6871,7 @@ export default function Home() {
               </div>
 
               <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 scrollbar-none text-[11px]">
-                {["Todos", "Perú", "Chile", "Argentina", "Bolivia", "Italia", "España", "Ecuador", "Deportes"].map((filter) => (
+                {["Todos", "Internacional", "Perú", "Chile", "Argentina", "Bolivia", "Italia", "España", "Ecuador", "Deportes"].map((filter) => (
                   <button
                     key={filter}
                     onClick={() => setSelectedCountryFilter(filter)}
@@ -7079,6 +7141,38 @@ export default function Home() {
               <li>No se puede guardar un catálogo vacío por accidente.</li>
               <li>Si ves una entrada que no reconoces, pulsa «🚨 Cerrar sesión en todos los demás»: cualquier otro dispositivo pierde el acceso al instante.</li>
             </ul>
+          </div>
+
+          {/* TV EN VIVO (YOUTUBE OFICIAL) */}
+          <div className="bg-[#0f0f0f] border border-red-900/40 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">📡 Canales de TV en vivo (YouTube oficial)</h3>
+              <p className="text-xs text-gray-500">Agrega señales <b>oficiales y gratuitas</b> de YouTube (noticias, cultura, etc.). Son legales para mostrar porque usan el reproductor oficial del canal. Aparecen en <b>TV en vivo → Internacional</b>.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input type="text" value={tvForm.url} onChange={(e) => setTvForm((f) => ({ ...f, url: e.target.value }))} placeholder="Enlace del canal: youtube.com/channel/UC…" className="sm:col-span-2 w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <input type="text" value={tvForm.name} onChange={(e) => setTvForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre (ej: NASA TV)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <input type="text" value={tvForm.currentShow} onChange={(e) => setTvForm((f) => ({ ...f, currentShow: e.target.value }))} placeholder="Qué emite (ej: En vivo 24/7)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+            </div>
+            <button onClick={addLiveChannel} disabled={tvBusy} className="text-sm font-black text-white bg-red-600 hover:bg-red-500 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">{tvBusy ? "Agregando…" : "➕ Agregar canal"}</button>
+            <div className="text-[11px] text-gray-500 leading-relaxed bg-[#080808] border border-gray-900 rounded-xl p-3">
+              <b className="text-gray-300">¿Cómo saco el enlace del canal?</b> En YouTube, entra al canal oficial → pulsa su nombre → «Compartir canal» → «Copiar enlace del canal». Debe empezar con <b>youtube.com/channel/UC…</b>. También sirve el enlace de un video en vivo. El canal debe estar transmitiendo en vivo para verse.
+            </div>
+            {extraLiveChannels.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-400">Canales que agregaste:</p>
+                {extraLiveChannels.map((ch) => (
+                  <div key={"tvl-" + ch.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
+                    <span className="text-xl">📡</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-white truncate">{ch.name}</span>
+                      <span className="block text-[11px] text-gray-500 truncate">{ch.currentShow}</span>
+                    </span>
+                    <button onClick={() => deleteLiveChannel(ch)} className="text-[11px] font-bold px-3 py-2 rounded-lg bg-[#181818] text-red-400 border border-gray-800 cursor-pointer hover:border-red-400">Quitar</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* SAGAS AUTOMÁTICAS */}
