@@ -284,21 +284,28 @@ export async function POST(req: Request) {
     if (action === "tvAdd" || action === "tvDelete") {
       if (!(await passwordOk(b?.password))) { await new Promise((r) => setTimeout(r, 700)); return fail("Clave incorrecta", 401); }
       if (action === "tvAdd") {
-        const parsed = ytEmbed(str(b.url, 300));
-        if (!parsed) return fail("Pega el enlace del CANAL de YouTube (youtube.com/channel/UC…) o de un video en vivo.", 400);
         const name = clean(str(b.name, 50).trim());
         if (!name) return fail("Escribe el nombre del canal", 400);
-        const ch = {
-          id: "ytlive-" + Math.random().toString(36).slice(2, 9),
+        const url = str(b.url, 500).trim();
+        const parsed = ytEmbed(url);
+        // YouTube → reproductor oficial; si no, un enlace directo http(s) (m3u8, mp4…)
+        let embedUrl = "", videoUrl = "";
+        if (parsed) embedUrl = parsed.embedUrl;
+        else if (/^https?:\/\/[^\s"']+$/.test(url)) videoUrl = url;
+        else return fail("Pega un enlace válido: de YouTube (youtube.com/channel/UC…) o un enlace directo m3u8/mp4 que empiece con http.", 400);
+        const GROUPS = ["Internacional 🌍", "Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽"];
+        const CATS = ["Noticias", "Señal Abierta", "Deportes", "Entretenimiento", "Regional"];
+        const ch: any = {
+          id: (videoUrl ? "live-" : "ytlive-") + Math.random().toString(36).slice(2, 9),
           name,
           shortCode: clean(str(b.shortCode, 6).trim()) || name.slice(0, 3).toUpperCase(),
-          country: "Internacional 🌍",
-          category: "Noticias",
+          country: GROUPS.indexOf(str(b.group, 30)) !== -1 ? str(b.group, 30) : "Internacional 🌍",
+          category: CATS.indexOf(str(b.category, 20)) !== -1 ? str(b.category, 20) : "Noticias",
           logo: /^https:\/\/[^\s"']+$/.test(str(b.logo, 400)) ? str(b.logo, 400) : "",
           currentShow: clean(str(b.currentShow, 60).trim()) || "En vivo",
-          embedUrl: parsed.embedUrl,
         };
-        await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.channels = (Array.isArray(d.channels) ? d.channels : []).filter((x: any) => x.embedUrl !== ch.embedUrl).concat(ch).slice(0, 60); });
+        if (embedUrl) ch.embedUrl = embedUrl; else ch.videoUrl = videoUrl;
+        await updateRow(ROW_TVLIVE, () => ({ channels: [] }), (d) => { d.channels = (Array.isArray(d.channels) ? d.channels : []).filter((x: any) => (x.embedUrl || x.videoUrl) !== (embedUrl || videoUrl)).concat(ch).slice(0, 80); });
         return NextResponse.json({ ok: true, channel: ch }, { headers: noStore });
       }
       const id = str(b.id, 40);

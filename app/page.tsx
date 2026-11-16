@@ -5333,7 +5333,7 @@ export default function Home() {
       .catch(() => {});
   };
   useEffect(() => { loadLiveChannels(); }, []);
-  const [tvForm, setTvForm] = useState({ url: "", name: "", shortCode: "", currentShow: "" });
+  const [tvForm, setTvForm] = useState({ url: "", name: "", shortCode: "", currentShow: "", group: "Internacional 🌍", category: "Noticias" });
   const [tvBusy, setTvBusy] = useState(false);
   const addLiveChannel = () => {
     if (!tvForm.url.trim() || !tvForm.name.trim()) { showToast("Pega el enlace del canal y escribe su nombre."); return; }
@@ -5343,7 +5343,7 @@ export default function Home() {
       if (!res) return;
       if (!res.ok) { showToast((res.d && res.d.error) || "No se pudo agregar."); return; }
       showToast("📡 ¡Canal agregado! Ya aparece en TV en vivo → Internacional.");
-      setTvForm({ url: "", name: "", shortCode: "", currentShow: "" });
+      setTvForm((f) => ({ url: "", name: "", shortCode: "", currentShow: "", group: f.group, category: f.category }));
       loadLiveChannels();
     });
   };
@@ -7147,16 +7147,22 @@ export default function Home() {
           <div className="bg-[#0f0f0f] border border-red-900/40 p-4 sm:p-6 rounded-3xl space-y-4">
             <div>
               <h3 className="text-lg font-bold text-white">📡 Canales de TV en vivo (YouTube oficial)</h3>
-              <p className="text-xs text-gray-500">Agrega señales <b>oficiales y gratuitas</b> de YouTube (noticias, cultura, etc.). Son legales para mostrar porque usan el reproductor oficial del canal. Aparecen en <b>TV en vivo → Internacional</b>.</p>
+              <p className="text-xs text-gray-500">Agrega canales a tu TV en vivo: <b>YouTube oficial</b> (pega el enlace del canal) o un <b>enlace directo m3u8/mp4</b>. Elige en qué grupo aparecen.</p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <input type="text" value={tvForm.url} onChange={(e) => setTvForm((f) => ({ ...f, url: e.target.value }))} placeholder="Enlace del canal: youtube.com/channel/UC…" className="sm:col-span-2 w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <input type="text" value={tvForm.url} onChange={(e) => setTvForm((f) => ({ ...f, url: e.target.value }))} placeholder="youtube.com/channel/UC…  o  https://…/stream.m3u8" className="sm:col-span-2 w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
               <input type="text" value={tvForm.name} onChange={(e) => setTvForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre (ej: NASA TV)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
               <input type="text" value={tvForm.currentShow} onChange={(e) => setTvForm((f) => ({ ...f, currentShow: e.target.value }))} placeholder="Qué emite (ej: En vivo 24/7)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <select value={tvForm.group} onChange={(e) => setTvForm((f) => ({ ...f, group: e.target.value }))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400">
+                {["Internacional 🌍", "Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽"].map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <select value={tvForm.category} onChange={(e) => setTvForm((f) => ({ ...f, category: e.target.value }))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400">
+                {["Noticias", "Señal Abierta", "Deportes", "Entretenimiento", "Regional"].map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
             </div>
             <button onClick={addLiveChannel} disabled={tvBusy} className="text-sm font-black text-white bg-red-600 hover:bg-red-500 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">{tvBusy ? "Agregando…" : "➕ Agregar canal"}</button>
             <div className="text-[11px] text-gray-500 leading-relaxed bg-[#080808] border border-gray-900 rounded-xl p-3">
-              <b className="text-gray-300">¿Cómo saco el enlace del canal?</b> En YouTube, entra al canal oficial → pulsa su nombre → «Compartir canal» → «Copiar enlace del canal». Debe empezar con <b>youtube.com/channel/UC…</b>. También sirve el enlace de un video en vivo. El canal debe estar transmitiendo en vivo para verse.
+              <b className="text-gray-300">YouTube:</b> entra al canal oficial → su nombre → «Compartir canal» → «Copiar enlace del canal» (empieza con <b>youtube.com/channel/UC…</b>). <b className="text-gray-300">m3u8/mp4:</b> pega el enlace directo del stream.<br /><span className="text-yellow-500/90">⚠️ Agrega solo señales que tengas derecho a mostrar (tu propia señal, señales públicas/abiertas o con permiso). Retransmitir canales comerciales sin autorización es ilegal y puede hacer que cierren tu web.</span>
             </div>
             {extraLiveChannels.length > 0 && (
               <div className="space-y-2">
