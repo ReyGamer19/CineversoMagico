@@ -130,16 +130,16 @@ export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }:
 
 // 1. Si es un embed (Filemoon / Vidhide / Streamwish), carga el iframe
   const esEmbed =
-    typeof src === "string" &&
-    (src.includes("filemoon") ||
-      src.includes("vidhide") ||
-      src.includes("streamwish") ||
-      src.includes("/e/"));
+    typeof currentUrl === "string" &&
+    (currentUrl.includes("filemoon") ||
+      currentUrl.includes("vidhide") ||
+      currentUrl.includes("streamwish") ||
+      currentUrl.includes("/e/"));
 
   if (esEmbed) {
     return (
       <iframe
-        src={src}
+        src={currentUrl}
         className="w-full h-full border-0 bg-black"
         allowFullScreen
         allow="autoplay; fullscreen; picture-in-picture"
