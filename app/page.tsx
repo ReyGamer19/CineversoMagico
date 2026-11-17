@@ -7027,10 +7027,10 @@ export default function Home() {
       {activeTab === "admin" && isAdmin && (
         <div className="max-w-7xl mx-auto pt-28 px-4 sm:px-6 md:px-12 pb-24 space-y-10 overflow-x-hidden">
           {/* NAVEGACIÓN DEL PANEL */}
-          <div className="sticky top-16 z-20 -mx-4 sm:-mx-6 md:-mx-12 px-4 sm:px-6 md:px-12 py-3 bg-[#0a0a0a]/95 backdrop-blur border-b border-gray-900">
-            <div className="flex gap-2 overflow-x-auto scrollbar-none">
+          <div className="sticky top-16 z-20 -mx-4 sm:-mx-6 md:-mx-12 px-4 sm:px-6 md:px-12 pt-3 pb-5 bg-[#050505]">
+            <div className="flex gap-1.5 bg-[#121212] border border-gray-800/80 rounded-2xl p-1.5 overflow-x-auto scrollbar-none shadow-lg shadow-black/50">
               {(([["catalogo","🎬 Catálogo"],["tv","📡 TV en vivo"],["comunidad","💬 Comunidad"],["avisos","🔔 Avisos"],["seguridad","🛡️ Seguridad"],["estadisticas","📊 Estadísticas"]]) as [string,string][]).map(([k, label]) => (
-                <button key={k} onClick={() => setAdminSection(k as any)} className={"px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-green-500 " + (adminSection === k ? "bg-green-500 text-black" : "bg-[#161616] text-gray-300 hover:text-white border border-gray-800")}>{label}</button>
+                <button key={k} onClick={() => setAdminSection(k as any)} className={"flex-1 min-w-max px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-green-500 " + (adminSection === k ? "bg-green-500 text-black shadow-md shadow-green-500/20" : "text-gray-400 hover:text-white hover:bg-white/5")}>{label}</button>
               ))}
             </div>
           </div>
