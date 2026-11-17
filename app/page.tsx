@@ -3130,165 +3130,60 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import Hls from "hls.js";
 import type { Movie } from "../lib/types";
 
-// ===== REPRODUCTOR ROBUSTO (MP4 / HLS / EMBED DE IFRAME) =====
-export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie; fallbackUrl?: string; startAt?: number; onProgress?: (t: number, d: number) => void }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
-    (u, i, arr): u is string => !!u && arr.indexOf(u) === i
-  );
-  const [sourceIndex, setSourceIndex] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
-  const currentUrl = sources[sourceIndex];
+// ===== AQUÍ COMIENZA TU COMPONENTE / ARCHIVO PAGE.TSX =====
+export default function Page() {
+  const [playerError, setPlayerError] = useState<string>("");
 
-  // 1. VERIFICACIÓN CRUCIAL: Si es un embed, renderizamos el iframe directamente y cortamos el flujo aquí.
-  const esEmbed =
-    typeof currentUrl === "string" &&
-    (currentUrl.includes("filemoon") ||
-     currentUrl.includes("vidhide") ||
-     currentUrl.includes("streamwish") ||
-     currentUrl.includes("/e/"));
+  // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
+  const diagnoseVideo = (url: string, code: number) => {
+    // Si es un enlace de embed permitido, no hacemos la validación estricta de red
+    const esEmbed =
+      typeof url === "string" &&
+      (url.includes("filemoon") ||
+       url.includes("vidhide") ||
+       url.includes("streamwish") ||
+       url.includes("/e/"));
 
-  if (esEmbed) {
-    return (
-      <div className="relative w-full h-full bg-black rounded-lg overflow-hidden flex items-center justify-center">
-        <iframe
-          src={currentUrl}
-          className="w-full h-full border-0 absolute inset-0"
-          allowFullScreen
-          allow="autoplay; fullscreen; picture-in-picture"
-          referrerPolicy="origin"
-        />
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !currentUrl || failed) return;
-
-    let hls: Hls | null = null;
-    const isHls = /\.m3u8(\?|$)/i.test(currentUrl);
-
-    const goNext = () => {
-      if (sourceIndex < sources.length - 1) {
-        setSourceIndex((i) => i + 1);
-      } else {
-        setFailed(true);
-      }
-    };
-
-    const tryPlay = () => {
-      video.play().catch(() => {
-        // Si el navegador bloquea el autoplay con sonido, el usuario puede tocar play.
-      });
-    };
-
-    if (isHls && !video.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
-      hls = new Hls();
-      hls.loadSource(currentUrl);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) goNext();
-      });
-    } else {
-      video.src = currentUrl;
-      video.load();
-      tryPlay();
+    if (esEmbed) {
+      setPlayerError("");
+      return;
     }
 
-    video.addEventListener("error", goNext);
-    return () => {
-      video.removeEventListener("error", goNext);
-      if (hls) hls.destroy();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUrl, failed, retryKey]);
+    const fallback = code === 2
+      ? "Se cortó la conexión con el servidor del video. Pulsa Reintentar."
+      : "El video no se pudo abrir. Pulsa Reintentar; si vuelve a fallar, el enlace necesita revisarse.";
+    
+    if (!url) { setPlayerError("Esta película no tiene enlace de video."); return; }
 
-  // Reanudar donde se quedó y guardar el progreso (solo videos con duración finita)
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || failed) return;
-    let last = 0;
-    let resumed = false;
-
-    const onMeta = () => {
-      if (resumed) return;
-      resumed = true;
-      if (startAt && isFinite(v.duration) && startAt > 5 && startAt < v.duration - 20) {
-        v.currentTime = startAt;
-      }
-    };
-    const report = () => {
-      if (!onProgress || !isFinite(v.duration) || v.duration <= 0) return;
-      onProgress(v.currentTime, v.duration);
-    };
-    const onTime = () => {
-      const now = Date.now();
-      if (now - last < 5000) return;
-      last = now;
-      report();
-    };
-
-    v.addEventListener("loadedmetadata", onMeta);
-    v.addEventListener("timeupdate", onTime);
-    v.addEventListener("pause", report);
-    v.addEventListener("ended", report);
-    return () => {
-      v.removeEventListener("loadedmetadata", onMeta);
-      v.removeEventListener("timeupdate", onTime);
-      v.removeEventListener("pause", report);
-      v.removeEventListener("ended", report);
-      report();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUrl, failed, retryKey]);
-
-  if (failed || !currentUrl) {
-    return (
-      <div className="flex flex-col items-center justify-center text-center gap-4 p-6 max-w-sm mx-auto">
-        <AlertCircle className="w-12 h-12 text-red-500" />
-        <h4 className="text-lg font-bold text-white">No se pudo reproducir este video</h4>
-        <p className="text-xs text-gray-400">
-          El enlace del video no responde, está roto o tiene un formato que tu navegador no soporta (usa MP4 con H.264 o HLS .m3u8).
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <button
-            onClick={() => { setFailed(false); setSourceIndex(0); setRetryKey((k) => k + 1); }}
-            className="flex items-center gap-2 bg-white text-black font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
-          >
-            <RefreshCw className="w-4 h-4" /> Reintentar
-          </button>
-          {currentUrl && (
-            <a
-              href={currentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 bg-[#181818] border border-gray-800 text-white font-bold px-4 py-2 rounded-xl text-xs"
-            >
-              Abrir enlace
-            </a>
-          )}
-        </div>
-      </div>
-    );
-  }
+    fetch("/api/video-check?u=" + encodeURIComponent(url), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        if (!d) { setPlayerError(fallback); return; }
+        const st = d.status || 0;
+        const ct = String(d.contentType || "");
+        if (st === 401 || st === 403) setPlayerError("El servidor bloqueó este video (error " + st + "). Suele pasar cuando el archivo fue retirado. Hay que reemplazar el enlace desde el panel.");
+        else if (st === 404 || st === 410) setPlayerError("Este archivo ya no existe en el servidor (error " + st + "). Hay que reemplazar el enlace desde el panel.");
+        else if (st === 429) setPlayerError("El servidor del video está recibiendo demasiadas peticiones. Espera un minuto y pulsa Reintentar.");
+        else if (st >= 500) setPlayerError("El servidor del video está caído en este momento (error " + st + "). Inténtalo más tarde.");
+        else if (st === 0) setPlayerError("El servidor del video no responde. Revisa tu internet o inténtalo más tarde.");
+        else if (ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct)) setPlayerError("El enlace no es un video directo (es una página web). En el panel hay que poner el enlace directo al archivo .mp4.");
+        else setPlayerError(fallback);
+      });
+  };
 
   return (
-    <video
-      ref={videoRef}
-      controls
-      autoPlay
-      playsInline
-      preload="auto"
-      controlsList="nodownload"
-      disableRemotePlayback={false}
-      {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
-      className="w-full h-full object-contain bg-black"
-    >
-      Tu navegador no soporta el reproductor.
-    </video>
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-4xl">
+        <h1 className="text-2xl font-bold mb-4">Cineverso Mágico</h1>
+        {playerError && (
+          <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded-lg mb-4 text-sm">
+            {playerError}
+          </div>
+        )}
+        {/* Resto de tu interfaz y lógica de la página principal */}
+      </div>
+    </main>
   );
 }
 
