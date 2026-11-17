@@ -3111,7 +3111,7 @@ export default function Home() {
     };
   }, [selectedMovie]);
 
- // Cuando aparece el error, el foco va directo a "Reintentar" (funciona con el control remoto)
+  // Cuando aparece el error, el foco va directo a "Reintentar" (funciona con el control remoto)
   useEffect(() => {
     if (!playerError) return;
     const t = setTimeout(() => {
@@ -3125,25 +3125,10 @@ export default function Home() {
 
   // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
   const diagnoseVideo = (url: string, code: number) => {
-    // Si es un enlace de embed permitido, omitimos por completo la validación de red
-    const esEmbed =
-      typeof url === "string" &&
-      (url.includes("filemoon") ||
-       url.includes("vidhide") ||
-       url.includes("streamwish") ||
-       url.includes("/e/"));
-
-    if (esEmbed) {
-      setPlayerError("");
-      return;
-    }
-
     const fallback = code === 2
       ? "Se cortó la conexión con el servidor del video. Pulsa Reintentar."
       : "El video no se pudo abrir. Pulsa Reintentar; si vuelve a fallar, el enlace necesita revisarse.";
-    
     if (!url) { setPlayerError("Esta película no tiene enlace de video."); return; }
-
     fetch("/api/video-check?u=" + encodeURIComponent(url), { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
