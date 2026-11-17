@@ -1,3 +1,4 @@
+
 // Tipos compartidos de Cineverso Mágico
 
 export interface Profile {
@@ -6,6 +7,22 @@ export interface Profile {
   avatar: string;
   isKid: boolean;
   pin?: string;
+}
+
+// ===== SERVIDORES DE REPRODUCCIÓN =====
+
+export type VideoServerType =
+  | "auto"
+  | "mp4"
+  | "hls"
+  | "dash"
+  | "iframe";
+
+export interface VideoServer {
+  id: string;
+  name: string;
+  url: string;
+  type?: VideoServerType;
 }
 
 export interface Movie {
@@ -20,6 +37,10 @@ export interface Movie {
   bgImage: string;
   videoUrl: string;
   backupVideoUrl?: string;
+
+  // Lista de servidores alternativos de reproducción
+  videoServers?: VideoServer[];
+
   img?: string;
   duration?: string;
   genres?: string[];
@@ -33,8 +54,22 @@ export interface Channel {
   id: string;
   name: string;
   shortCode?: string;
-  country: "Perú 🇵🇪" | "Chile 🇨🇱" | "Argentina 🇦🇷" | "España 🇪🇸" | "Ecuador 🇪🇨" | "Bolivia 🇧🇴" | "Italia 🇮🇹" | "Deportes ⚽" | "Internacional 🌍";
-  category: "Señal Abierta" | "Deportes" | "Noticias" | "Entretenimiento" | "Regional";
+  country:
+    | "Perú 🇵🇪"
+    | "Chile 🇨🇱"
+    | "Argentina 🇦🇷"
+    | "España 🇪🇸"
+    | "Ecuador 🇪🇨"
+    | "Bolivia 🇧🇴"
+    | "Italia 🇮🇹"
+    | "Deportes ⚽"
+    | "Internacional 🌍";
+  category:
+    | "Señal Abierta"
+    | "Deportes"
+    | "Noticias"
+    | "Entretenimiento"
+    | "Regional";
   logo: string;
   currentShow: string;
   videoUrl?: string;
@@ -51,10 +86,12 @@ export interface ContinueItem {
 }
 
 // ===== GUÍA DE PROGRAMACIÓN (Ahora / Después) =====
+
 export interface EpgItem {
   t: string; // hora de inicio "HH:MM" (hora local del canal)
   title: string;
 }
+
 export type EpgMap = Record<string, EpgItem[]>;
 
 export interface NowNext {
@@ -63,5 +100,12 @@ export interface NowNext {
   progress: number; // 0 a 100
 }
 
-// Pestañas principales de la app
-export type Tab = "inicio" | "explorar" | "tv" | "milista" | "cuenta" | "admin";
+// ===== PESTAÑAS PRINCIPALES =====
+
+export type Tab =
+  | "inicio"
+  | "explorar"
+  | "tv"
+  | "milista"
+  | "cuenta"
+  | "admin";

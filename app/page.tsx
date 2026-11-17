@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import Hls from "hls.js";
 import { preconnect, preload } from "react-dom";
+import VideoServerManager from "@/app/components/VideoServerManager";
+import VideoServerSelector from "@/app/components/VideoServerSelector";
 
 interface Profile {
   id: string;
@@ -17,16 +19,30 @@ interface Profile {
   pinHash?: string;
   birthday?: string; // "MM-DD"
 }
+type VideoServerType =
+  | "auto"
+  | "mp4"
+  | "hls"
+  | "dash"
+  | "iframe";
 
+interface VideoServer {
+  id: string;
+  name: string;
+  url: string;
+  type?: VideoServerType;
+}
 interface Episode {
   id: string;
   season: number;
   number: number;
   title: string;
   videoUrl: string;
+  videoServers?: VideoServer[];
   duration?: string;
   addedAt?: number;
 }
+
 
 interface Movie {
   id: number | string;
@@ -40,6 +56,7 @@ interface Movie {
   bgImage: string;
   videoUrl: string;
   backupVideoUrl?: string;
+  videoServers?: VideoServer[];
   img?: string;
   duration?: string;
   genres?: string[];
@@ -59,9 +76,10 @@ interface Movie {
   releaseDate?: string;
   saga?: string;
   sagaOrder?: number;
-  sagaId?: number; // colección de TMDB
+  sagaId?: number;
   tmdbId?: number;
 }
+
 
 interface ProgressItem {
   id: number | string;
@@ -1793,6 +1811,7 @@ export default function Home() {
   const [newMovieType, setNewMovieType] = useState<"pelicula" | "serie">("pelicula");
   const [newMovieImage, setNewMovieImage] = useState("");
   const [newMovieVideoUrl, setNewMovieVideoUrl] = useState("");
+  const [newMovieVideoServers, setNewMovieVideoServers] = useState<VideoServer[]>([]);
   const [newMovieYear, setNewMovieYear] = useState("");
   const [newMovieDuration, setNewMovieDuration] = useState("");
   const [newMovieAge, setNewMovieAge] = useState("");
@@ -2286,12 +2305,16 @@ export default function Home() {
     return exists ? list.map((m) => (String(m.id) === String(op.movie.id) ? op.movie : m)) : [op.movie].concat(list);
   };
 
+  
   // Guarda UN cambio sin pisar el resto: primero lee el catálogo actual del servidor,
   // le aplica solo este cambio y lo vuelve a guardar. Así una copia vieja en otro
   // dispositivo ya no puede borrar ni reemplazar tus enlaces.
   const saveChange = (op: CatalogOp, okMsg: string) => {
     let pass = "";
-    try { pass = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {}
+    try {
+      pass = localStorage.getItem("cineverso_admin_pass") || "";
+    } catch (e) {}
+
     if (!pass) {
       // No guardamos nada a medias: pedimos la clave del servidor y luego seguimos
       pendingSaveRef.current = () => saveChange(op, okMsg);
@@ -2299,38 +2322,61 @@ export default function Home() {
       setShowServerPass(true);
       return;
     }
+
     setCustomMovies((prev) => applyOp(prev, op));
     setSyncing(true);
+
     fetch("/api/catalog?v=" + Date.now(), { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
       .then((d: any) => {
         if (!d || !Array.isArray(d.movies)) {
           setSyncing(false);
-          showToast("No se pudo leer el catálogo del servidor; el cambio NO se publicó. Inténtalo de nuevo.", 7000);
+          showToast(
+            "No se pudo leer el catálogo del servidor; el cambio NO se publicó. Inténtalo de nuevo.",
+            7000
+          );
           return;
         }
-        const finalList = applyOp(d.movies.length ? (d.movies as Movie[]) : customMovies, op);
+
+        const finalList = applyOp(
+          d.movies.length ? (d.movies as Movie[]) : customMovies,
+          op
+        );
+
         return fetch("/api/catalog", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: pass, movies: finalList }),
         })
-          .then((r) => r.json().catch(() => ({})).then((x: any) => ({ ok: r.ok, status: r.status, x })))
+          .then((r) =>
+            r.json()
+              .catch(() => ({}))
+              .then((x: any) => ({ ok: r.ok, status: r.status, x }))
+          )
           .then(({ ok, status, x }) => {
             setSyncing(false);
+
             if (ok) {
               setCustomMovies(finalList);
               setServerCatalog(true);
               showToast(okMsg + " ✔ Publicado en todos los dispositivos.");
             } else if (status === 401) {
               // El pase de administrador venció: se pide la clave y se vuelve a intentar este mismo cambio
-              try { localStorage.removeItem("cineverso_admin_pass"); } catch (e) {}
+              try {
+                localStorage.removeItem("cineverso_admin_pass");
+              } catch (e) {}
+
               pendingSaveRef.current = () => saveChange(op, okMsg);
-              setServerPassError("Por seguridad, vuelve a escribir tu clave de administrador.");
+              setServerPassError(
+                "Por seguridad, vuelve a escribir tu clave de administrador."
+              );
               setShowServerPass(true);
             } else {
-              showToast("No se pudo publicar (" + ((x && x.error) || status) + ").", 7000);
+              showToast(
+                "No se pudo publicar (" + ((x && x.error) || status) + ").",
+                7000
+              );
             }
           });
       })
@@ -2339,6 +2385,21 @@ export default function Home() {
         showToast("Sin conexión con el servidor. El cambio no se publicó.", 6000);
       });
   };
+
+  // Elimina una película o serie del catálogo.
+  const handleDeleteMovie = (id: number | string) => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de que deseas eliminar este contenido del catálogo?"
+    );
+
+    if (!confirmed) return;
+
+    saveChange(
+      { type: "delete", id },
+      "Contenido eliminado correctamente"
+    );
+  };
+
 
   // Al abrir el panel, carga siempre la versión más nueva del servidor
   useEffect(() => {
@@ -2889,9 +2950,11 @@ export default function Home() {
     }
   }, [selectedMovie, isPlaying]);
 
+
   // En TV, al entrar a Inicio el foco empieza en "Reproducir"
   useEffect(() => {
     if (!tvMode || activeTab !== "inicio" || selectedMovie) return;
+
     const t = setTimeout(() => {
       const a = document.activeElement;
       if (!a || a === document.body) {
@@ -2899,38 +2962,86 @@ export default function Home() {
         if (el) el.focus();
       }
     }, 300);
+
     return () => clearTimeout(t);
   }, [tvMode, activeTab, selectedMovie]);
 
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
+  const [selectedServerId, setSelectedServerId] = useState<string>("");
+  const [playerIframeUrl, setPlayerIframeUrl] = useState<string>("");
+
   const currentEpisodeRef = useRef<Episode | null>(null);
   currentEpisodeRef.current = currentEpisode;
+
   const [nextUp, setNextUp] = useState<{ ep: Episode; secs: number } | null>(null);
-  // "intro" | "credits" | "" -> qué botón de saltar se muestra (solo cambia el estado cuando hace falta)
+
+  // "intro" | "credits" | "" -> qué botón de saltar se muestra
   const [skipMode, setSkipMode] = useState<"" | "intro" | "credits">("");
   const skipModeRef = useRef<"" | "intro" | "credits">("");
+
   const updateSkip = (t: number, m: Movie | null) => {
     let mode: "" | "intro" | "credits" = "";
+
     if (m) {
-      if (m.introEnd && t >= (m.introStart || 0) && t < m.introEnd - 1) mode = "intro";
-      else if (m.creditsStart && t >= m.creditsStart) mode = "credits";
+      if (m.introEnd && t >= (m.introStart || 0) && t < m.introEnd - 1) {
+        mode = "intro";
+      } else if (m.creditsStart && t >= m.creditsStart) {
+        mode = "credits";
+      }
     }
+
     if (mode !== skipModeRef.current) {
       skipModeRef.current = mode;
       setSkipMode(mode);
     }
   };
-  // Reproductor de películas: MP4 directo o HLS (.m3u8), autoplay con respaldo en silencio
+
+  // Reproductor principal: MP4 y HLS con selección de servidores
   useEffect(() => {
     if (!isPlaying || !selectedMovie) return;
+
     const video = playerRef.current;
     if (!video) return;
+
     setPlayerError("");
+
     const ep = currentEpisodeRef.current;
-    const src = ep ? ep.videoUrl : usingBackup && selectedMovie.backupVideoUrl ? selectedMovie.backupVideoUrl : selectedMovie.videoUrl || heroMovie.videoUrl;
+
+    // Servidores del episodio o de la película
+    const availableServers = ep?.videoServers?.length
+      ? ep.videoServers
+      : selectedMovie.videoServers || [];
+
+    const selectedServer =
+      availableServers.find((server) => server.id === selectedServerId) ||
+      availableServers[0];
+
+    // Si no hay servidores adicionales, utiliza el enlace original
+    const src =
+      selectedServer?.url ||
+      (ep
+        ? ep.videoUrl
+        : usingBackup && selectedMovie.backupVideoUrl
+          ? selectedMovie.backupVideoUrl
+          : selectedMovie.videoUrl || heroMovie.videoUrl);
+
+    const serverType = selectedServer?.type || "auto";
+
+    // Estos formatos necesitan un reproductor específico
+    if (serverType === "iframe" || serverType === "dash") {
+      setPlayerError(
+        serverType === "iframe"
+          ? "Este servidor necesita integrar el reproductor iframe."
+          : "Este servidor necesita integrar el reproductor DASH."
+      );
+      return;
+    }
+
     let hls: Hls | null = null;
+
     const tryPlay = () => {
       const p = video.play();
+
       if (p && p.catch) {
         p.catch(() => {
           video.muted = true;
@@ -2939,47 +3050,98 @@ export default function Home() {
         });
       }
     };
-    const savedAny = progressRef.current.find((p) => String(p.id) === String(selectedMovie.id));
-    const saved = savedAny && (!ep || savedAny.episodeId === ep.id) ? savedAny : undefined;
+
+    // Recuperar el progreso guardado
+    const savedAny = progressRef.current.find(
+      (p) => String(p.id) === String(selectedMovie.id)
+    );
+
+    const saved =
+      savedAny && (!ep || savedAny.episodeId === ep.id)
+        ? savedAny
+        : undefined;
+
     const onMeta = () => {
       // Enviado desde el celular: empieza en el mismo minuto
       const cs = castStartRef.current;
+
       if (cs && cs.id === String(selectedMovie.id)) {
         castStartRef.current = null;
-        if (cs.time > 3) { try { video.currentTime = cs.time; } catch (e) {} }
+
+        if (cs.time > 3) {
+          try {
+            video.currentTime = cs.time;
+          } catch (e) {}
+        }
+
         return;
       }
-      if (saved && saved.time > 5 && (!video.duration || saved.time < video.duration - 60)) {
-        try { video.currentTime = saved.time; } catch (e) {}
+
+      if (
+        saved &&
+        saved.time > 5 &&
+        (!video.duration || saved.time < video.duration - 60)
+      ) {
+        try {
+          video.currentTime = saved.time;
+        } catch (e) {}
       }
     };
+
     video.addEventListener("loadedmetadata", onMeta);
+
     const movieForProgress = selectedMovie;
-    const isHlsSrc = /\.m3u8(\?|$)/i.test(src);
-    if (isHlsSrc && !video.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
+
+    const isHlsSrc =
+      serverType === "hls" || /\.m3u8(\?|$)/i.test(src);
+
+    if (
+      isHlsSrc &&
+      !video.canPlayType("application/vnd.apple.mpegurl") &&
+      Hls.isSupported()
+    ) {
       hls = new Hls();
       hls.loadSource(src);
       hls.attachMedia(video);
+
       hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+
       hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
-        if (data && data.fatal) setPlayerError("No se pudo cargar este video en este dispositivo.");
+        if (data && data.fatal) {
+          setPlayerError(
+            "No se pudo cargar este video en este dispositivo."
+          );
+        }
       });
     } else {
       video.src = src;
       video.load();
       tryPlay();
     }
+
     return () => {
       video.removeEventListener("loadedmetadata", onMeta);
-      try { recordProgress(video, movieForProgress, true); } catch (e) {}
+
+      try {
+        recordProgress(video, movieForProgress, true);
+      } catch (e) {}
+
       if (hls) hls.destroy();
+
       try {
         video.pause();
         video.removeAttribute("src");
         video.load();
       } catch (e) {}
     };
-  }, [isPlaying, selectedMovie, usingBackup, currentEpisode]);
+  }, [
+    isPlaying,
+    selectedMovie,
+    usingBackup,
+    currentEpisode,
+    selectedServerId
+  ]);
+
 
   // Barras del reproductor: se ocultan solas a los 4 s y vuelven con cualquier tecla/movimiento
   const [playerUi, setPlayerUi] = useState(true);
@@ -3423,6 +3585,7 @@ export default function Home() {
           bgImage: newMovieImage || m.bgImage,
           img: newMovieImage || m.img,
           videoUrl: mainUrl.trim(),
+          videoServers: newMovieVideoServers,
           year: newMovieYear.trim() || m.year,
           duration: newMovieDuration.trim() || undefined,
           ageRating: newMovieAge || undefined,
@@ -3471,6 +3634,7 @@ export default function Home() {
         bgImage: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         img: newMovieImage || "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         videoUrl: mainUrl.trim(),
+        videoServers: newMovieVideoServers,
         duration: newMovieDuration.trim() || undefined,
         genres: tmdbExtra && tmdbExtra.genres && tmdbExtra.genres.length ? [newMovieCategory].concat(tmdbExtra.genres.filter((g) => g !== newMovieCategory)) : [newMovieCategory],
         cast: newMovieCast.trim() || undefined,
@@ -3500,32 +3664,35 @@ export default function Home() {
     resetMovieForm();
   };
 
-  const resetMovieForm = () => {
-    setNewMovieSaga("");
-    setNewMovieSagaOrder("");
-    setNewMovieTitle("");
-    setNewMovieDesc("");
-    setNewMovieImage("");
-    setNewMovieVideoUrl("");
-    setNewMovieYear("");
-    setNewMovieDuration("");
-    setNewMovieAge("");
-    setNewMovieDirector("");
-    setNewMovieCast("");
-    setNewMovieTrailer("");
-    setNewEpisodes([]);
-    setNewIntroStart("");
-    setNewIntroEnd("");
-    setNewCreditsStart("");
-    setNewComingSoon(false);
-    setNewReleaseDate("");
-    setTmdbExtra(null);
-    setTmdbResults(null);
-    setEpSeason("1");
-    setEpNumber("1");
-    setEpTitle("");
-    setEpUrl("");
-  };
+  
+const resetMovieForm = () => {
+  setNewMovieSaga("");
+  setNewMovieSagaOrder("");
+  setNewMovieTitle("");
+  setNewMovieDesc("");
+  setNewMovieImage("");
+  setNewMovieVideoUrl("");
+  setNewMovieVideoServers([]);
+  setNewMovieYear("");
+  setNewMovieDuration("");
+  setNewMovieAge("");
+  setNewMovieDirector("");
+  setNewMovieCast("");
+  setNewMovieTrailer("");
+  setNewEpisodes([]);
+  setNewIntroStart("");
+  setNewIntroEnd("");
+  setNewCreditsStart("");
+  setNewComingSoon(false);
+  setNewReleaseDate("");
+  setTmdbExtra(null);
+  setTmdbResults(null);
+  setEpSeason("1");
+  setEpNumber("1");
+  setEpTitle("");
+  setEpUrl("");
+};
+
 
   const addEpisode = () => {
     const season = parseInt(epSeason, 10) || 1, number = parseInt(epNumber, 10) || 1;
@@ -3634,46 +3801,45 @@ export default function Home() {
     v.src = url;
   };
 
-  const handleEditClick = (movie: Movie) => {
-    setEditingMovieId(movie.id);
-    setNewMovieTitle(movie.title);
-    setNewMovieDesc(movie.desc);
-    setNewMovieCategory(movie.tag || "Acción");
-    setNewMovieType(movie.type || "pelicula");
-    setNewMovieImage(movie.bgImage || "");
-    setNewMovieVideoUrl(movie.videoUrl || "");
-    setNewMovieYear(movie.year || "");
-    setNewMovieDuration(movie.duration || "");
-    setNewMovieAge(movie.ageRating || "");
-    setNewMovieDirector(movie.director || "");
-    setNewMovieCast(movie.cast || "");
-    setNewMovieTrailer(movie.trailerUrl || "");
-    setNewMovieSaga(movie.saga || "");
-    setNewMovieSagaOrder(movie.sagaOrder ? String(movie.sagaOrder) : "");
-    const eps = movie.episodes || [];
-    setNewEpisodes(eps);
-    setNewComingSoon(!!movie.comingSoon);
-    setNewReleaseDate(movie.releaseDate || "");
-    setNewIntroStart(fmtClock(movie.introStart));
-    setNewIntroEnd(fmtClock(movie.introEnd));
-    setNewCreditsStart(fmtClock(movie.creditsStart));
-    setTmdbExtra(null);
-    setTmdbResults(null);
-    const last = eps[eps.length - 1];
-    setEpSeason(String(last ? last.season : 1));
-    setEpNumber(String(last ? last.number + 1 : 1));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  
+const handleEditClick = (movie: Movie) => {
+  setEditingMovieId(movie.id);
+  setNewMovieTitle(movie.title);
+  setNewMovieDesc(movie.desc);
+  setNewMovieCategory(movie.tag || "Acción");
+  setNewMovieType(movie.type || "pelicula");
+  setNewMovieImage(movie.bgImage || "");
+  setNewMovieVideoUrl(movie.videoUrl || "");
 
-  const handleDeleteMovie = (id: number | string) => {
-    if (confirm("¿Estás seguro de eliminar este contenido del catálogo?")) {
-      saveChange({ type: "delete", id }, "Contenido eliminado.");
-      if (editingMovieId === id) {
-        setEditingMovieId(null);
-        resetMovieForm();
-      }
-    }
-  };
+  // Recuperar los servidores guardados
+  setNewMovieVideoServers(movie.videoServers || []);
+
+  setNewMovieYear(movie.year || "");
+  setNewMovieDuration(movie.duration || "");
+  setNewMovieAge(movie.ageRating || "");
+  setNewMovieDirector(movie.director || "");
+  setNewMovieCast(movie.cast || "");
+  setNewMovieTrailer(movie.trailerUrl || "");
+  setNewMovieSaga(movie.saga || "");
+  setNewMovieSagaOrder(movie.sagaOrder ? String(movie.sagaOrder) : "");
+
+  const eps = movie.episodes || [];
+  setNewEpisodes(eps);
+  setNewComingSoon(!!movie.comingSoon);
+  setNewReleaseDate(movie.releaseDate || "");
+  setNewIntroStart(fmtClock(movie.introStart));
+  setNewIntroEnd(fmtClock(movie.introEnd));
+  setNewCreditsStart(fmtClock(movie.creditsStart));
+  setTmdbExtra(null);
+  setTmdbResults(null);
+
+  const last = eps[eps.length - 1];
+  setEpSeason(String(last ? last.season : 1));
+  setEpNumber(String(last ? last.number + 1 : 1));
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
 
   // ================================================================
   // CUENTAS REALES (/api/account + Supabase)
@@ -7192,17 +7358,32 @@ export default function Home() {
                 )}
               </div>
 
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Enlace del Vídeo (MP4 directo de Archive.org)</label>
-                <input 
-                  type="url" 
-                  required={newMovieType !== "serie" && !newComingSoon}
-                  placeholder={newMovieType === "serie" ? "Opcional en series: se usa el primer episodio" : "https://archive.org/download/..."} 
-                  value={newMovieVideoUrl}
-                  onChange={(e) => setNewMovieVideoUrl(e.target.value)}
-                  className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
+              
+<div>
+  <label className="text-xs text-gray-400 block mb-1">
+    Enlace del Vídeo (MP4 directo de Archive.org)
+  </label>
+
+  <input
+    type="url"
+    required={newMovieType !== "serie" && !newComingSoon}
+    placeholder={
+      newMovieType === "serie"
+        ? "Opcional en series: se usa el primer episodio"
+        : "https://archive.org/download/..."
+    }
+    value={newMovieVideoUrl}
+    onChange={(e) => setNewMovieVideoUrl(e.target.value)}
+    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+  />
+</div>
+
+<div className="mt-4">
+  <VideoServerManager
+    servers={newMovieVideoServers}
+    onChange={setNewMovieVideoServers}
+  />
+</div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -8798,49 +8979,82 @@ export default function Home() {
         >
           <div className="flex-1 min-h-0 flex items-center justify-center sm:px-4 sm:pt-4 lg:px-6 lg:pt-6 cv-pstage">
           <div className="relative w-full h-full bg-black overflow-hidden sm:rounded-2xl sm:border sm:border-white/5 shadow-2xl">
-            <video 
-              ref={playerRef}
-              x-webkit-airplay="allow"
-              data-autofocus
-              tabIndex={0}
-              controls={!touchUi}
-              autoPlay
-              playsInline
-              preload="auto"
-              controlsList="nodownload"
-              className="w-full h-full focus:outline-none"
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: videoFit }}
-              onLoadStart={() => setVideoLoading(true)}
-              onWaiting={() => setVideoLoading(true)}
-              onCanPlay={() => setVideoLoading(false)}
-              onPlaying={() => { setVideoLoading(false); trackPlaying(selectedMovie); }}
-              onTimeUpdate={(e) => { recordProgress(e.currentTarget, selectedMovie, false); updateSkip(e.currentTarget.currentTime, selectedMovie); trackTime(e.currentTarget, selectedMovie); }}
-              onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
-              onEnded={(e) => {
-                recordProgress(e.currentTarget, selectedMovie, true);
-                const nx = nextEpisodeOf(selectedMovie, currentEpisode);
-                if (nx) setNextUp({ ep: nx, secs: 8 });
-                else if (!nextSaga) offerNextSaga(10);
-              }}
-              onError={(e) => {
-                const err = e.currentTarget.error;
-                const code = err ? err.code : 0;
-                const isSample = (selectedMovie.backupVideoUrl || "").indexOf("gtv-videos-bucket") !== -1;
-                if (!usingBackup && selectedMovie.backupVideoUrl && !isSample) {
-                  setUsingBackup(true);
-                  return;
-                }
-                setVideoLoading(false);
-                if (code === 3) {
-                  setPlayerError("Este dispositivo no puede decodificar este video (H.265/HEVC, 10 bits o audio Dolby). Necesita una versión MP4 H.264 + AAC.");
-                  return;
-                }
-                setPlayerError("Comprobando el enlace del video...");
-                diagnoseVideo(selectedMovie.videoUrl || "", code);
-              }}
-            >
-              Tu navegador no soporta el reproductor.
-            </video>
+            
+<div className="w-full">
+  {playerIframeUrl ? (
+  <iframe
+    src={playerIframeUrl}
+    title="Reproductor externo"
+    className="absolute inset-0 w-full h-full"
+    style={{ border: 0 }}
+    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+    allowFullScreen
+    referrerPolicy="origin"
+  />
+) : (
+  <video
+    ref={playerRef}
+    x-webkit-airplay="allow"
+    data-autofocus
+    tabIndex={0}
+    controls={!touchUi}
+    autoPlay
+    playsInline
+    preload="auto"
+    controlsList="nodownload"
+    className="w-full h-full focus:outline-none"
+    style={{
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      objectFit: videoFit
+    }}
+    onLoadStart={() => setVideoLoading(true)}
+    onWaiting={() => setVideoLoading(true)}
+    onCanPlay={() => setVideoLoading(false)}
+    onPlaying={() => {
+      setVideoLoading(false);
+      trackPlaying(selectedMovie);
+    }}
+    onTimeUpdate={(e) => {
+      recordProgress(e.currentTarget, selectedMovie, false);
+      updateSkip(e.currentTarget.currentTime, selectedMovie);
+      trackTime(e.currentTarget, selectedMovie);
+    }}
+    onPause={(e) => recordProgress(e.currentTarget, selectedMovie, true)}
+    onEnded={(e) => {
+      recordProgress(e.currentTarget, selectedMovie, true);
+      const nx = nextEpisodeOf(selectedMovie, currentEpisode);
+      if (nx) setNextUp({ ep: nx, secs: 8 });
+      else if (!nextSaga) offerNextSaga(10);
+    }}
+    onError={(e) => {
+      const err = e.currentTarget.error;
+      const code = err ? err.code : 0;
+      const isSample = (selectedMovie.backupVideoUrl || "").indexOf("gtv-videos-bucket") !== -1;
+
+      if (!usingBackup && selectedMovie.backupVideoUrl && !isSample) {
+        setUsingBackup(true);
+        return;
+      }
+
+      setVideoLoading(false);
+
+      if (code === 3) {
+        setPlayerError("Este dispositivo no puede decodificar este video (H.265/HEVC, 10 bits o audio Dolby). Necesita una versión MP4 H.264 + AAC.");
+        return;
+      }
+
+      setPlayerError("Comprobando el enlace del video...");
+      diagnoseVideo(selectedMovie.videoUrl || "", code);
+        }}
+  >
+    Tu navegador no soporta el reproductor.
+</video>
+)}
+</div>
             {touchUi && !playerError && (
               <TouchControls
                 videoRef={playerRef}
