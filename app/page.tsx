@@ -3123,12 +3123,27 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [playerError]);
 
-  // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
+ // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
   const diagnoseVideo = (url: string, code: number) => {
     const fallback = code === 2
       ? "Se cortó la conexión con el servidor del video. Pulsa Reintentar."
       : "El video no se pudo abrir. Pulsa Reintentar; si vuelve a fallar, el enlace necesita revisarse.";
+    
     if (!url) { setPlayerError("Esta película no tiene enlace de video."); return; }
+
+    // Si es un enlace de embed permitido, no hacemos la validación estricta de Content-Type de video
+    const esEmbed =
+      typeof url === "string" &&
+      (url.includes("filemoon") ||
+       url.includes("vidhide") ||
+       url.includes("streamwish") ||
+       url.includes("/e/"));
+
+    if (esEmbed) {
+      // Si es embed, no bloqueamos con el diagnóstico de archivo directo
+      return;
+    }
+
     fetch("/api/video-check?u=" + encodeURIComponent(url), { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
