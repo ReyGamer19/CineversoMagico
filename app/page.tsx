@@ -3125,7 +3125,13 @@ export default function Home() {
 
  // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
   const diagnoseVideo = (url: string, code: number) => {
-    // 1. Si es un enlace embed, lo dejamos pasar de inmediato sin chequear en el servidor
+    const fallback = code === 2
+      ? "Se cortó la conexión con el servidor del video. Pulsa Reintentar."
+      : "El video no se pudo abrir. Pulsa Reintentar; si vuelve a fallar, el enlace necesita revisarse.";
+    
+    if (!url) { setPlayerError("Esta película no tiene enlace de video."); return; }
+
+    // Declaramos `esEmbed` una sola vez aquí
     const esEmbed =
       typeof url === "string" &&
       (url.includes("filemoon") ||
@@ -3138,11 +3144,22 @@ export default function Home() {
       return;
     }
 
-    const fallback = code === 2
-      ? "Se cortó la conexión con el servidor del video. Pulsa Reintentar."
-      : "El video no se pudo abrir. Pulsa Reintentar; si vuelve a fallar, el enlace necesita revisarse.";
-    
-    if (!url) { setPlayerError("Esta película no tiene enlace de video."); return; }
+    fetch("/api/video-check?u=" + encodeURIComponent(url), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d: any) => {
+        if (!d) { setPlayerError(fallback); return; }
+        const st = d.status || 0;
+        const ct = String(d.contentType || "");
+        if (st === 401 || st === 403) setPlayerError("El servidor bloqueó este video (error " + st + "). Suele pasar cuando el archivo fue retirado. Hay que reemplazar el enlace desde el panel.");
+        else if (st === 404 || st === 410) setPlayerError("Este archivo ya no existe en el servidor (error " + st + "). Hay que reemplazar el enlace desde el panel.");
+        else if (st === 429) setPlayerError("El servidor del video está recibiendo demasiadas peticiones. Espera un minuto y pulsa Reintentar.");
+        else if (st >= 500) setPlayerError("El servidor del video está caído en este momento (error " + st + "). Inténtalo más tarde.");
+        else if (st === 0) setPlayerError("El servidor del video no responde. Revisa tu internet o inténtalo más tarde.");
+        else if (ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct)) setPlayerError("El enlace no es un video directo (es una página web). En el panel hay que poner el enlace directo al archivo .mp4.");
+        else setPlayerError(fallback);
+      });
+  };
     // Si es un enlace de embed permitido, no hacemos la validación estricta de Content-Type de video
     const esEmbed =
       typeof url === "string" &&
