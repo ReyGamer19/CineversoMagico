@@ -3123,20 +3123,9 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [playerError]);
 
- "use client";
-
-import React, { useState, useEffect, useRef } from "react";
-import { AlertCircle, RefreshCw } from "lucide-react";
-import Hls from "hls.js";
-import type { Movie } from "../lib/types";
-
-// ===== AQUÍ COMIENZA TU COMPONENTE / ARCHIVO PAGE.TSX =====
-export default function Page() {
-  const [playerError, setPlayerError] = useState<string>("");
-
-  // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
+ // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
   const diagnoseVideo = (url: string, code: number) => {
-    // Si es un enlace de embed permitido, no hacemos la validación estricta de red
+    // Si es un enlace de embed permitido, evitamos cualquier validación de red y limpiamos el error
     const esEmbed =
       typeof url === "string" &&
       (url.includes("filemoon") ||
@@ -3171,21 +3160,6 @@ export default function Page() {
         else setPlayerError(fallback);
       });
   };
-
-  return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
-        <h1 className="text-2xl font-bold mb-4">Cineverso Mágico</h1>
-        {playerError && (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 p-3 rounded-lg mb-4 text-sm">
-            {playerError}
-          </div>
-        )}
-        {/* Resto de tu interfaz y lógica de la página principal */}
-      </div>
-    </main>
-  );
-}
 
   // Series: episodio que se está viendo + aviso de "Siguiente episodio"
   const sortedEpisodes = (m: Movie | null) =>
