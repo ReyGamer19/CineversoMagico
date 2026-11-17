@@ -7,6 +7,7 @@ import type { Movie } from "../lib/types";
 
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 interface Movie {
   videoUrl?: string;
@@ -14,19 +15,18 @@ interface Movie {
   [key: string]: any;
 }
 
-interface MoviePlayerProps {
-  movie: Movie;
-  fallbackUrl?: string;
-  startAt?: number;
-  onProgress?: (t: number, d: number) => void;
-}
-
+// ===== REPRODUCTOR ROBUSTO (MP4 / HLS / EMBED DE IFRAME) =====
 export default function MoviePlayer({ 
   movie, 
   fallbackUrl, 
   startAt, 
   onProgress 
-}: MoviePlayerProps) {
+}: { 
+  movie: Movie; 
+  fallbackUrl?: string; 
+  startAt?: number; 
+  onProgress?: (t: number, d: number) => void 
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sources = [movie?.videoUrl, movie?.backupVideoUrl, fallbackUrl].filter(
     (u, i, arr): u is string => !!u && arr.indexOf(u) === i
@@ -47,10 +47,10 @@ export default function MoviePlayer({
   // Si es un embed de iframe, lo renderizamos directamente de forma limpia
   if (esEmbed) {
     return (
-      <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-2xl">
+      <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-2xl flex items-center justify-center">
         <iframe
           src={currentUrl}
-          className="w-full h-full border-0 bg-black"
+          className="w-full h-full border-0 bg-black absolute inset-0"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture"
           referrerPolicy="origin"
@@ -59,7 +59,6 @@ export default function MoviePlayer({
     );
   }
 
-  // 2. Si no es embed, ejecutamos la lógica de reproductor nativo MP4 / HLS
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentUrl || failed) return;
@@ -77,7 +76,7 @@ export default function MoviePlayer({
 
     const tryPlay = () => {
       video.play().catch(() => {
-        // Si el navegador bloquea el autoplay con sonido, el usuario hace click.
+        // Si el navegador bloquea el autoplay con sonido, el usuario puede tocar play.
       });
     };
 
@@ -103,30 +102,6 @@ export default function MoviePlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUrl, failed, retryKey]);
 
-  if (failed) {
-    return (
-      <div className="w-full aspect-video bg-black flex items-center justify-center text-red-500 font-bold">
-        Error al cargar todas las fuentes de video disponibles.
-      </div>
-    );
-  }
-
-  return (
-    <video
-      ref={videoRef}
-      controls
-      autoPlay
-      playsInline
-      preload="auto"
-      controlsList="nodownload"
-      disableRemotePlayback={false}
-      {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
-      className="w-full h-full object-contain bg-black"
-    >
-      Tu navegador no soporta el reproductor.
-    </video>
-  );
-}
   // Reanudar donde se quedó y guardar el progreso (solo videos con duración finita)
   useEffect(() => {
     const v = videoRef.current;
@@ -168,7 +143,7 @@ export default function MoviePlayer({
 
   if (failed || !currentUrl) {
     return (
-      <div className="flex flex-col items-center justify-center text-center gap-4 p-6 max-w-sm">
+      <div className="flex flex-col items-center justify-center text-center gap-4 p-6 max-w-sm mx-auto">
         <AlertCircle className="w-12 h-12 text-red-500" />
         <h4 className="text-lg font-bold text-white">No se pudo reproducir este video</h4>
         <p className="text-xs text-gray-400">
@@ -196,18 +171,34 @@ export default function MoviePlayer({
     );
   }
 
+  return (
+    <video
+      ref={videoRef}
+      controls
+      autoPlay
+      playsInline
+      preload="auto"
+      controlsList="nodownload"
+      disableRemotePlayback={false}
+      {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
+      className="w-full h-full object-contain bg-black"
+    >
+      Tu navegador no soporta el reproductor.
+    </video>
+  );
+}
 // 1. Si es un embed (Filemoon / Vidhide / Streamwish), carga el iframe
   const esEmbed =
-    typeof currentUrl === "string" &&
-    (currentUrl.includes("filemoon") ||
-      currentUrl.includes("vidhide") ||
-      currentUrl.includes("streamwish") ||
-      currentUrl.includes("/e/"));
+    typeof src === "string" &&
+    (src.includes("filemoon") ||
+      src.includes("vidhide") ||
+      src.includes("streamwish") ||
+      src.includes("/e/"));
 
   if (esEmbed) {
     return (
       <iframe
-        src={currentUrl}
+        src={src}
         className="w-full h-full border-0 bg-black"
         allowFullScreen
         allow="autoplay; fullscreen; picture-in-picture"
