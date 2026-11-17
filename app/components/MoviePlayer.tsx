@@ -5,30 +5,10 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import Hls from "hls.js";
 import type { Movie } from "../lib/types";
 
-import React, { useEffect, useRef, useState } from 'react';
-import Hls from 'hls.js';
-import { AlertCircle, RefreshCw } from 'lucide-react';
-
-interface Movie {
-  videoUrl?: string;
-  backupVideoUrl?: string;
-  [key: string]: any;
-}
-
 // ===== REPRODUCTOR ROBUSTO (MP4 / HLS / EMBED DE IFRAME) =====
-export default function MoviePlayer({ 
-  movie, 
-  fallbackUrl, 
-  startAt, 
-  onProgress 
-}: { 
-  movie: Movie; 
-  fallbackUrl?: string; 
-  startAt?: number; 
-  onProgress?: (t: number, d: number) => void 
-}) {
+export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie; fallbackUrl?: string; startAt?: number; onProgress?: (t: number, d: number) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const sources = [movie?.videoUrl, movie?.backupVideoUrl, fallbackUrl].filter(
+  const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
     (u, i, arr): u is string => !!u && arr.indexOf(u) === i
   );
   const [sourceIndex, setSourceIndex] = useState(0);
@@ -44,7 +24,7 @@ export default function MoviePlayer({
      currentUrl.includes("streamwish") ||
      currentUrl.includes("/e/"));
 
-  // Si es un embed de iframe, lo renderizamos directamente de forma limpia
+  // Si es un embed de iframe, lo renderizamos directamente de forma limpia y responsiva
   if (esEmbed) {
     return (
       <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-2xl flex items-center justify-center">
@@ -171,43 +151,6 @@ export default function MoviePlayer({
     );
   }
 
-  return (
-    <video
-      ref={videoRef}
-      controls
-      autoPlay
-      playsInline
-      preload="auto"
-      controlsList="nodownload"
-      disableRemotePlayback={false}
-      {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
-      className="w-full h-full object-contain bg-black"
-    >
-      Tu navegador no soporta el reproductor.
-    </video>
-  );
-}
-// 1. Si es un embed (Filemoon / Vidhide / Streamwish), carga el iframe
-  const esEmbed =
-    typeof src === "string" &&
-    (src.includes("filemoon") ||
-      src.includes("vidhide") ||
-      src.includes("streamwish") ||
-      src.includes("/e/"));
-
-  if (esEmbed) {
-    return (
-      <iframe
-        src={src}
-        className="w-full h-full border-0 bg-black"
-        allowFullScreen
-        allow="autoplay; fullscreen; picture-in-picture"
-        referrerPolicy="origin"
-      />
-    );
-  }
-
-  // 2. Si es un enlace directo (.mp4 o .m3u8), carga tu reproductor de siempre
   return (
     <video
       ref={videoRef}
