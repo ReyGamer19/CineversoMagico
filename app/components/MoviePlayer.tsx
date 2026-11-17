@@ -5,18 +5,28 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import Hls from "hls.js";
 import type { Movie } from "../lib/types";
 
-// ===== REPRODUCTOR ROBUSTO (MP4 / HLS / EMBED DE IFRAME) =====
+import React, { useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
+
+interface Movie {
+  videoUrl?: string;
+  backupVideoUrl?: string;
+  [key: string]: any;
+}
+
+interface MoviePlayerProps {
+  movie: Movie;
+  fallbackUrl?: string;
+  startAt?: number;
+  onProgress?: (t: number, d: number) => void;
+}
+
 export default function MoviePlayer({ 
   movie, 
   fallbackUrl, 
   startAt, 
   onProgress 
-}: { 
-  movie: Movie; 
-  fallbackUrl?: string; 
-  startAt?: number; 
-  onProgress?: (t: number, d: number) => void 
-}) {
+}: MoviePlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
     (u, i, arr): u is string => !!u && arr.indexOf(u) === i
@@ -49,7 +59,7 @@ export default function MoviePlayer({
     );
   }
 
-  // 2. Si no es embed, continúa tu lógica robusta de siempre para MP4 / HLS
+  // 2. Si no es embed, ejecutamos la lógica de reproductor nativo MP4 / HLS
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentUrl || failed) return;
@@ -67,7 +77,7 @@ export default function MoviePlayer({
 
     const tryPlay = () => {
       video.play().catch(() => {
-        // Si el navegador bloquea el autoplay con sonido, el usuario puede tocar play.
+        // Si el navegador bloquea el autoplay con sonido, el usuario hace click.
       });
     };
 
