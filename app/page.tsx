@@ -3111,7 +3111,7 @@ export default function Home() {
     };
   }, [selectedMovie]);
 
-  // Cuando aparece el error, el foco va directo a "Reintentar" (funciona con el control remoto)
+ // Cuando aparece el error, el foco va directo a "Reintentar" (funciona con el control remoto)
   useEffect(() => {
     if (!playerError) return;
     const t = setTimeout(() => {
@@ -3123,9 +3123,9 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [playerError]);
 
- // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
+  // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
   const diagnoseVideo = (url: string, code: number) => {
-    // Si es un enlace de embed permitido, evitamos cualquier validación de red y limpiamos el error
+    // Si es un enlace de embed permitido, omitimos por completo la validación de red
     const esEmbed =
       typeof url === "string" &&
       (url.includes("filemoon") ||
