@@ -28,7 +28,7 @@ export default function MoviePlayer({
   onProgress 
 }: MoviePlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
+  const sources = [movie?.videoUrl, movie?.backupVideoUrl, fallbackUrl].filter(
     (u, i, arr): u is string => !!u && arr.indexOf(u) === i
   );
   const [sourceIndex, setSourceIndex] = useState(0);
