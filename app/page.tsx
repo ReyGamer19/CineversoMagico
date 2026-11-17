@@ -3123,17 +3123,18 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [playerError]);
 
-// Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
+ // Pregunta al servidor qué pasa con el enlace (bloqueado, borrado, lento...) para mostrar la causa real
   const diagnoseVideo = (url: string, code: number) => {
-    // Si es un embed, ignoramos cualquier verificación por completo
-    if (
+    // Si es un enlace de embed permitido, no hacemos la validación estricta de red
+    const esEmbed =
       typeof url === "string" &&
       (url.includes("filemoon") ||
        url.includes("vidhide") ||
        url.includes("streamwish") ||
-       url.includes("/e/"))
-    ) {
-      setPlayerError(null);
+       url.includes("/e/"));
+
+    if (esEmbed) {
+      setPlayerError("");
       return;
     }
 
@@ -3159,6 +3160,7 @@ export default function Home() {
         else setPlayerError(fallback);
       });
   };
+
   // Series: episodio que se está viendo + aviso de "Siguiente episodio"
   const sortedEpisodes = (m: Movie | null) =>
     (m && m.episodes ? m.episodes.slice() : []).sort((a, b) => a.season - b.season || a.number - b.number);
