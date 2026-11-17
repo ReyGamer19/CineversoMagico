@@ -128,6 +128,27 @@ export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }:
     );
   }
 
+// 1. Si es un embed (Filemoon / Vidhide / Streamwish), carga el iframe
+  const esEmbed =
+    typeof src === "string" &&
+    (src.includes("filemoon") ||
+      src.includes("vidhide") ||
+      src.includes("streamwish") ||
+      src.includes("/e/"));
+
+  if (esEmbed) {
+    return (
+      <iframe
+        src={src}
+        className="w-full h-full border-0 bg-black"
+        allowFullScreen
+        allow="autoplay; fullscreen; picture-in-picture"
+        referrerPolicy="origin"
+      />
+    );
+  }
+
+  // 2. Si es un enlace directo (.mp4 o .m3u8), carga tu reproductor de siempre
   return (
     <video
       ref={videoRef}
