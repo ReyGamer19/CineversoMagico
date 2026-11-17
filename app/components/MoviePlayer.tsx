@@ -5,8 +5,18 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import Hls from "hls.js";
 import type { Movie } from "../lib/types";
 
-// ===== REPRODUCTOR ROBUSTO (MP4 / HLS, con respaldo y manejo de errores) =====
-export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }: { movie: Movie; fallbackUrl?: string; startAt?: number; onProgress?: (t: number, d: number) => void }) {
+// ===== REPRODUCTOR ROBUSTO (MP4 / HLS / EMBED DE IFRAME) =====
+export default function MoviePlayer({ 
+  movie, 
+  fallbackUrl, 
+  startAt, 
+  onProgress 
+}: { 
+  movie: Movie; 
+  fallbackUrl?: string; 
+  startAt?: number; 
+  onProgress?: (t: number, d: number) => void 
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sources = [movie.videoUrl, movie.backupVideoUrl, fallbackUrl].filter(
     (u, i, arr): u is string => !!u && arr.indexOf(u) === i
@@ -16,6 +26,30 @@ export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }:
   const [retryKey, setRetryKey] = useState(0);
   const currentUrl = sources[sourceIndex];
 
+  // 1. Verificamos si la URL actual es un Embed (Filemoon / Vidhide / Streamwish / /e/)
+  const esEmbed =
+    typeof currentUrl === "string" &&
+    (currentUrl.includes("filemoon") ||
+     currentUrl.includes("vidhide") ||
+     currentUrl.includes("streamwish") ||
+     currentUrl.includes("/e/"));
+
+  // Si es un embed de iframe, lo renderizamos directamente de forma limpia
+  if (esEmbed) {
+    return (
+      <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-2xl">
+        <iframe
+          src={currentUrl}
+          className="w-full h-full border-0 bg-black"
+          allowFullScreen
+          allow="autoplay; fullscreen; picture-in-picture"
+          referrerPolicy="origin"
+        />
+      </div>
+    );
+  }
+
+  // 2. Si no es embed, continúa tu lógica robusta de siempre para MP4 / HLS
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !currentUrl || failed) return;
@@ -59,6 +93,30 @@ export default function MoviePlayer({ movie, fallbackUrl, startAt, onProgress }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUrl, failed, retryKey]);
 
+  if (failed) {
+    return (
+      <div className="w-full aspect-video bg-black flex items-center justify-center text-red-500 font-bold">
+        Error al cargar todas las fuentes de video disponibles.
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      controls
+      autoPlay
+      playsInline
+      preload="auto"
+      controlsList="nodownload"
+      disableRemotePlayback={false}
+      {...({ "x-webkit-airplay": "allow" } as Record<string, string>)}
+      className="w-full h-full object-contain bg-black"
+    >
+      Tu navegador no soporta el reproductor.
+    </video>
+  );
+}
   // Reanudar donde se quedó y guardar el progreso (solo videos con duración finita)
   useEffect(() => {
     const v = videoRef.current;
