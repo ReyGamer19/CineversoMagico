@@ -1688,6 +1688,7 @@ export default function Home() {
   // Canales de TV en vivo que el administrador agrega (se guardan en el servidor y se ven en todos los dispositivos)
   const [extraLiveChannels, setExtraLiveChannels] = useState<Channel[]>([]);
   const [channelLogos, setChannelLogos] = useState<Record<string, string>>({});
+  const [adminSection, setAdminSection] = useState<"catalogo" | "tv" | "comunidad" | "avisos" | "seguridad" | "estadisticas">("catalogo");
   // Aplica el logo real que el admin haya puesto para cada canal
   const withLogo = (ch: Channel): Channel => (channelLogos[ch.id] ? { ...ch, logo: channelLogos[ch.id] } : ch);
   const shownChannels = useMemo(() => liveChannels.concat(extraLiveChannels).map(withLogo), [liveChannels, extraLiveChannels, channelLogos]);
@@ -7025,8 +7026,17 @@ export default function Home() {
       {/* PANEL DE ADMINISTRACIÓN */}
       {activeTab === "admin" && isAdmin && (
         <div className="max-w-4xl mx-auto pt-28 px-4 sm:px-6 pb-24 space-y-10 overflow-x-hidden">
+          {/* NAVEGACIÓN DEL PANEL */}
+          <div className="sticky top-16 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-[#0a0a0a]/95 backdrop-blur border-b border-gray-900">
+            <div className="flex gap-2 overflow-x-auto scrollbar-none">
+              {(([["catalogo","🎬 Catálogo"],["tv","📡 TV en vivo"],["comunidad","💬 Comunidad"],["avisos","🔔 Avisos"],["seguridad","🛡️ Seguridad"],["estadisticas","📊 Estadísticas"]]) as [string,string][]).map(([k, label]) => (
+                <button key={k} onClick={() => setAdminSection(k as any)} className={"px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-green-500 " + (adminSection === k ? "bg-green-500 text-black" : "bg-[#161616] text-gray-300 hover:text-white border border-gray-800")}>{label}</button>
+              ))}
+            </div>
+          </div>
+
           {/* ESTRENOS QUE YA LLEGARON */}
-          {(() => {
+          {adminSection === "catalogo" && (() => {
             const due = customMovies.filter((m) => m.comingSoon && m.releaseDate && todayStr && m.releaseDate <= todayStr);
             if (!due.length) return null;
             return (
@@ -7046,6 +7056,7 @@ export default function Home() {
           })()}
 
           {/* REVISIÓN DE ENLACES */}
+          {adminSection === "catalogo" && (
           <div className={"p-4 sm:p-5 rounded-2xl border space-y-3 " + (linkIssues.length ? "bg-red-500/10 border-red-500/40" : "bg-[#0f0f0f] border-gray-800")}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -7075,472 +7086,9 @@ export default function Home() {
               </div>
             )}
           </div>
+          )}
 
-          {/* AVISOS PROGRAMADOS */}
-          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-white">⏰ Avisos programados</h3>
-              <p className="text-xs text-gray-400">Deja listo un aviso para que llegue a todos los que tienen la campanita 🔔 un día y hora exactos.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <select value={schedMovieId} onChange={(e) => setSchedMovieId(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500">
-                <option value="">Película (opcional)</option>
-                {catalogAll.map((x) => <option key={"so-" + x.id} value={String(x.id)}>{x.title}{x.comingSoon ? " (próximo estreno)" : ""}</option>)}
-              </select>
-              <input type="datetime-local" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" style={{ colorScheme: "dark" }} />
-              <input type="text" maxLength={80} placeholder="Título (ej. ¡Hoy se estrena! 🍿)" value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-              <input type="text" maxLength={200} placeholder="Mensaje (si eliges película, se escribe solo)" value={schedBody} onChange={(e) => setSchedBody(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-            </div>
-            <button onClick={addSched} className="w-full sm:w-auto bg-white hover:bg-gray-200 text-black px-5 py-3 rounded-xl text-sm font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Programar aviso</button>
-            {schedList.length > 0 && (
-              <div className="space-y-2 pt-1">
-                {schedList.slice().sort((a, b) => a.at - b.at).map((it) => (
-                  <div key={it.id} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-white truncate">{it.title} <span className="text-gray-400 font-normal">— {it.body}</span></p>
-                      <p className="text-[11px] text-green-400">{new Date(it.at).toLocaleString("es-PE", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
-                    </div>
-                    <button onClick={() => removeSched(it.id)} className="text-xs text-red-400 hover:underline cursor-pointer px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500">Quitar</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* SEGURIDAD */}
-          <div className="bg-[#0f0f0f] border border-blue-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="text-lg font-bold text-white">🛡️ Seguridad y copias de seguridad</h3>
-                <p className="text-xs text-gray-500">Cada día se guarda sola una copia del catálogo (se conservan los últimos 7 días). Si algo se borra o alguien lo daña, lo restauras con un toque.</p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={loadBackups} className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-400">🗂️ Ver copias</button>
-                <button onClick={loadAdminLog} className="text-xs font-bold text-white bg-[#181818] border border-gray-800 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">📋 Ver entradas</button>
-                <button onClick={revokeAllAdmins} className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">🚨 Cerrar sesión en todos los demás</button>
-                <button onClick={adminLogoutDevice} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">🔒 Cerrar sesión aquí</button>
-              </div>
-            </div>
-            {adminLog && (() => {
-              const mine = myLoginId();
-              const week = Date.now() - 7 * 86400000;
-              const locks = adminLog.filter((x) => x.kind === "lock" && x.at > week);
-              const others = adminLog.filter((x) => x.kind === "login" && x.at > week && x.id !== mine);
-              return (
-                <div className="space-y-2">
-                  {locks.length > 0 && (
-                    <div className="rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
-                      🔒 <b>{locks.length} bloqueo{locks.length === 1 ? "" : "s"} por claves incorrectas</b> esta semana (último: {locks[0].device}, {new Date(locks[0].at).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}). Si no fuiste tú, alguien intentó adivinar tu clave: el bloqueo lo frenó.
-                    </div>
-                  )}
-                  {others.length > 0 && (
-                    <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-3 py-2.5 text-sm text-yellow-100 flex items-center gap-3 flex-wrap">
-                      <span className="flex-1 min-w-[200px]">⚠️ Hubo <b>{others.length} entrada{others.length === 1 ? "" : "s"}</b> al panel desde otros dispositivos esta semana. ¿Fuiste tú? Revisa la lista de abajo.</span>
-                      <button onClick={revokeAllAdmins} className="text-xs font-black text-white bg-red-600 hover:bg-red-500 px-3 py-2 rounded-lg cursor-pointer">🚨 No fui yo: cerrar todas</button>
-                    </div>
-                  )}
-                  <div className="rounded-xl border border-gray-800 bg-[#050505] p-3">
-                    <p className="text-xs font-bold text-gray-400 mb-2">📋 Últimas entradas al panel</p>
-                    {adminLog.length === 0 ? <p className="text-xs text-gray-500">Todavía no hay registros. Se anotan desde esta actualización.</p> : (
-                      <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
-                        {adminLog.slice(0, 20).map((x, i) => (
-                          <div key={"lg-" + i} className="flex items-center gap-2 text-xs">
-                            <span className="w-5 text-center">{x.kind === "login" ? "🔑" : x.kind === "lock" ? "🔒" : "🚨"}</span>
-                            <span className="flex-1 min-w-0 truncate text-gray-200">{x.kind === "login" ? "Entrada" : x.kind === "lock" ? "Bloqueo por claves incorrectas" : "Cerró sesión en todos"} · {x.device}{x.id && x.id === mine ? <b className="text-green-400"> · este dispositivo</b> : null}</span>
-                            <span className="text-gray-500 shrink-0">{new Date(x.at).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-            {backups && (backups.length === 0 ? (
-              <p className="text-sm text-gray-500">Todavía no hay copias. La primera se crea sola la próxima vez que guardes un cambio.</p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {backups.map((b) => (
-                  <div key={"bk-" + b.slot} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
-                    <span className="text-xl">🗂️</span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-bold text-white truncate">{(() => { const t = new Date(b.at).toLocaleString("es-PE", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); return t.charAt(0).toUpperCase() + t.slice(1); })()}</span>
-                      <span className="block text-[11px] text-gray-400">{b.count} títulos</span>
-                    </span>
-                    <button onClick={() => restoreBackup(b)} className="text-[11px] font-bold px-3 py-2 rounded-lg bg-[#181818] text-blue-300 border border-gray-800 cursor-pointer hover:border-blue-400">↩ Restaurar</button>
-                  </div>
-                ))}
-              </div>
-            ))}
-            <ul className="text-[11px] text-gray-500 space-y-1 list-disc pl-4">
-              <li>Tu clave ya no se guarda en el navegador: se usa un pase temporal que vence a los 7 días y se renueva solo.</li>
-              <li>Si alguien prueba claves, se bloquea 15 minutos después de 5 intentos fallidos.</li>
-              <li>No se puede guardar un catálogo vacío por accidente.</li>
-              <li>Si ves una entrada que no reconoces, pulsa «🚨 Cerrar sesión en todos los demás»: cualquier otro dispositivo pierde el acceso al instante.</li>
-            </ul>
-          </div>
-
-          {/* TV EN VIVO (YOUTUBE OFICIAL) */}
-          <div className="bg-[#0f0f0f] border border-red-900/40 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-white">📡 Canales de TV en vivo (YouTube oficial)</h3>
-              <p className="text-xs text-gray-500">Agrega canales a tu TV en vivo: <b>YouTube oficial</b> (pega el enlace del canal) o un <b>enlace directo m3u8/mp4</b>. Elige en qué grupo aparecen.</p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <input type="text" value={tvForm.url} onChange={(e) => setTvForm((f) => ({ ...f, url: e.target.value }))} placeholder="youtube.com/channel/UC…  o  https://…/stream.m3u8" className="sm:col-span-2 w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
-              <input type="text" value={tvForm.name} onChange={(e) => setTvForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre (ej: NASA TV)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
-              <input type="text" value={tvForm.currentShow} onChange={(e) => setTvForm((f) => ({ ...f, currentShow: e.target.value }))} placeholder="Qué emite (ej: En vivo 24/7)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
-              <select value={tvForm.group} onChange={(e) => setTvForm((f) => ({ ...f, group: e.target.value }))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400">
-                {["Internacional 🌍", "Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽"].map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-              <select value={tvForm.category} onChange={(e) => setTvForm((f) => ({ ...f, category: e.target.value }))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400">
-                {["Noticias", "Señal Abierta", "Deportes", "Entretenimiento", "Regional"].map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <button onClick={addLiveChannel} disabled={tvBusy} className="text-sm font-black text-white bg-red-600 hover:bg-red-500 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">{tvBusy ? "Agregando…" : "➕ Agregar canal"}</button>
-            <div className="text-[11px] text-gray-500 leading-relaxed bg-[#080808] border border-gray-900 rounded-xl p-3">
-              <b className="text-gray-300">YouTube:</b> entra al canal oficial → su nombre → «Compartir canal» → «Copiar enlace del canal» (empieza con <b>youtube.com/channel/UC…</b>). <b className="text-gray-300">m3u8/mp4:</b> pega el enlace directo del stream.<br /><span className="text-yellow-500/90">⚠️ Agrega solo señales que tengas derecho a mostrar (tu propia señal, señales públicas/abiertas o con permiso). Retransmitir canales comerciales sin autorización es ilegal y puede hacer que cierren tu web.</span>
-            </div>
-            {extraLiveChannels.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-400">Canales que agregaste:</p>
-                {extraLiveChannels.map((ch) => (
-                  <div key={"tvl-" + ch.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
-                    <span className="text-xl">📡</span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-bold text-white truncate">{ch.name}</span>
-                      <span className="block text-[11px] text-gray-500 truncate">{ch.currentShow}</span>
-                    </span>
-                    <button onClick={() => deleteLiveChannel(ch)} className="text-[11px] font-bold px-3 py-2 rounded-lg bg-[#181818] text-red-400 border border-gray-800 cursor-pointer hover:border-red-400">Quitar</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* EDITOR DE LOGOS DE CANALES */}
-          <div className="bg-[#0f0f0f] border border-indigo-900/40 p-4 sm:p-6 rounded-3xl space-y-3">
-            <div>
-              <h3 className="text-lg font-bold text-white">🖼️ Logos de los canales</h3>
-              <p className="text-xs text-gray-500">Ponle a cada canal su logo real pegando el enlace de una imagen (termina en .png, .jpg, .svg o .webp). Si lo dejas vacío, se usa el logo automático con sus iniciales.</p>
-            </div>
-            <div className="relative">
-              <Search className="w-4 h-4 text-gray-500 absolute left-3 top-3" />
-              <input type="text" value={logoSearch} onChange={(e) => setLogoSearch(e.target.value)} placeholder="Buscar canal…" className="w-full bg-[#050505] border border-gray-800 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
-              {shownChannels.filter((ch) => !logoSearch.trim() || (ch.name + " " + (ch.shortCode || "")).toLowerCase().includes(logoSearch.trim().toLowerCase())).slice(0, 120).map((ch) => (
-                <div key={"lg-" + ch.id} className="flex items-center gap-2.5 rounded-xl border border-gray-800 bg-[#050505] px-2.5 py-2">
-                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-800 shrink-0"><ChannelLogo ch={logoDraft[ch.id] !== undefined ? { ...ch, logo: logoDraft[ch.id] } : ch} big /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-white truncate">{ch.name}</p>
-                    <input type="text" value={logoDraft[ch.id] ?? channelLogos[ch.id] ?? ""} onChange={(e) => setLogoDraft((d) => ({ ...d, [ch.id]: e.target.value }))} placeholder="https://…/logo.png" className="mt-1 w-full bg-[#0c0c0c] border border-gray-800 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-                  </div>
-                  <button onClick={() => saveChannelLogo(ch)} className="text-[11px] font-bold px-2.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shrink-0">Guardar</button>
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-500">💡 ¿De dónde saco los logos? Busca en <b className="text-gray-300">Wikimedia Commons</b> el nombre del canal + «logo» (muchos son de uso libre), o usa el logo de la web oficial del canal. Haz clic derecho en la imagen → «Copiar dirección de la imagen».</p>
-          </div>
-
-          {/* SAGAS AUTOMÁTICAS */}
-          <div className="bg-[#0f0f0f] border border-green-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="text-lg font-bold text-white">🎞️ Ordenar mis sagas</h3>
-                <p className="text-xs text-gray-500">Busca en TMDB a qué saga pertenece cada película que ya subiste y le pone su número (1, 2, 3…) según su fecha de estreno. Las nuevas se completan solas al usar «Autocompletar».</p>
-              </div>
-              <button onClick={scanSagas} disabled={!!(sagaScan && sagaScan.busy)} className="text-sm font-black text-black bg-green-500 hover:bg-green-400 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-300">{sagaScan && sagaScan.busy ? "Revisando " + sagaScan.done + " de " + sagaScan.total + "…" : "✨ Revisar todo el catálogo"}</button>
-            </div>
-            {sagaScan && sagaScan.busy && (
-              <div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-green-500" style={{ width: Math.round((sagaScan.done / Math.max(1, sagaScan.total)) * 100) + "%", transition: "width .3s" }} /></div>
-            )}
-            {sagaScan && sagaScan.hits.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-xs text-gray-400">{sagaScan.busy ? "Encontradas hasta ahora:" : "Encontré " + sagaScan.hits.length + " película" + (sagaScan.hits.length === 1 ? "" : "s") + " para ordenar. Desmarca las que no quieras cambiar:"}</p>
-                <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
-                  {Array.from(new Set(sagaScan.hits.map((h) => h.saga))).map((sg) => (
-                    <div key={"ss-" + sg} className="rounded-xl border border-gray-800 bg-[#050505] p-3">
-                      <p className="text-sm font-black text-green-400 mb-2">🎞️ {sg}</p>
-                      {sagaScan.hits.filter((h) => h.saga === sg).sort((a, b) => a.sagaOrder - b.sagaOrder).map((h) => (
-                        <label key={"sh-" + h.id} className="flex items-center gap-3 py-1 text-sm cursor-pointer">
-                          <input type="checkbox" checked={h.include} onChange={(e) => { const v = e.target.checked; setSagaScan((sc) => (sc ? { ...sc, hits: sc.hits.map((x) => (x.id === h.id ? { ...x, include: v } : x)) } : sc)); }} className="w-4 h-4 accent-green-500" />
-                          <span className="w-14 shrink-0 text-xs font-black text-white bg-white/10 rounded px-1.5 py-0.5 text-center">Parte {h.sagaOrder || "?"}</span>
-                          <span className="flex-1 min-w-0 truncate text-gray-200">{h.title} <span className="text-gray-500">({h.year})</span></span>
-                          {(h.prev || h.prevOrder) ? <span className="text-[10px] text-gray-500 shrink-0">antes: {h.prev || "sin saga"}{h.prevOrder ? " #" + h.prevOrder : ""}</span> : null}
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                {!sagaScan.busy && <button onClick={saveSagaScan} className="text-sm font-black text-black bg-white hover:bg-gray-200 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">💾 Guardar el orden de las sagas</button>}
-              </div>
-            )}
-          </div>
-
-          {/* VOTACIONES */}
-          <div className="bg-[#0f0f0f] border border-purple-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="text-lg font-bold text-white">🗳️ Votaciones de la comunidad</h3>
-                <p className="text-xs text-gray-500">La votación abierta aparece en la portada. Cada cuenta vota una vez (puede cambiar su voto). Al cerrarla, el ganador se anuncia en el chat.</p>
-              </div>
-              <button onClick={loadAdminPolls} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
-            </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-400">Pregunta</label>
-                <input type="text" maxLength={120} value={pollQ} onChange={(e) => setPollQ(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400" />
-                <label className="text-xs font-bold text-gray-400 block pt-1">Opciones (una por línea, de 2 a 6)</label>
-                <textarea rows={5} value={pollOpts} onChange={(e) => setPollOpts(e.target.value)} placeholder={"Opción 1\nOpción 2\nOpción 3"} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400" />
-                <div className="flex gap-2 flex-wrap">
-                  <button onClick={pollFromRequests} className="text-xs font-bold text-purple-200 bg-purple-500/15 border border-purple-500/40 px-3 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400">📬 Llenar con los más pedidos</button>
-                  <button onClick={createPoll} className="text-sm font-black text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-purple-400">Publicar votación</button>
-                </div>
-                <p className="text-[11px] text-gray-500">Si una opción se llama igual que una película del catálogo, se muestra con su póster.</p>
-              </div>
-              <div className="space-y-2">
-                {adminPolls.length === 0 ? (
-                  <p className="text-sm text-gray-500">Todavía no hay votaciones.</p>
-                ) : adminPolls.map((p) => (
-                  <div key={"ap-" + p.id} className="rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className={"text-[10px] font-black px-2 py-0.5 rounded-full " + (p.open ? "bg-green-500/20 text-green-400" : "bg-gray-700 text-gray-300")}>{p.open ? "ABIERTA" : "CERRADA"}</span>
-                      <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{p.q}</span>
-                      <span className="text-[11px] text-gray-400">{p.total} votos</span>
-                    </div>
-                    <p className="text-[11px] text-gray-400 mt-1 truncate">{p.opts.map((o) => (p.winner === o.id ? "🏆 " : "") + o.label + " (" + o.count + ")").join(" · ")}</p>
-                    <div className="flex gap-2 mt-2">
-                      {p.open && <button onClick={() => closePoll(p)} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-yellow-500 text-black cursor-pointer">🏆 Cerrar y anunciar</button>}
-                      <button onClick={() => deletePoll(p)} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#181818] text-red-400 border border-gray-800 cursor-pointer">Borrar</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* PEDIDOS DE USUARIOS */}
-          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 className="text-lg font-bold text-white">📬 Pedidos de usuarios {adminReqs.filter((r) => r.status === "nueva").length > 0 && <span className="ml-1 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full align-middle">{adminReqs.filter((r) => r.status === "nueva").length} nuevos</span>}</h3>
-              <div className="flex gap-2">
-              {adminReqs.some((r) => r.status !== "nueva") && (
-                <button onClick={() => setShowDoneReqs(!showDoneReqs)} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">{showDoneReqs ? "Ocultar atendidos" : "Ver atendidos (" + adminReqs.filter((r) => r.status !== "nueva").length + ")"}</button>
-              )}
-              <button onClick={() => adminReqCall("list")} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
-              </div>
-            </div>
-            {adminReqs.filter((r) => showDoneReqs || r.status === "nueva").length === 0 ? (
-              <p className="text-xs text-gray-500">{adminReqs.length ? "✅ No hay pedidos pendientes." : ""} Cuando subas una película que alguien pidió, el pedido se marca solo como atendido y se anuncia en el chat.</p>
-            ) : false ? (
-              <p className="text-xs text-gray-500">Todavía no hay pedidos. Los usuarios pueden pedir desde Cuenta → Pedir una película.</p>
-            ) : (
-              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {adminReqs.filter((r) => showDoneReqs || r.status === "nueva").map((r) => (
-                  <div key={r.id} className={"rounded-xl border px-3 py-2.5 " + (r.status === "nueva" ? "bg-yellow-500/5 border-yellow-700/40" : "bg-[#050505] border-gray-900")}>
-                    <div className="flex items-start gap-3 flex-wrap">
-                      <div className="flex-1 min-w-[180px]">
-                        <p className="text-sm font-bold text-white">{r.title}</p>
-                        {r.note && <p className="text-xs text-gray-400">“{r.note}”</p>}
-                        <p className="text-[10px] text-gray-500 mt-0.5">{r.profile || "—"} · {r.email} · {fmtChatTime(r.at)}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button onClick={() => markReqDone(r)} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "agregada" ? "bg-green-500 text-black" : "bg-[#181818] text-green-400 border border-gray-800")}>✔ Agregada</button>
-                        <button onClick={() => adminReqCall("status", { id: r.id, status: "rechazada", reply: "Por ahora no está disponible." })} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "rechazada" ? "bg-red-600 text-white" : "bg-[#181818] text-red-400 border border-gray-800")}>✖ No disponible</button>
-                        <button onClick={() => adminReqCall("delete", { id: r.id })} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer bg-[#181818] text-gray-400 border border-gray-800">Borrar</button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* CHAT: MODERACIÓN */}
-          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-3">
-            <h3 className="text-lg font-bold text-white">💬 Chat de la comunidad</h3>
-            <p className="text-xs text-gray-400">Mensaje fijado (aparece arriba del chat). En el chat puedes borrar mensajes o bloquear usuarios con los botones que aparecen debajo de cada mensaje.</p>
-            <textarea maxLength={300} rows={2} placeholder={chatPinned || "Ej. Bienvenidos, pidan sus películas aquí 🍿"} value={chatPinEdit} onChange={(e) => setChatPinEdit(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => chatAdmin("pin", { text: chatPinEdit.trim() }).then((d: any) => { if (d && d.ok) { showToast("📌 Mensaje fijado actualizado."); setChatPinEdit(""); } })} className="bg-white hover:bg-gray-200 text-black px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Guardar mensaje fijado</button>
-              <button onClick={() => setChatOpen(true)} className="bg-[#181818] text-white border border-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Abrir el chat</button>
-            </div>
-          </div>
-
-          {/* AGREGAR VARIAS A LA VEZ */}
-          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-white">⚡ Agregar varias a la vez</h3>
-              <p className="text-xs text-gray-400">Pega una por línea: <b className="text-gray-200">Título | enlace del video</b>. Se completan solas con Autocompletar (póster, sinopsis, reparto, tráiler…). Máximo 40 por vez.</p>
-            </div>
-            <textarea rows={5} value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"Mi Película | https://servidor.com/mi-pelicula.mp4\nOtra Película | https://servidor.com/otra.mp4"} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex bg-[#050505] border border-gray-800 rounded-xl p-1">
-                {(["pelicula", "serie"] as const).map((t) => (
-                  <button key={t} onClick={() => setBulkType(t)} className={"px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer " + (bulkType === t ? "bg-white text-black" : "text-gray-400")}>{t === "pelicula" ? "Películas" : "Series"}</button>
-                ))}
-              </div>
-              <button onClick={runBulk} disabled={bulkBusy} className="bg-white hover:bg-gray-200 disabled:opacity-50 text-black px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">{bulkBusy ? "Buscando datos…" : "1. Buscar datos"}</button>
-            </div>
-            {bulkItems.length > 0 && (
-              <div className="space-y-2">
-                {bulkItems.map((it, i) => (
-                  <label key={"bk-" + i} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2 cursor-pointer">
-                    <input type="checkbox" checked={it.include} disabled={!it.movie} onChange={(e) => setBulkItems((list) => list.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} className="w-4 h-4 accent-green-500 shrink-0" />
-                    {it.movie ? <img decoding="async" loading="lazy" src={posterSrc(it.movie)} alt="" className="w-9 h-12 rounded object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-12 rounded bg-gray-900 shrink-0" />}
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm text-white font-bold truncate">{it.movie ? it.movie.title + " (" + it.movie.year + ")" : it.title || it.line}</span>
-                      <span className="block text-[11px] text-gray-500 truncate">{it.url || "Falta el enlace del video"}</span>
-                    </span>
-                    <span className={"text-[10px] font-black px-2 py-1 rounded-full shrink-0 " + (it.status === "listo" ? "bg-green-500/20 text-green-400" : it.status === "buscando" ? "bg-blue-500/20 text-blue-300" : it.status === "pendiente" ? "bg-gray-700 text-gray-300" : "bg-yellow-500/15 text-yellow-400")}>
-                      {it.status === "listo" ? "✔ Datos listos" : it.status === "buscando" ? "Buscando…" : it.status === "pendiente" ? "En cola" : it.url ? "Sin datos de TMDB" : "Incompleta"}
-                    </span>
-                  </label>
-                ))}
-                <label className="flex items-center gap-2 text-xs text-gray-300 pt-1 cursor-pointer"><input type="checkbox" checked={bulkNotify} onChange={(e) => setBulkNotify(e.target.checked)} className="w-4 h-4 accent-green-500" /> Avisar a todos con la campanita 🔔 (un solo aviso)</label>
-                <div className="flex gap-2 flex-wrap">
-                  <button onClick={saveBulk} disabled={bulkBusy || !bulkItems.some((x) => x.include && x.movie)} className="bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black px-5 py-3 rounded-xl text-sm font-black cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">2. Agregar {bulkItems.filter((x) => x.include && x.movie).length} al catálogo</button>
-                  <button onClick={() => setBulkItems([])} className="text-xs text-gray-400 hover:text-white px-3 py-2 cursor-pointer">Cancelar</button>
-                </div>
-                <p className="text-[11px] text-gray-500">Las que digan “Sin datos de TMDB” se agregan solo con el título; luego puedes completarlas con Editar → Autocompletar.</p>
-              </div>
-            )}
-          </div>
-
-          {/* ESTADÍSTICAS */}
-          <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-lg font-bold text-white mr-auto">📊 Estadísticas</h3>
-              {[7, 30, 90].map((d) => (
-                <button
-                  key={"sd-" + d}
-                  onClick={() => setStatsDays(d)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${statsDays === d ? "bg-white text-black" : "bg-[#181818] text-gray-300 border border-gray-800"}`}
-                >
-                  {d === 7 ? "7 días" : d === 30 ? "30 días" : "90 días"}
-                </button>
-              ))}
-              <button onClick={() => loadStats(statsDays)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#181818] text-gray-300 border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
-                {statsLoading ? "Cargando..." : "↻ Actualizar"}
-              </button>
-            </div>
-            {statsError && <p className="text-xs text-red-400 font-bold">{statsError}</p>}
-            {stats && (() => {
-              const plays: Record<string, number> = stats.plays || {};
-              const watch: Record<string, number> = stats.watchSecs || {};
-              const comp: Record<string, number> = stats.completes || {};
-              const drop: Record<string, number[]> = stats.dropoff || {};
-              const titles: Record<string, string> = stats.titles || {};
-              const nameOf = (id: string) => titles[id] || (customMovies.find((m) => String(m.id) === id) || { title: "Título " + id }).title;
-              const totalPlays = Object.keys(plays).reduce((a, k) => a + plays[k], 0);
-              const totalHours = Object.keys(watch).reduce((a, k) => a + watch[k], 0) / 3600;
-              const totalComp = Object.keys(comp).reduce((a, k) => a + comp[k], 0);
-              const totalEnded = totalComp + Object.keys(drop).reduce((a, k) => a + drop[k].reduce((x, y) => x + y, 0), 0);
-              const devices: Record<string, number> = stats.devices || {};
-              const devTotal = Math.max(1, Object.keys(devices).reduce((a, k) => a + devices[k], 0));
-              const daily: { day: number; visits: number; plays: number }[] = stats.daily || [];
-              const maxDaily = Math.max(1, ...daily.map((d) => d.visits));
-              const top = Object.keys(plays).sort((a, b) => plays[b] - plays[a]).slice(0, 10);
-              const kpis = [
-                { label: "Visitas", value: stats.visits || 0 },
-                { label: "Visitantes únicos", value: stats.uniqueVisitors || 0 },
-                { label: "Reproducciones", value: totalPlays },
-                { label: "Horas vistas", value: totalHours < 10 ? totalHours.toFixed(1) : Math.round(totalHours) },
-                { label: "Terminan la película", value: totalEnded ? Math.round((totalComp / totalEnded) * 100) + "%" : "—" },
-                { label: "Visitas con cuenta", value: stats.visits ? Math.round(((stats.loggedVisits || 0) / stats.visits) * 100) + "%" : "—" },
-              ];
-              return (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {kpis.map((k) => (
-                      <div key={k.label} className="bg-[#050505] border border-gray-900 rounded-2xl p-4">
-                        <p className="text-2xl font-black text-white">{k.value}</p>
-                        <p className="text-[11px] text-gray-400 mt-1">{k.label}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {daily.length > 0 && (
-                    <div>
-                      <p className="text-xs font-bold text-gray-300 mb-2">Visitas por día</p>
-                      <div className="flex items-end gap-1 h-28 bg-[#050505] border border-gray-900 rounded-2xl p-3">
-                        {daily.map((d) => (
-                          <div key={"day-" + d.day} className="flex-1 flex flex-col items-center justify-end h-full" title={String(d.day).slice(6) + "/" + String(d.day).slice(4, 6) + ": " + d.visits + " visitas, " + d.plays + " reproducciones"}>
-                            <div className="w-full bg-green-500 rounded-t" style={{ height: Math.max(3, (d.visits / maxDaily) * 100) + "%" }} />
-                            {daily.length <= 14 && <span className="text-[9px] text-gray-500 mt-1">{String(d.day).slice(6)}</span>}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <p className="text-xs font-bold text-gray-300 mb-2">Dispositivos</p>
-                    <div className="space-y-2">
-                      {[["tv", "📺 Smart TV"], ["mobile", "📱 Celular / tablet"], ["desktop", "💻 Computadora"]].map(([k, label]) => {
-                        const pct = Math.round(((devices[k] || 0) / devTotal) * 100);
-                        return (
-                          <div key={"dev-" + k} className="flex items-center gap-3">
-                            <span className="text-xs text-gray-300 w-36 shrink-0">{label}</span>
-                            <div className="flex-1 h-3 bg-[#1f1f1f] rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: pct + "%" }} /></div>
-                            <span className="text-xs text-gray-400 w-16 text-right">{pct}% ({devices[k] || 0})</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-bold text-gray-300 mb-2">Lo más visto</p>
-                    {top.length === 0 ? (
-                      <p className="text-xs text-gray-500">Todavía no hay reproducciones en este periodo.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {top.map((id, i) => {
-                          const ended = (comp[id] || 0) + (drop[id] || []).reduce((x, y) => x + y, 0);
-                          const compPct = ended ? Math.round(((comp[id] || 0) / ended) * 100) : null;
-                          return (
-                            <div key={"top-" + id} className="bg-[#050505] border border-gray-900 rounded-xl p-3">
-                              <div className="flex items-center gap-3">
-                                <span className="text-lg font-black text-gray-500 w-6 text-center">{i + 1}</span>
-                                <span className="text-sm font-bold text-white truncate flex-1">{nameOf(id)}</span>
-                                <span className="text-[11px] text-gray-400 shrink-0">{plays[id]} ▶ · {((watch[id] || 0) / 3600).toFixed(1)} h{compPct !== null ? " · " + compPct + "% termina" : ""}</span>
-                                {drop[id] && (
-                                  <button onClick={() => setDropoffFor(dropoffFor === id ? null : id)} className="text-[11px] font-bold text-green-400 hover:underline shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-1">
-                                    {dropoffFor === id ? "Ocultar" : "¿Dónde abandonan?"}
-                                  </button>
-                                )}
-                              </div>
-                              {dropoffFor === id && drop[id] && (() => {
-                                const arr = drop[id];
-                                const mx = Math.max(1, ...arr);
-                                return (
-                                  <div className="mt-3">
-                                    <div className="flex items-end gap-1 h-20">
-                                      {arr.map((n, j) => (
-                                        <div key={"dp-" + j} className="flex-1 flex flex-col items-center justify-end h-full" title={j * 10 + "–" + (j * 10 + 10) + "%: " + n + " personas dejaron de ver"}>
-                                          <div className="w-full bg-red-500/80 rounded-t" style={{ height: Math.max(2, (n / mx) * 100) + "%" }} />
-                                        </div>
-                                      ))}
-                                    </div>
-                                    <div className="flex justify-between text-[9px] text-gray-500 mt-1"><span>Inicio</span><span>Mitad</span><span>Final</span></div>
-                                    <p className="text-[11px] text-gray-400 mt-1">Cada barra es un 10 % de la película: muestra en qué parte la gente dejó de ver.</p>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-gray-500">Datos anónimos: no se guarda quién vio qué. Tus propias visitas como administrador no cuentan.</p>
-                </div>
-              );
-            })()}
-          </div>
-
+          {adminSection === "catalogo" && (
           <div className="bg-[#0f0f0f] border border-green-500/30 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-900 gap-4">
               <div className="flex items-center gap-3">
@@ -7591,7 +7139,16 @@ export default function Home() {
 
             <form onSubmit={handleSaveMovie} className="space-y-4">
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Título de la Película o Serie</label>
+                <label className="text-xs text-gray-400 block mb-1.5">¿Qué vas a agregar?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([["pelicula","🎬 Película"],["serie","📺 Serie"]] as [string,string][]).map(([t, label]) => (
+                    <button key={t} type="button" onClick={() => { setNewMovieType(t as "pelicula" | "serie"); setTmdbResults(null); }} className={"py-3 rounded-xl text-sm font-black border-2 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (newMovieType === t ? "bg-green-500 text-black border-green-500" : "bg-[#050505] text-gray-300 border-gray-800 hover:border-green-500")}>{label}</button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">{newMovieType === "serie" ? "El autocompletar buscará SERIES." : "El autocompletar buscará PELÍCULAS."}</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Título de la {newMovieType === "serie" ? "Serie" : "Película"}</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -7647,18 +7204,7 @@ export default function Home() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Tipo</label>
-                  <select 
-                    value={newMovieType}
-                    onChange={(e) => setNewMovieType(e.target.value as "pelicula" | "serie")}
-                    className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="pelicula">Película</option>
-                    <option value="serie">Serie</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-gray-400 block mb-1">Categoría / Género</label>
                   <select 
@@ -7817,7 +7363,9 @@ export default function Home() {
               </button>
             </form>
           </div>
+          )}
 
+          {adminSection === "catalogo" && (
           <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-lg font-bold text-white w-full lg:w-auto lg:mr-auto">
@@ -7928,6 +7476,493 @@ export default function Home() {
               ))}
             </div>
           </div>
+          )}
+
+          {/* AGREGAR VARIAS A LA VEZ */}
+          {adminSection === "catalogo" && (
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">⚡ Agregar varias a la vez</h3>
+              <p className="text-xs text-gray-400">Pega una por línea: <b className="text-gray-200">Título | enlace del video</b>. Se completan solas con Autocompletar (póster, sinopsis, reparto, tráiler…). Máximo 40 por vez.</p>
+            </div>
+            <textarea rows={5} value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"Mi Película | https://servidor.com/mi-pelicula.mp4\nOtra Película | https://servidor.com/otra.mp4"} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex bg-[#050505] border border-gray-800 rounded-xl p-1">
+                {(["pelicula", "serie"] as const).map((t) => (
+                  <button key={t} onClick={() => setBulkType(t)} className={"px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer " + (bulkType === t ? "bg-white text-black" : "text-gray-400")}>{t === "pelicula" ? "Películas" : "Series"}</button>
+                ))}
+              </div>
+              <button onClick={runBulk} disabled={bulkBusy} className="bg-white hover:bg-gray-200 disabled:opacity-50 text-black px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">{bulkBusy ? "Buscando datos…" : "1. Buscar datos"}</button>
+            </div>
+            {bulkItems.length > 0 && (
+              <div className="space-y-2">
+                {bulkItems.map((it, i) => (
+                  <label key={"bk-" + i} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2 cursor-pointer">
+                    <input type="checkbox" checked={it.include} disabled={!it.movie} onChange={(e) => setBulkItems((list) => list.map((x, j) => (j === i ? { ...x, include: e.target.checked } : x)))} className="w-4 h-4 accent-green-500 shrink-0" />
+                    {it.movie ? <img decoding="async" loading="lazy" src={posterSrc(it.movie)} alt="" className="w-9 h-12 rounded object-cover bg-gray-900 shrink-0" /> : <span className="w-9 h-12 rounded bg-gray-900 shrink-0" />}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-white font-bold truncate">{it.movie ? it.movie.title + " (" + it.movie.year + ")" : it.title || it.line}</span>
+                      <span className="block text-[11px] text-gray-500 truncate">{it.url || "Falta el enlace del video"}</span>
+                    </span>
+                    <span className={"text-[10px] font-black px-2 py-1 rounded-full shrink-0 " + (it.status === "listo" ? "bg-green-500/20 text-green-400" : it.status === "buscando" ? "bg-blue-500/20 text-blue-300" : it.status === "pendiente" ? "bg-gray-700 text-gray-300" : "bg-yellow-500/15 text-yellow-400")}>
+                      {it.status === "listo" ? "✔ Datos listos" : it.status === "buscando" ? "Buscando…" : it.status === "pendiente" ? "En cola" : it.url ? "Sin datos de TMDB" : "Incompleta"}
+                    </span>
+                  </label>
+                ))}
+                <label className="flex items-center gap-2 text-xs text-gray-300 pt-1 cursor-pointer"><input type="checkbox" checked={bulkNotify} onChange={(e) => setBulkNotify(e.target.checked)} className="w-4 h-4 accent-green-500" /> Avisar a todos con la campanita 🔔 (un solo aviso)</label>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={saveBulk} disabled={bulkBusy || !bulkItems.some((x) => x.include && x.movie)} className="bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black px-5 py-3 rounded-xl text-sm font-black cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">2. Agregar {bulkItems.filter((x) => x.include && x.movie).length} al catálogo</button>
+                  <button onClick={() => setBulkItems([])} className="text-xs text-gray-400 hover:text-white px-3 py-2 cursor-pointer">Cancelar</button>
+                </div>
+                <p className="text-[11px] text-gray-500">Las que digan “Sin datos de TMDB” se agregan solo con el título; luego puedes completarlas con Editar → Autocompletar.</p>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* SAGAS AUTOMÁTICAS */}
+          {adminSection === "catalogo" && (
+          <div className="bg-[#0f0f0f] border border-green-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-bold text-white">🎞️ Ordenar mis sagas</h3>
+                <p className="text-xs text-gray-500">Busca en TMDB a qué saga pertenece cada película que ya subiste y le pone su número (1, 2, 3…) según su fecha de estreno. Las nuevas se completan solas al usar «Autocompletar».</p>
+              </div>
+              <button onClick={scanSagas} disabled={!!(sagaScan && sagaScan.busy)} className="text-sm font-black text-black bg-green-500 hover:bg-green-400 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-300">{sagaScan && sagaScan.busy ? "Revisando " + sagaScan.done + " de " + sagaScan.total + "…" : "✨ Revisar todo el catálogo"}</button>
+            </div>
+            {sagaScan && sagaScan.busy && (
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full bg-green-500" style={{ width: Math.round((sagaScan.done / Math.max(1, sagaScan.total)) * 100) + "%", transition: "width .3s" }} /></div>
+            )}
+            {sagaScan && sagaScan.hits.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400">{sagaScan.busy ? "Encontradas hasta ahora:" : "Encontré " + sagaScan.hits.length + " película" + (sagaScan.hits.length === 1 ? "" : "s") + " para ordenar. Desmarca las que no quieras cambiar:"}</p>
+                <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
+                  {Array.from(new Set(sagaScan.hits.map((h) => h.saga))).map((sg) => (
+                    <div key={"ss-" + sg} className="rounded-xl border border-gray-800 bg-[#050505] p-3">
+                      <p className="text-sm font-black text-green-400 mb-2">🎞️ {sg}</p>
+                      {sagaScan.hits.filter((h) => h.saga === sg).sort((a, b) => a.sagaOrder - b.sagaOrder).map((h) => (
+                        <label key={"sh-" + h.id} className="flex items-center gap-3 py-1 text-sm cursor-pointer">
+                          <input type="checkbox" checked={h.include} onChange={(e) => { const v = e.target.checked; setSagaScan((sc) => (sc ? { ...sc, hits: sc.hits.map((x) => (x.id === h.id ? { ...x, include: v } : x)) } : sc)); }} className="w-4 h-4 accent-green-500" />
+                          <span className="w-14 shrink-0 text-xs font-black text-white bg-white/10 rounded px-1.5 py-0.5 text-center">Parte {h.sagaOrder || "?"}</span>
+                          <span className="flex-1 min-w-0 truncate text-gray-200">{h.title} <span className="text-gray-500">({h.year})</span></span>
+                          {(h.prev || h.prevOrder) ? <span className="text-[10px] text-gray-500 shrink-0">antes: {h.prev || "sin saga"}{h.prevOrder ? " #" + h.prevOrder : ""}</span> : null}
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {!sagaScan.busy && <button onClick={saveSagaScan} className="text-sm font-black text-black bg-white hover:bg-gray-200 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">💾 Guardar el orden de las sagas</button>}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* TV EN VIVO (YOUTUBE OFICIAL) */}
+          {adminSection === "tv" && (
+          <div className="bg-[#0f0f0f] border border-red-900/40 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">📡 Canales de TV en vivo (YouTube oficial)</h3>
+              <p className="text-xs text-gray-500">Agrega canales a tu TV en vivo: <b>YouTube oficial</b> (pega el enlace del canal) o un <b>enlace directo m3u8/mp4</b>. Elige en qué grupo aparecen.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input type="text" value={tvForm.url} onChange={(e) => setTvForm((f) => ({ ...f, url: e.target.value }))} placeholder="youtube.com/channel/UC…  o  https://…/stream.m3u8" className="sm:col-span-2 w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <input type="text" value={tvForm.name} onChange={(e) => setTvForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre (ej: NASA TV)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <input type="text" value={tvForm.currentShow} onChange={(e) => setTvForm((f) => ({ ...f, currentShow: e.target.value }))} placeholder="Qué emite (ej: En vivo 24/7)" className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <select value={tvForm.group} onChange={(e) => setTvForm((f) => ({ ...f, group: e.target.value }))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400">
+                {["Internacional 🌍", "Perú 🇵🇪", "Chile 🇨🇱", "Argentina 🇦🇷", "Bolivia 🇧🇴", "Italia 🇮🇹", "España 🇪🇸", "Ecuador 🇪🇨", "Deportes ⚽"].map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <select value={tvForm.category} onChange={(e) => setTvForm((f) => ({ ...f, category: e.target.value }))} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400">
+                {["Noticias", "Señal Abierta", "Deportes", "Entretenimiento", "Regional"].map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <button onClick={addLiveChannel} disabled={tvBusy} className="text-sm font-black text-white bg-red-600 hover:bg-red-500 disabled:opacity-60 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">{tvBusy ? "Agregando…" : "➕ Agregar canal"}</button>
+            <div className="text-[11px] text-gray-500 leading-relaxed bg-[#080808] border border-gray-900 rounded-xl p-3">
+              <b className="text-gray-300">YouTube:</b> entra al canal oficial → su nombre → «Compartir canal» → «Copiar enlace del canal» (empieza con <b>youtube.com/channel/UC…</b>). <b className="text-gray-300">m3u8/mp4:</b> pega el enlace directo del stream.<br /><span className="text-yellow-500/90">⚠️ Agrega solo señales que tengas derecho a mostrar (tu propia señal, señales públicas/abiertas o con permiso). Retransmitir canales comerciales sin autorización es ilegal y puede hacer que cierren tu web.</span>
+            </div>
+            {extraLiveChannels.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-400">Canales que agregaste:</p>
+                {extraLiveChannels.map((ch) => (
+                  <div key={"tvl-" + ch.id} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
+                    <span className="text-xl">📡</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-white truncate">{ch.name}</span>
+                      <span className="block text-[11px] text-gray-500 truncate">{ch.currentShow}</span>
+                    </span>
+                    <button onClick={() => deleteLiveChannel(ch)} className="text-[11px] font-bold px-3 py-2 rounded-lg bg-[#181818] text-red-400 border border-gray-800 cursor-pointer hover:border-red-400">Quitar</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* EDITOR DE LOGOS DE CANALES */}
+          {adminSection === "tv" && (
+          <div className="bg-[#0f0f0f] border border-indigo-900/40 p-4 sm:p-6 rounded-3xl space-y-3">
+            <div>
+              <h3 className="text-lg font-bold text-white">🖼️ Logos de los canales</h3>
+              <p className="text-xs text-gray-500">Ponle a cada canal su logo real pegando el enlace de una imagen (termina en .png, .jpg, .svg o .webp). Si lo dejas vacío, se usa el logo automático con sus iniciales.</p>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-500 absolute left-3 top-3" />
+              <input type="text" value={logoSearch} onChange={(e) => setLogoSearch(e.target.value)} placeholder="Buscar canal…" className="w-full bg-[#050505] border border-gray-800 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+              {shownChannels.filter((ch) => !logoSearch.trim() || (ch.name + " " + (ch.shortCode || "")).toLowerCase().includes(logoSearch.trim().toLowerCase())).slice(0, 120).map((ch) => (
+                <div key={"lg-" + ch.id} className="flex items-center gap-2.5 rounded-xl border border-gray-800 bg-[#050505] px-2.5 py-2">
+                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-800 shrink-0"><ChannelLogo ch={logoDraft[ch.id] !== undefined ? { ...ch, logo: logoDraft[ch.id] } : ch} big /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{ch.name}</p>
+                    <input type="text" value={logoDraft[ch.id] ?? channelLogos[ch.id] ?? ""} onChange={(e) => setLogoDraft((d) => ({ ...d, [ch.id]: e.target.value }))} placeholder="https://…/logo.png" className="mt-1 w-full bg-[#0c0c0c] border border-gray-800 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                  </div>
+                  <button onClick={() => saveChannelLogo(ch)} className="text-[11px] font-bold px-2.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shrink-0">Guardar</button>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-500">💡 ¿De dónde saco los logos? Busca en <b className="text-gray-300">Wikimedia Commons</b> el nombre del canal + «logo» (muchos son de uso libre), o usa el logo de la web oficial del canal. Haz clic derecho en la imagen → «Copiar dirección de la imagen».</p>
+          </div>
+          )}
+
+          {/* CHAT: MODERACIÓN */}
+          {adminSection === "comunidad" && (
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-3">
+            <h3 className="text-lg font-bold text-white">💬 Chat de la comunidad</h3>
+            <p className="text-xs text-gray-400">Mensaje fijado (aparece arriba del chat). En el chat puedes borrar mensajes o bloquear usuarios con los botones que aparecen debajo de cada mensaje.</p>
+            <textarea maxLength={300} rows={2} placeholder={chatPinned || "Ej. Bienvenidos, pidan sus películas aquí 🍿"} value={chatPinEdit} onChange={(e) => setChatPinEdit(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => chatAdmin("pin", { text: chatPinEdit.trim() }).then((d: any) => { if (d && d.ok) { showToast("📌 Mensaje fijado actualizado."); setChatPinEdit(""); } })} className="bg-white hover:bg-gray-200 text-black px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Guardar mensaje fijado</button>
+              <button onClick={() => setChatOpen(true)} className="bg-[#181818] text-white border border-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Abrir el chat</button>
+            </div>
+          </div>
+          )}
+
+          {/* PEDIDOS DE USUARIOS */}
+          {adminSection === "comunidad" && (
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h3 className="text-lg font-bold text-white">📬 Pedidos de usuarios {adminReqs.filter((r) => r.status === "nueva").length > 0 && <span className="ml-1 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full align-middle">{adminReqs.filter((r) => r.status === "nueva").length} nuevos</span>}</h3>
+              <div className="flex gap-2">
+              {adminReqs.some((r) => r.status !== "nueva") && (
+                <button onClick={() => setShowDoneReqs(!showDoneReqs)} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">{showDoneReqs ? "Ocultar atendidos" : "Ver atendidos (" + adminReqs.filter((r) => r.status !== "nueva").length + ")"}</button>
+              )}
+              <button onClick={() => adminReqCall("list")} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
+              </div>
+            </div>
+            {adminReqs.filter((r) => showDoneReqs || r.status === "nueva").length === 0 ? (
+              <p className="text-xs text-gray-500">{adminReqs.length ? "✅ No hay pedidos pendientes." : ""} Cuando subas una película que alguien pidió, el pedido se marca solo como atendido y se anuncia en el chat.</p>
+            ) : false ? (
+              <p className="text-xs text-gray-500">Todavía no hay pedidos. Los usuarios pueden pedir desde Cuenta → Pedir una película.</p>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {adminReqs.filter((r) => showDoneReqs || r.status === "nueva").map((r) => (
+                  <div key={r.id} className={"rounded-xl border px-3 py-2.5 " + (r.status === "nueva" ? "bg-yellow-500/5 border-yellow-700/40" : "bg-[#050505] border-gray-900")}>
+                    <div className="flex items-start gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[180px]">
+                        <p className="text-sm font-bold text-white">{r.title}</p>
+                        {r.note && <p className="text-xs text-gray-400">“{r.note}”</p>}
+                        <p className="text-[10px] text-gray-500 mt-0.5">{r.profile || "—"} · {r.email} · {fmtChatTime(r.at)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button onClick={() => markReqDone(r)} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "agregada" ? "bg-green-500 text-black" : "bg-[#181818] text-green-400 border border-gray-800")}>✔ Agregada</button>
+                        <button onClick={() => adminReqCall("status", { id: r.id, status: "rechazada", reply: "Por ahora no está disponible." })} className={"text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer " + (r.status === "rechazada" ? "bg-red-600 text-white" : "bg-[#181818] text-red-400 border border-gray-800")}>✖ No disponible</button>
+                        <button onClick={() => adminReqCall("delete", { id: r.id })} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer bg-[#181818] text-gray-400 border border-gray-800">Borrar</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* VOTACIONES */}
+          {adminSection === "comunidad" && (
+          <div className="bg-[#0f0f0f] border border-purple-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-bold text-white">🗳️ Votaciones de la comunidad</h3>
+                <p className="text-xs text-gray-500">La votación abierta aparece en la portada. Cada cuenta vota una vez (puede cambiar su voto). Al cerrarla, el ganador se anuncia en el chat.</p>
+              </div>
+              <button onClick={loadAdminPolls} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-3 py-2 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">Actualizar</button>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400">Pregunta</label>
+                <input type="text" maxLength={120} value={pollQ} onChange={(e) => setPollQ(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                <label className="text-xs font-bold text-gray-400 block pt-1">Opciones (una por línea, de 2 a 6)</label>
+                <textarea rows={5} value={pollOpts} onChange={(e) => setPollOpts(e.target.value)} placeholder={"Opción 1\nOpción 2\nOpción 3"} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={pollFromRequests} className="text-xs font-bold text-purple-200 bg-purple-500/15 border border-purple-500/40 px-3 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400">📬 Llenar con los más pedidos</button>
+                  <button onClick={createPoll} className="text-sm font-black text-white bg-purple-600 hover:bg-purple-500 px-5 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-purple-400">Publicar votación</button>
+                </div>
+                <p className="text-[11px] text-gray-500">Si una opción se llama igual que una película del catálogo, se muestra con su póster.</p>
+              </div>
+              <div className="space-y-2">
+                {adminPolls.length === 0 ? (
+                  <p className="text-sm text-gray-500">Todavía no hay votaciones.</p>
+                ) : adminPolls.map((p) => (
+                  <div key={"ap-" + p.id} className="rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={"text-[10px] font-black px-2 py-0.5 rounded-full " + (p.open ? "bg-green-500/20 text-green-400" : "bg-gray-700 text-gray-300")}>{p.open ? "ABIERTA" : "CERRADA"}</span>
+                      <span className="flex-1 min-w-0 text-sm font-bold text-white truncate">{p.q}</span>
+                      <span className="text-[11px] text-gray-400">{p.total} votos</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1 truncate">{p.opts.map((o) => (p.winner === o.id ? "🏆 " : "") + o.label + " (" + o.count + ")").join(" · ")}</p>
+                    <div className="flex gap-2 mt-2">
+                      {p.open && <button onClick={() => closePoll(p)} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-yellow-500 text-black cursor-pointer">🏆 Cerrar y anunciar</button>}
+                      <button onClick={() => deletePoll(p)} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#181818] text-red-400 border border-gray-800 cursor-pointer">Borrar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* AVISOS PROGRAMADOS */}
+          {adminSection === "avisos" && (
+          <div className="bg-[#0f0f0f] border border-gray-800 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">⏰ Avisos programados</h3>
+              <p className="text-xs text-gray-400">Deja listo un aviso para que llegue a todos los que tienen la campanita 🔔 un día y hora exactos.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select value={schedMovieId} onChange={(e) => setSchedMovieId(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500">
+                <option value="">Película (opcional)</option>
+                {catalogAll.map((x) => <option key={"so-" + x.id} value={String(x.id)}>{x.title}{x.comingSoon ? " (próximo estreno)" : ""}</option>)}
+              </select>
+              <input type="datetime-local" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" style={{ colorScheme: "dark" }} />
+              <input type="text" maxLength={80} placeholder="Título (ej. ¡Hoy se estrena! 🍿)" value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              <input type="text" maxLength={200} placeholder="Mensaje (si eliges película, se escribe solo)" value={schedBody} onChange={(e) => setSchedBody(e.target.value)} className="w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+            <button onClick={addSched} className="w-full sm:w-auto bg-white hover:bg-gray-200 text-black px-5 py-3 rounded-xl text-sm font-bold cursor-pointer focus:outline-none focus:ring-4 focus:ring-green-500">Programar aviso</button>
+            {schedList.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {schedList.slice().sort((a, b) => a.at - b.at).map((it) => (
+                  <div key={it.id} className="flex items-center gap-3 bg-[#050505] border border-gray-900 rounded-xl px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{it.title} <span className="text-gray-400 font-normal">— {it.body}</span></p>
+                      <p className="text-[11px] text-green-400">{new Date(it.at).toLocaleString("es-PE", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                    <button onClick={() => removeSched(it.id)} className="text-xs text-red-400 hover:underline cursor-pointer px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-green-500">Quitar</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* SEGURIDAD */}
+          {adminSection === "seguridad" && (
+          <div className="bg-[#0f0f0f] border border-blue-900/50 p-4 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-bold text-white">🛡️ Seguridad y copias de seguridad</h3>
+                <p className="text-xs text-gray-500">Cada día se guarda sola una copia del catálogo (se conservan los últimos 7 días). Si algo se borra o alguien lo daña, lo restauras con un toque.</p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={loadBackups} className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-blue-400">🗂️ Ver copias</button>
+                <button onClick={loadAdminLog} className="text-xs font-bold text-white bg-[#181818] border border-gray-800 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">📋 Ver entradas</button>
+                <button onClick={revokeAllAdmins} className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-4 focus:ring-red-400">🚨 Cerrar sesión en todos los demás</button>
+                <button onClick={adminLogoutDevice} className="text-xs font-bold text-gray-300 hover:text-white bg-[#181818] border border-gray-800 px-4 py-2.5 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">🔒 Cerrar sesión aquí</button>
+              </div>
+            </div>
+            {adminLog && (() => {
+              const mine = myLoginId();
+              const week = Date.now() - 7 * 86400000;
+              const locks = adminLog.filter((x) => x.kind === "lock" && x.at > week);
+              const others = adminLog.filter((x) => x.kind === "login" && x.at > week && x.id !== mine);
+              return (
+                <div className="space-y-2">
+                  {locks.length > 0 && (
+                    <div className="rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">
+                      🔒 <b>{locks.length} bloqueo{locks.length === 1 ? "" : "s"} por claves incorrectas</b> esta semana (último: {locks[0].device}, {new Date(locks[0].at).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}). Si no fuiste tú, alguien intentó adivinar tu clave: el bloqueo lo frenó.
+                    </div>
+                  )}
+                  {others.length > 0 && (
+                    <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-3 py-2.5 text-sm text-yellow-100 flex items-center gap-3 flex-wrap">
+                      <span className="flex-1 min-w-[200px]">⚠️ Hubo <b>{others.length} entrada{others.length === 1 ? "" : "s"}</b> al panel desde otros dispositivos esta semana. ¿Fuiste tú? Revisa la lista de abajo.</span>
+                      <button onClick={revokeAllAdmins} className="text-xs font-black text-white bg-red-600 hover:bg-red-500 px-3 py-2 rounded-lg cursor-pointer">🚨 No fui yo: cerrar todas</button>
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-gray-800 bg-[#050505] p-3">
+                    <p className="text-xs font-bold text-gray-400 mb-2">📋 Últimas entradas al panel</p>
+                    {adminLog.length === 0 ? <p className="text-xs text-gray-500">Todavía no hay registros. Se anotan desde esta actualización.</p> : (
+                      <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                        {adminLog.slice(0, 20).map((x, i) => (
+                          <div key={"lg-" + i} className="flex items-center gap-2 text-xs">
+                            <span className="w-5 text-center">{x.kind === "login" ? "🔑" : x.kind === "lock" ? "🔒" : "🚨"}</span>
+                            <span className="flex-1 min-w-0 truncate text-gray-200">{x.kind === "login" ? "Entrada" : x.kind === "lock" ? "Bloqueo por claves incorrectas" : "Cerró sesión en todos"} · {x.device}{x.id && x.id === mine ? <b className="text-green-400"> · este dispositivo</b> : null}</span>
+                            <span className="text-gray-500 shrink-0">{new Date(x.at).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            {backups && (backups.length === 0 ? (
+              <p className="text-sm text-gray-500">Todavía no hay copias. La primera se crea sola la próxima vez que guardes un cambio.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {backups.map((b) => (
+                  <div key={"bk-" + b.slot} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-[#050505] px-3 py-2.5">
+                    <span className="text-xl">🗂️</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-white truncate">{(() => { const t = new Date(b.at).toLocaleString("es-PE", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); return t.charAt(0).toUpperCase() + t.slice(1); })()}</span>
+                      <span className="block text-[11px] text-gray-400">{b.count} títulos</span>
+                    </span>
+                    <button onClick={() => restoreBackup(b)} className="text-[11px] font-bold px-3 py-2 rounded-lg bg-[#181818] text-blue-300 border border-gray-800 cursor-pointer hover:border-blue-400">↩ Restaurar</button>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <ul className="text-[11px] text-gray-500 space-y-1 list-disc pl-4">
+              <li>Tu clave ya no se guarda en el navegador: se usa un pase temporal que vence a los 7 días y se renueva solo.</li>
+              <li>Si alguien prueba claves, se bloquea 15 minutos después de 5 intentos fallidos.</li>
+              <li>No se puede guardar un catálogo vacío por accidente.</li>
+              <li>Si ves una entrada que no reconoces, pulsa «🚨 Cerrar sesión en todos los demás»: cualquier otro dispositivo pierde el acceso al instante.</li>
+            </ul>
+          </div>
+          )}
+
+          {/* ESTADÍSTICAS */}
+          {adminSection === "estadisticas" && (
+          <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-3xl space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-bold text-white mr-auto">📊 Estadísticas</h3>
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={"sd-" + d}
+                  onClick={() => setStatsDays(d)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${statsDays === d ? "bg-white text-black" : "bg-[#181818] text-gray-300 border border-gray-800"}`}
+                >
+                  {d === 7 ? "7 días" : d === 30 ? "30 días" : "90 días"}
+                </button>
+              ))}
+              <button onClick={() => loadStats(statsDays)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#181818] text-gray-300 border border-gray-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
+                {statsLoading ? "Cargando..." : "↻ Actualizar"}
+              </button>
+            </div>
+            {statsError && <p className="text-xs text-red-400 font-bold">{statsError}</p>}
+            {stats && (() => {
+              const plays: Record<string, number> = stats.plays || {};
+              const watch: Record<string, number> = stats.watchSecs || {};
+              const comp: Record<string, number> = stats.completes || {};
+              const drop: Record<string, number[]> = stats.dropoff || {};
+              const titles: Record<string, string> = stats.titles || {};
+              const nameOf = (id: string) => titles[id] || (customMovies.find((m) => String(m.id) === id) || { title: "Título " + id }).title;
+              const totalPlays = Object.keys(plays).reduce((a, k) => a + plays[k], 0);
+              const totalHours = Object.keys(watch).reduce((a, k) => a + watch[k], 0) / 3600;
+              const totalComp = Object.keys(comp).reduce((a, k) => a + comp[k], 0);
+              const totalEnded = totalComp + Object.keys(drop).reduce((a, k) => a + drop[k].reduce((x, y) => x + y, 0), 0);
+              const devices: Record<string, number> = stats.devices || {};
+              const devTotal = Math.max(1, Object.keys(devices).reduce((a, k) => a + devices[k], 0));
+              const daily: { day: number; visits: number; plays: number }[] = stats.daily || [];
+              const maxDaily = Math.max(1, ...daily.map((d) => d.visits));
+              const top = Object.keys(plays).sort((a, b) => plays[b] - plays[a]).slice(0, 10);
+              const kpis = [
+                { label: "Visitas", value: stats.visits || 0 },
+                { label: "Visitantes únicos", value: stats.uniqueVisitors || 0 },
+                { label: "Reproducciones", value: totalPlays },
+                { label: "Horas vistas", value: totalHours < 10 ? totalHours.toFixed(1) : Math.round(totalHours) },
+                { label: "Terminan la película", value: totalEnded ? Math.round((totalComp / totalEnded) * 100) + "%" : "—" },
+                { label: "Visitas con cuenta", value: stats.visits ? Math.round(((stats.loggedVisits || 0) / stats.visits) * 100) + "%" : "—" },
+              ];
+              return (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {kpis.map((k) => (
+                      <div key={k.label} className="bg-[#050505] border border-gray-900 rounded-2xl p-4">
+                        <p className="text-2xl font-black text-white">{k.value}</p>
+                        <p className="text-[11px] text-gray-400 mt-1">{k.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {daily.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-300 mb-2">Visitas por día</p>
+                      <div className="flex items-end gap-1 h-28 bg-[#050505] border border-gray-900 rounded-2xl p-3">
+                        {daily.map((d) => (
+                          <div key={"day-" + d.day} className="flex-1 flex flex-col items-center justify-end h-full" title={String(d.day).slice(6) + "/" + String(d.day).slice(4, 6) + ": " + d.visits + " visitas, " + d.plays + " reproducciones"}>
+                            <div className="w-full bg-green-500 rounded-t" style={{ height: Math.max(3, (d.visits / maxDaily) * 100) + "%" }} />
+                            {daily.length <= 14 && <span className="text-[9px] text-gray-500 mt-1">{String(d.day).slice(6)}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-xs font-bold text-gray-300 mb-2">Dispositivos</p>
+                    <div className="space-y-2">
+                      {[["tv", "📺 Smart TV"], ["mobile", "📱 Celular / tablet"], ["desktop", "💻 Computadora"]].map(([k, label]) => {
+                        const pct = Math.round(((devices[k] || 0) / devTotal) * 100);
+                        return (
+                          <div key={"dev-" + k} className="flex items-center gap-3">
+                            <span className="text-xs text-gray-300 w-36 shrink-0">{label}</span>
+                            <div className="flex-1 h-3 bg-[#1f1f1f] rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: pct + "%" }} /></div>
+                            <span className="text-xs text-gray-400 w-16 text-right">{pct}% ({devices[k] || 0})</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold text-gray-300 mb-2">Lo más visto</p>
+                    {top.length === 0 ? (
+                      <p className="text-xs text-gray-500">Todavía no hay reproducciones en este periodo.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {top.map((id, i) => {
+                          const ended = (comp[id] || 0) + (drop[id] || []).reduce((x, y) => x + y, 0);
+                          const compPct = ended ? Math.round(((comp[id] || 0) / ended) * 100) : null;
+                          return (
+                            <div key={"top-" + id} className="bg-[#050505] border border-gray-900 rounded-xl p-3">
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg font-black text-gray-500 w-6 text-center">{i + 1}</span>
+                                <span className="text-sm font-bold text-white truncate flex-1">{nameOf(id)}</span>
+                                <span className="text-[11px] text-gray-400 shrink-0">{plays[id]} ▶ · {((watch[id] || 0) / 3600).toFixed(1)} h{compPct !== null ? " · " + compPct + "% termina" : ""}</span>
+                                {drop[id] && (
+                                  <button onClick={() => setDropoffFor(dropoffFor === id ? null : id)} className="text-[11px] font-bold text-green-400 hover:underline shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 rounded px-1">
+                                    {dropoffFor === id ? "Ocultar" : "¿Dónde abandonan?"}
+                                  </button>
+                                )}
+                              </div>
+                              {dropoffFor === id && drop[id] && (() => {
+                                const arr = drop[id];
+                                const mx = Math.max(1, ...arr);
+                                return (
+                                  <div className="mt-3">
+                                    <div className="flex items-end gap-1 h-20">
+                                      {arr.map((n, j) => (
+                                        <div key={"dp-" + j} className="flex-1 flex flex-col items-center justify-end h-full" title={j * 10 + "–" + (j * 10 + 10) + "%: " + n + " personas dejaron de ver"}>
+                                          <div className="w-full bg-red-500/80 rounded-t" style={{ height: Math.max(2, (n / mx) * 100) + "%" }} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="flex justify-between text-[9px] text-gray-500 mt-1"><span>Inicio</span><span>Mitad</span><span>Final</span></div>
+                                    <p className="text-[11px] text-gray-400 mt-1">Cada barra es un 10 % de la película: muestra en qué parte la gente dejó de ver.</p>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-500">Datos anónimos: no se guarda quién vio qué. Tus propias visitas como administrador no cuentan.</p>
+                </div>
+              );
+            })()}
+          </div>
+          )}
+
         </div>
       )}
 

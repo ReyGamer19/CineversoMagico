@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  experimental: {
+  experimental: { agentUpgrade: false,
     agentFeedback: true,
   },
   cacheComponents: true,
