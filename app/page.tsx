@@ -3026,6 +3026,9 @@ export default function Home() {
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
   const [selectedServerId, setSelectedServerId] = useState<string>("");
   const [playerIframeUrl, setPlayerIframeUrl] = useState<string>("");
+  const [serverMenuOpen, setServerMenuOpen] = useState(false);
+  // Al abrir otra película o episodio se vuelve al primer servidor
+  useEffect(() => { setSelectedServerId(""); setServerMenuOpen(false); }, [selectedMovie && selectedMovie.id, currentEpisode && currentEpisode.id]);
 
   const currentEpisodeRef = useRef<Episode | null>(null);
   currentEpisodeRef.current = currentEpisode;
@@ -3067,8 +3070,10 @@ export default function Home() {
       : selectedMovie.videoServers || [];
 
     const selectedServer =
-      availableServers.find((server) => server.id === selectedServerId) ||
-      availableServers[0];
+      selectedServerId === "principal"
+        ? undefined
+        : availableServers.find((server, i) => (server.id || "srv" + i) === selectedServerId) ||
+          availableServers[0];
 
     // Si no hay servidores adicionales, utiliza el enlace original
     const src =
@@ -3603,9 +3608,11 @@ export default function Home() {
       // la serie usa el enlace de su primer episodio como enlace principal
       setNewMovieVideoUrl(newEpisodes[0].videoUrl);
     }
-    const mainUrl = newMovieVideoUrl || (newMovieType === "serie" && newEpisodes.length ? newEpisodes[0].videoUrl : "");
+    // cv-un-solo-enlace: si el campo principal está vacío, se usa el primer servidor de la lista
+    const firstServerUrl = ((newMovieVideoServers || []).find((x) => x && x.url && x.url.trim()) || { url: "" }).url.trim();
+    const mainUrl = newMovieVideoUrl.trim() || firstServerUrl || (newMovieType === "serie" && newEpisodes.length ? newEpisodes[0].videoUrl : "");
     if (!newMovieTitle || (!mainUrl && !newComingSoon)) {
-      alert(newMovieType === "serie" ? "Ingresa el título y agrega al menos un episodio." : "Por favor ingresa al menos el título y el enlace del vídeo.");
+      alert(newMovieType === "serie" ? "Ingresa el título y agrega al menos un episodio." : "Ingresa el título y al menos un enlace (en el campo de video o en la lista de servidores).");
       return;
     }
     if (/gtv-videos-bucket|BigBuckBunny|ElephantsDream|ForBiggerBlazes/i.test(mainUrl)) {
@@ -7421,12 +7428,13 @@ const handleEditClick = (movie: Movie) => {
               
 <div>
   <label className="text-xs text-gray-400 block mb-1">
-    Enlace del Vídeo (MP4 directo de Archive.org)
+    Enlace del Vídeo (opcional si agregas servidores abajo)
   </label>
 
   <input
     type="url"
-    required={newMovieType !== "serie" && !newComingSoon}
+    required={newMovieType !== "serie" && !newComingSoon && !(newMovieVideoServers || []).some((x) => x && x.url && x.url.trim())}
+    data-cv="cv-campo-opcional"
     placeholder={
       newMovieType === "serie"
         ? "Opcional en series: se usa el primer episodio"
@@ -9300,6 +9308,45 @@ const handleEditClick = (movie: Movie) => {
             >
               <ArrowLeft className="w-5 h-5" /> <span className="truncate">{selectedMovie.title}{currentEpisode ? " · T" + currentEpisode.season + ":E" + currentEpisode.number + " " + currentEpisode.title : ""}</span>
             </button>
+            {/* cv-server-picker: idioma + servidor */}
+            {(() => {
+              const ep = currentEpisode;
+              const base = (ep && ep.videoServers && ep.videoServers.length ? ep.videoServers : selectedMovie.videoServers || []).filter((x) => x && x.url);
+              const main = ep ? ep.videoUrl : selectedMovie.videoUrl;
+              const opts: { id: string; name: string }[] = base.map((x, i) => ({ id: x.id || "srv" + i, name: x.name || "Servidor " + (i + 1) }));
+              if (base.length && main && !base.some((x) => cvFixLink(x.url) === cvFixLink(main))) opts.push({ id: "principal", name: "Servidor " + (opts.length + 1) });
+              if (!opts.length) opts.push({ id: "principal", name: "Servidor 1" });
+              const active = opts.find((o) => o.id === selectedServerId) || opts[0];
+              return (
+                <div className="relative shrink-0">
+                  <button
+                    onClick={() => setServerMenuOpen((o) => !o)}
+                    aria-label="Cambiar servidor"
+                    className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black pl-3 pr-2.5 py-2 rounded-full text-xs font-black whitespace-nowrap transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-black/70" /> Latino
+                    <span className="font-bold opacity-70">· {active.name}</span>
+                    <ChevronDown className={"w-4 h-4 transition-transform " + (serverMenuOpen ? "rotate-180" : "")} />
+                  </button>
+                  {serverMenuOpen && (
+                    <div className="absolute bottom-full mb-2 left-0 bg-[#141414] border border-gray-700 rounded-xl p-1.5 flex flex-col min-w-[190px] shadow-2xl z-40">
+                      <div className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Latino · elige un servidor</div>
+                      {opts.map((o) => (
+                        <button
+                          key={"srv-" + o.id}
+                          onClick={() => { setSelectedServerId(o.id); setServerMenuOpen(false); setPlayerError(""); }}
+                          className={"flex items-center justify-between gap-3 text-xs font-bold px-3 py-2 rounded-lg text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 " + (o.id === active.id ? "bg-green-500 text-black" : "text-gray-200 hover:bg-white/10")}
+                        >
+                          {o.name}
+                          {o.id === active.id && <Check className="w-4 h-4" />}
+                        </button>
+                      ))}
+                      {opts.length < 2 && <div className="px-3 pt-2 pb-1 text-[10px] text-gray-500">Agrega más servidores desde el panel.</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none max-w-full pb-0.5" style={{ scrollbarWidth: "none" }}>
               <button 
                 onClick={touchUi ? toggleTouchFullscreen : requestFullscreenSafe}
