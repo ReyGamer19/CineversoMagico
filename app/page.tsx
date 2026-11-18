@@ -3084,8 +3084,15 @@ export default function Home() {
     const duration = parseDur(ep ? ep.duration : movie.duration) || (prev && prev.duration) || 5400;
     const base = prev ? prev.time : 0;
     const start = Date.now();
+    // cv-historial-externo: cuenta como reproducción (Top 10, historial, gustos, retos y Sorpréndeme)
+    try { trackPlaying(movie); } catch (e) {}
     const save = () => {
       const time = Math.max(0, Math.min(duration - 90, base + Math.floor((Date.now() - start) / 1000)));
+      const w = watchRef.current;
+      if (w && w.id === String(movie.id)) {
+        w.secs = Math.max(w.secs, Math.floor((Date.now() - start) / 1000));
+        w.maxPct = Math.max(w.maxPct, (time / duration) * 100);
+      }
       if (time < 30) return;
       setContinueWatchingList((list) => {
         const rest = list.filter((p) => String(p.id) !== String(movie.id));
@@ -4755,11 +4762,18 @@ const handleEditClick = (movie: Movie) => {
     if (!password) return;
     commPost({ action: "claimOwner", password }).then(({ ok }) => { if (ok) { setIsOwner(true); showToast("👑 Tu cuenta quedó registrada como la del Fundador de Cineverso."); } });
   }, [isAdmin, accountUser && accountUser.email, meLoaded, isOwner]);
-  const watched = continueWatchingList.filter((p) => p.duration > 0 && p.time / p.duration > 0.15);
-  const watchedMovies = watched.map((p) => catalogAll.find((x) => String(x.id) === String(p.id))).filter(Boolean) as Movie[];
+  // cv-logros-historial: cuenta también lo que ya terminaste (historial), no solo "Continuar viendo"
+  const watchedIdSet = new Set<string>();
+  continueWatchingList.forEach((p) => { if (p.duration > 0 && p.time / p.duration > 0.15) watchedIdSet.add(String(p.id)); });
+  watchHistory.forEach((h) => { if (h.pct >= 15 || h.mins >= 10) watchedIdSet.add(String(h.id)); });
+  const watched = Array.from(watchedIdSet);
+  const watchedMovies = watched.map((id) => catalogAll.find((x) => String(x.id) === id)).filter(Boolean) as Movie[];
   const genresSeen = new Set(watchedMovies.map((m) => m.tag).filter(Boolean));
-  const episodesSeen = watched.filter((p) => p.episodeId).length;
-  const finished = continueWatchingList.filter((p) => p.duration > 0 && p.time / p.duration > 0.9).length;
+  const episodesSeen = continueWatchingList.filter((p) => p.episodeId && p.duration > 0 && p.time / p.duration > 0.15).length;
+  const finishedSet = new Set<string>();
+  watchHistory.forEach((h) => { if (h.pct >= 90) finishedSet.add(String(h.id)); });
+  continueWatchingList.forEach((p) => { if (p.duration > 0 && p.time / p.duration > 0.9) finishedSet.add(String(p.id)); });
+  const finished = finishedSet.size;
   const ratingsCount = Object.keys(ratings).length;
   const BADGES: { id: string; icon: string; name: string; desc: string; have: number; need: number }[] = [
     { id: "estreno", icon: "🎬", name: "Primera función", desc: "Mira tu primer título", have: watched.length, need: 1 },
