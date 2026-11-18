@@ -5438,25 +5438,55 @@ const handleEditClick = (movie: Movie) => {
     if (actor) return "Sale " + actor + ", que ya viste en otras 🎬";
     return "Algo distinto para variar 🎲";
   };
+  // cv-sorpresa-variada: recomienda según tus gustos, pero variando (una por saga y sin repetir las últimas)
+  const surpriseRecent = useRef<string[]>([]);
   const pickSurprise = (exclude: string): { m: Movie; why: string } | null => {
+    const recent = surpriseRecent.current;
+    const prevPick = exclude ? catalog.find((x) => String(x.id) === exclude) : undefined;
     const playable = catalog.filter((m) => String(m.id) !== exclude);
-    const fresh = playable.filter((m) => !seenIds.has(String(m.id)) && ratings[String(m.id)] !== -1);
-    const base = fresh.length ? fresh : playable;
-    if (!base.length) return null;
-    if (!taste.has) {
-      const tops = commTop.map((id) => base.find((x) => String(x.id) === id)).filter(Boolean) as Movie[];
-      const from = tops.length ? tops.slice(0, 10) : base;
-      const m = from[Math.floor(Math.random() * from.length)];
-      return { m, why: tops.length ? "Aún no conocemos tus gustos: esta es de lo mejor valorado por la comunidad ⭐" : "Aún no conocemos tus gustos. ¡Mira algo y aprenderemos de ti! 🍿" };
+    if (!playable.length) return null;
+    const unseen = playable.filter((m) => !seenIds.has(String(m.id)) && ratings[String(m.id)] !== -1);
+    let base = unseen.length ? unseen : playable;
+    // No repetir lo que ya mostró hace poco (si quedan otras opciones)
+    const notRecent = base.filter((m) => recent.indexOf(String(m.id)) === -1);
+    if (notRecent.length) base = notRecent;
+    // Si la anterior era de una saga, la siguiente es de otra cosa
+    if (prevPick && prevPick.saga) {
+      const other = base.filter((m) => m.saga !== prevPick.saga);
+      if (other.length) base = other;
     }
-    // Se elige al azar entre las que más encajan (las de mayor puntaje tienen mucha más probabilidad)
-    const top = base.map((m) => ({ m, s: tasteScore(m) })).sort((a, b) => b.s - a.s).slice(0, 6);
-    const minS = Math.min.apply(null, top.map((x) => x.s));
-    const w = top.map((x) => Math.pow(x.s - minS + 0.5, 2));
-    let r = Math.random() * w.reduce((a, b) => a + b, 0);
-    let chosen = top[0];
-    for (let i = 0; i < top.length; i++) { r -= w[i]; if (r <= 0) { chosen = top[i]; break; } }
-    return { m: chosen.m, why: fresh.length ? tasteWhy(chosen.m) : "¡Ya viste casi todo! Esta te puede gustar de nuevo 🔁" };
+    // Una sola por saga: la primera parte que te falta ver
+    const bySaga: Record<string, boolean> = {};
+    const pool: Movie[] = [];
+    base.slice().sort(sagaSort).forEach((m) => {
+      if (!m.saga) { pool.push(m); return; }
+      if (!bySaga[m.saga]) { bySaga[m.saga] = true; pool.push(m); }
+    });
+    if (!pool.length) return null;
+    const keep = Math.max(3, Math.min(15, Math.floor(catalog.length / 2)));
+    const remember = (m: Movie) => { surpriseRecent.current = [String(m.id)].concat(recent.filter((x) => x !== String(m.id))).slice(0, keep); };
+    if (!taste.has) {
+      const tops = commTop.map((id) => pool.find((x) => String(x.id) === id)).filter(Boolean) as Movie[];
+      const from = tops.length >= 3 ? tops.slice(0, 12) : pool;
+      const m = from[Math.floor(Math.random() * from.length)];
+      remember(m);
+      return { m, why: tops.length >= 3 ? "Aún no conocemos tus gustos: esta es de lo mejor valorado por la comunidad ⭐" : "Aún no conocemos tus gustos. ¡Mira algo y aprenderemos de ti! 🍿" };
+    }
+    // 1 de cada 4 veces: algo distinto para descubrir
+    if (pool.length > 3 && Math.random() < 0.25) {
+      const m = pool[Math.floor(Math.random() * pool.length)];
+      remember(m);
+      return { m, why: tasteScore(m) > 0 ? tasteWhy(m) : "Algo distinto para descubrir 🎲" };
+    }
+    // Las que más encajan con tus gustos tienen más probabilidad, pero todas las del top 12 pueden salir
+    const ranked = pool.map((m) => ({ m, s: tasteScore(m) })).sort((x, y) => y.s - x.s).slice(0, 12);
+    const minS = ranked[ranked.length - 1].s;
+    const w = ranked.map((x) => x.s - minS + 1);
+    let rnd = Math.random() * w.reduce((x, y) => x + y, 0);
+    let chosen = ranked[0];
+    for (let i = 0; i < ranked.length; i++) { rnd -= w[i]; if (rnd <= 0) { chosen = ranked[i]; break; } }
+    remember(chosen.m);
+    return { m: chosen.m, why: unseen.length ? tasteWhy(chosen.m) : "¡Ya viste casi todo! Esta te puede gustar de nuevo 🔁" };
   };
   // Ruleta de Sorpréndeme
   const [surprise, setSurprise] = useState<{ phase: "spin" | "done"; reel: Movie[]; idx: number; pick: Movie; why: string } | null>(null);
