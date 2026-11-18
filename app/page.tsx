@@ -2948,6 +2948,11 @@ export default function Home() {
           e.preventDefault();
           return;
         }
+        if (tag === "iframe") {
+          try { const fr = target as HTMLIFrameElement; if (fr.contentWindow) fr.contentWindow.focus(); } catch (err) {}
+          e.preventDefault();
+          return;
+        }
         if (!typing && tag !== "button" && tag !== "a" && target && target.getAttribute && target.getAttribute("tabindex") !== null) {
           e.preventDefault();
           target.click();
@@ -9053,6 +9058,10 @@ const handleEditClick = (movie: Movie) => {
   <iframe
     src={playerIframeUrl}
     title="Reproductor externo"
+    data-cv="cv-iframe-tactil"
+    tabIndex={0}
+    data-autofocus
+    onLoad={(e) => { const f = e.currentTarget; setTimeout(() => { try { f.focus(); if (f.contentWindow) f.contentWindow.focus(); } catch (err) {} }, 300); }}
     className="absolute inset-0 w-full h-full"
     style={{ border: 0 }}
     allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
@@ -9123,7 +9132,7 @@ const handleEditClick = (movie: Movie) => {
 </video>
 )}
 </div>
-            {touchUi && !playerError && (
+            {touchUi && !playerError && !playerIframeUrl && (
               <TouchControls
                 videoRef={playerRef}
                 title={selectedMovie.title + (currentEpisode ? " · T" + currentEpisode.season + ":E" + currentEpisode.number : "")}
@@ -9258,7 +9267,7 @@ const handleEditClick = (movie: Movie) => {
                 </div>
               </div>
             )}
-            {videoLoading && !playerError && !touchUi && (
+            {videoLoading && !playerError && !touchUi && !playerIframeUrl && (
               <div style={{ position: "absolute", top: "50%", left: 0, right: 0, marginTop: -40, textAlign: "center", pointerEvents: "none" }}>
                 <div className="inline-block w-12 h-12 rounded-full border-4 border-gray-700 border-t-green-500 animate-spin" />
                 <p className="text-sm text-gray-300 mt-3">Cargando película...</p>
