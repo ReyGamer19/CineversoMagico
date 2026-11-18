@@ -44,3 +44,6 @@ reporte-canales.*
 page.limpio.tsx
 canales-quitados.txt
 .respaldos-cineverso/
+
+.vercel
+.env*

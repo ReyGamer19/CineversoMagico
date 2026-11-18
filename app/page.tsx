@@ -616,6 +616,46 @@ function Rail({ className, style, children }: { className: string; style?: { [k:
   );
 }
 
+// ===== Reproductor externo: decide si un enlace va en <iframe> =====
+// Devuelve la URL para el iframe, o "" si se debe reproducir con <video> (MP4 / HLS).
+function cvResolveEmbed(rawUrl: string, type?: string): string {
+  const url = String(rawUrl || "").trim();
+  if (!url || type === "mp4" || type === "hls" || type === "dash") return "";
+  let u: URL;
+  try { u = new URL(url); } catch (e) { return type === "iframe" ? url : ""; }
+  const p = u.pathname.toLowerCase();
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  if (type !== "iframe") {
+    // Archivos de video directos -> reproductor normal
+    if (/\.(mp4|m4v|webm|ogg|ogv|mov|mkv|m3u8|mpd|ts)$/.test(p)) return "";
+    if (/(^|\.)archive\.org$/.test(host) && p.indexOf("/download/") === 0) return "";
+    if (/googlevideo\.com$|storage\.googleapis\.com$|commondatastorage\.googleapis\.com$/.test(host)) return "";
+  }
+  // YouTube
+  if (host === "youtu.be") return "https://www.youtube.com/embed/" + u.pathname.slice(1).split("/")[0];
+  if (/(^|\.)youtube\.com$/.test(host)) {
+    const v = u.searchParams.get("v");
+    if (v) return "https://www.youtube.com/embed/" + v;
+    const sh = u.pathname.match(/^\/shorts\/([^/?#]+)/);
+    if (sh) return "https://www.youtube.com/embed/" + sh[1];
+    return url;
+  }
+  // Vimeo
+  if (host === "vimeo.com") {
+    const id = u.pathname.split("/").filter(Boolean)[0];
+    if (id && /^\d+$/.test(id)) return "https://player.vimeo.com/video/" + id;
+  }
+  // Google Drive: /view -> /preview
+  if (host === "drive.google.com" && u.pathname.indexOf("/file/d/") === 0) {
+    return url.replace(/\/(view|edit)(\?.*)?$/, "/preview");
+  }
+  // Filemoon, Vidhide, Streamwish y similares: /d/xxx, /f/xxx, /v/xxx -> /e/xxx
+  const m = u.pathname.match(/^\/(d|f|v|file)\/([^/]+)/);
+  if (m) { u.pathname = "/e/" + m[2]; return u.toString(); }
+  // Cualquier otro enlace se abre en iframe
+  return u.toString();
+}
+
 export default function Home() {
   const myAvatars: { name: string; file: string; cv?: boolean }[] = [
     // Avatares originales de Cineverso
@@ -3000,9 +3040,6 @@ export default function Home() {
   useEffect(() => {
     if (!isPlaying || !selectedMovie) return;
 
-    const video = playerRef.current;
-    if (!video) return;
-
     setPlayerError("");
 
     const ep = currentEpisodeRef.current;
@@ -3027,15 +3064,20 @@ export default function Home() {
 
     const serverType = selectedServer?.type || "auto";
 
-    // Estos formatos necesitan un reproductor específico
-    if (serverType === "iframe" || serverType === "dash") {
-      setPlayerError(
-        serverType === "iframe"
-          ? "Este servidor necesita integrar el reproductor iframe."
-          : "Este servidor necesita integrar el reproductor DASH."
-      );
+    // Enlaces externos (Filemoon, Vidhide, YouTube, /e/...) -> reproductor iframe
+    const embedSrc = cvResolveEmbed(src, serverType);
+    if (embedSrc) {
+      if (playerIframeUrl !== embedSrc) setPlayerIframeUrl(embedSrc);
       return;
     }
+    if (playerIframeUrl) setPlayerIframeUrl("");
+    if (serverType === "dash") {
+      setPlayerError("Este servidor necesita integrar el reproductor DASH.");
+      return;
+    }
+
+    const video = playerRef.current;
+    if (!video) return;
 
     let hls: Hls | null = null;
 
@@ -3139,7 +3181,8 @@ export default function Home() {
     selectedMovie,
     usingBackup,
     currentEpisode,
-    selectedServerId
+    selectedServerId,
+    playerIframeUrl
   ]);
 
 
