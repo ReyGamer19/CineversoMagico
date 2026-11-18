@@ -3067,6 +3067,34 @@ export default function Home() {
   const [serverMenuOpen, setServerMenuOpen] = useState(false);
   // Al abrir otra película o episodio se vuelve al primer servidor
   useEffect(() => { setSelectedServerId(""); setServerMenuOpen(false); }, [selectedMovie && selectedMovie.id, currentEpisode && currentEpisode.id]);
+  // cv-seguir-externo: los videos externos (iframe) también aparecen en "Continuar viendo".
+  // La página no puede leer el minuto exacto del reproductor externo, así que se cuenta el tiempo que estuvo abierto.
+  useEffect(() => {
+    if (!isPlaying || !selectedMovie || !playerIframeUrl) return;
+    const movie = selectedMovie;
+    const ep = currentEpisode;
+    const parseDur = (d?: string) => {
+      const t = String(d || "").toLowerCase();
+      const h = t.match(/(\d+)\s*h/);
+      const mm = t.match(/(\d+)\s*m/);
+      const mins = (h ? parseInt(h[1], 10) * 60 : 0) + (mm ? parseInt(mm[1], 10) : 0);
+      return mins > 0 ? mins * 60 : 0;
+    };
+    const prev = progressRef.current.find((p) => String(p.id) === String(movie.id) && (!ep || p.episodeId === ep.id));
+    const duration = parseDur(ep ? ep.duration : movie.duration) || (prev && prev.duration) || 5400;
+    const base = prev ? prev.time : 0;
+    const start = Date.now();
+    const save = () => {
+      const time = Math.max(0, Math.min(duration - 90, base + Math.floor((Date.now() - start) / 1000)));
+      if (time < 30) return;
+      setContinueWatchingList((list) => {
+        const rest = list.filter((p) => String(p.id) !== String(movie.id));
+        return [{ id: movie.id, title: movie.title, img: movie.img || movie.bgImage, time, duration, updatedAt: Date.now(), episodeId: ep ? ep.id : undefined, episodeLabel: ep ? "T" + ep.season + ":E" + ep.number + " · " + ep.title : undefined } as ProgressItem].concat(rest).slice(0, 50);
+      });
+    };
+    const t = setInterval(save, 30000);
+    return () => { clearInterval(t); save(); };
+  }, [isPlaying, selectedMovie && selectedMovie.id, playerIframeUrl, currentEpisode && currentEpisode.id]);
 
   const currentEpisodeRef = useRef<Episode | null>(null);
   currentEpisodeRef.current = currentEpisode;
