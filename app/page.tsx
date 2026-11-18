@@ -3455,6 +3455,23 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [skipMode, tvMode]);
 
+  // Pantalla completa cuando el video es externo: se agranda todo el reproductor
+  const cvIframeFullscreen = () => {
+    const d: any = document;
+    if (d.fullscreenElement || d.webkitFullscreenElement) {
+      try { const ex = d.exitFullscreen || d.webkitExitFullscreen; const r = ex && ex.call(d); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+      return;
+    }
+    const box: any = playerShellRef.current;
+    const req = box && (box.requestFullscreen || box.webkitRequestFullscreen);
+    const tip = () => showToast("En este dispositivo usa el botón de pantalla completa (⛶) dentro del reproductor.", 5000);
+    if (!req) { tip(); return; }
+    try {
+      Promise.resolve(req.call(box))
+        .then(() => { try { const o: any = (screen as any).orientation; if (o && o.lock) o.lock("landscape").catch(() => {}); } catch (e) {} })
+        .catch(tip);
+    } catch (e) { tip(); }
+  };
   const requestFullscreenSafe = () => {
     const el: any = playerRef.current || document.documentElement;
     const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
@@ -9358,12 +9375,12 @@ const handleEditClick = (movie: Movie) => {
             })()}
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none max-w-full pb-0.5" style={{ scrollbarWidth: "none" }}>
               <button 
-                onClick={touchUi ? toggleTouchFullscreen : requestFullscreenSafe}
+                onClick={playerIframeUrl ? cvIframeFullscreen : touchUi ? toggleTouchFullscreen : requestFullscreenSafe}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Maximize2 className="w-4 h-4 text-green-400" /> Pantalla completa
               </button>
-              <div className="relative">
+              <div className={"relative" + (playerIframeUrl ? " hidden" : "")}>
                 <button
                   onClick={() => setRateOpen((o) => !o)}
                   aria-label="Velocidad de reproducción"
@@ -9381,7 +9398,7 @@ const handleEditClick = (movie: Movie) => {
                   </div>
                 )}
               </div>
-              {pipSupported && (
+              {pipSupported && !playerIframeUrl && (
                 <button
                   onClick={togglePip}
                   className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -9399,6 +9416,7 @@ const handleEditClick = (movie: Movie) => {
               )}
               <button 
                 onClick={toggleVideoFit}
+                style={playerIframeUrl ? { display: "none" } : undefined}
                 className="flex items-center gap-1.5 bg-[#181818] hover:bg-gray-800 px-3.5 sm:px-4 py-2 rounded-full text-xs font-bold border border-white/10 whitespace-nowrap shrink-0 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <Tv className="w-4 h-4 text-green-400" /> {videoFit === "cover" ? "Ver completa" : "Llenar pantalla"}
