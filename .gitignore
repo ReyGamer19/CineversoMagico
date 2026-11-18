@@ -47,3 +47,7 @@ canales-quitados.txt
 
 .vercel
 .env*
+
+# respaldos y scripts locales
+*.bak
+scripts/
