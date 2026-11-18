@@ -2508,12 +2508,41 @@ export default function Home() {
         return;
       }
     } catch (e) {}
-    const jobs: { id: string; title: string; where: string; url: string }[] = [];
-    const skip = (u: string) => !u || !/^https?:\/\//i.test(u) || /gtv-videos-bucket|youtube\.com|youtu\.be|drive\.google|\/embed\//i.test(u);
+    // cv-revision-servidores: revisa el enlace principal y todos los servidores de cada título
+    const jobs: { id: string; title: string; where: string; urls: string[] }[] = [];
+    const skip = (u: string) => !u || !/^https?:\/\//i.test(u) || /gtv-videos-bucket/i.test(u);
+    const uniq = (arr: (string | undefined)[]) => {
+      const seen: Record<string, boolean> = {};
+      const out: string[] = [];
+      arr.forEach((u) => { const x = String(u || "").trim(); if (skip(x)) return; const k = cvFixLink(x); if (seen[k]) return; seen[k] = true; out.push(x); });
+      return out;
+    };
     catalogAll.forEach((m) => {
-      if (!skip(m.videoUrl)) jobs.push({ id: String(m.id), title: m.title, where: "Película", url: m.videoUrl });
-      (m.episodes || []).forEach((ep) => { if (!skip(ep.videoUrl)) jobs.push({ id: String(m.id), title: m.title, where: "T" + ep.season + " E" + ep.number, url: ep.videoUrl }); });
+      const urls = uniq([m.videoUrl].concat((m.videoServers || []).map((x) => x && x.url)));
+      if (urls.length) jobs.push({ id: String(m.id), title: m.title, where: m.type === "serie" ? "Serie" : "Película", urls });
+      (m.episodes || []).forEach((ep) => {
+        const eu = uniq([ep.videoUrl].concat((ep.videoServers || []).map((x) => x && x.url)));
+        if (eu.length) jobs.push({ id: String(m.id), title: m.title, where: "T" + ep.season + " E" + ep.number, urls: eu });
+      });
     });
+    // Revisa un enlace: "" si está bien, o el motivo del problema
+    const checkOne = (url: string): Promise<string> => {
+      const embed = cvResolveEmbed(url, "auto");
+      return fetch("/api/video-check?u=" + encodeURIComponent(embed || url), { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: any) => {
+          const st = d && d.status ? Number(d.status) : 0;
+          if (embed) {
+            // Reproductor externo: es normal que sea una página web; solo falla si el archivo ya no existe
+            return st === 404 || st === 410 ? "Borrado o no existe (" + st + ")" : "";
+          }
+          const ct = String((d && d.contentType) || "");
+          if (!d || (!d.ok && st !== 206)) return st === 403 ? "Bloqueado (403)" : st === 404 ? "Borrado o no existe (404)" : d && d.reason === "timeout" ? "No responde (muy lento)" : st ? "Error " + st : "No se pudo conectar";
+          if (/text\/html/i.test(ct)) return "El enlace abre una página, no un video";
+          return "";
+        })
+        .catch(() => "");
+    };
     const list = jobs.slice(0, 300);
     const issues: { id: string; title: string; where: string; reason: string }[] = [];
     let done = 0, next = 0;
@@ -2528,17 +2557,20 @@ export default function Home() {
     const worker = (): Promise<void> => {
       if (next >= list.length) return Promise.resolve();
       const j = list[next++];
-      return fetch("/api/video-check?u=" + encodeURIComponent(j.url), { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d: any) => {
-          const ct = String((d && d.contentType) || "");
-          let reason = "";
-          if (!d || (!d.ok && d.status !== 206)) {
-            reason = d && d.status === 403 ? "Bloqueado (403)" : d && d.status === 404 ? "Borrado o no existe (404)" : d && d.reason === "timeout" ? "No responde (muy lento)" : d && d.status ? "Error " + d.status : "No se pudo conectar";
-          } else if (/text\/html/i.test(ct)) reason = "El enlace abre una página, no un video";
-          if (reason) issues.push({ id: j.id, title: j.title, where: j.where, reason });
+      let firstReason = "";
+      // Basta con que UN servidor funcione para que el título esté bien
+      const tryAt = (i: number): Promise<boolean> =>
+        i >= j.urls.length
+          ? Promise.resolve(false)
+          : checkOne(j.urls[i]).then((reason) => {
+              if (!reason) return true;
+              if (!firstReason) firstReason = reason;
+              return tryAt(i + 1);
+            });
+      return tryAt(0)
+        .then((ok) => {
+          if (!ok) issues.push({ id: j.id, title: j.title, where: j.where, reason: j.urls.length > 1 ? "Ningún servidor funciona: " + firstReason : firstReason || "No se pudo comprobar" });
         })
-        .catch(() => {})
         .then(() => { done++; setLinkCheck((c) => ({ ...c, done })); return worker(); });
     };
     Promise.all([worker(), worker(), worker(), worker()]).then(finish);
@@ -2621,7 +2653,8 @@ export default function Home() {
         if (d) {
           const st = d.status || 0;
           const ct = String(d.contentType || "");
-          if (st === 200 || st === 206) t = ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct) ? "✖ No es un video directo (" + ct + ")" : "✔ Funciona (" + st + ")";
+          if (cvResolveEmbed(movie.videoUrl || "", "auto") && st !== 404 && st !== 410) t = "✔ Reproductor externo (" + (st || "sin respuesta") + ")";
+          else if (st === 200 || st === 206) t = ct && !/video|octet-stream|mpegurl|mp2t/i.test(ct) ? "✖ No es un video directo (" + ct + ")" : "✔ Funciona (" + st + ")";
           else if (st === 0) t = "✖ El servidor no responde";
           else t = "✖ Error " + st + (st === 403 ? " (bloqueado/retirado)" : st === 404 ? " (no existe)" : "");
         }
