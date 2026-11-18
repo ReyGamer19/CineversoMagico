@@ -618,8 +618,25 @@ function Rail({ className, style, children }: { className: string; style?: { [k:
 
 // ===== Reproductor externo: decide si un enlace va en <iframe> =====
 // Devuelve la URL para el iframe, o "" si se debe reproducir con <video> (MP4 / HLS).
-function cvResolveEmbed(rawUrl: string, type?: string): string {
+// ===== Corrige enlaces al pegarlos en el panel =====
+// Página del archivo -> reproductor:  host/es/CODIGO/file  ->  host/es/CODIGO/embed
+// Descarga -> reproductor:            host/d/CODIGO, /f/, /v/  ->  host/e/CODIGO
+function cvFixLink(rawUrl: string): string {
   const url = String(rawUrl || "").trim();
+  let u: URL;
+  try { u = new URL(url); } catch (e) { return rawUrl; }
+  const p = u.pathname;
+  if (/\.(mp4|m4v|webm|ogg|ogv|mov|mkv|m3u8|mpd|ts)$/i.test(p)) return url;
+  if (/(^|\.)(youtube\.com|youtu\.be|vimeo\.com|google\.com|googleapis\.com|archive\.org)$/i.test(u.hostname)) return url;
+  const fe = p.match(/^\/([a-z]{2}\/)?([A-Za-z0-9_-]{6,})\/(file|watch|download)\/?$/);
+  if (fe) { u.pathname = "/" + (fe[1] || "") + fe[2] + "/embed"; return u.toString(); }
+  const d = p.match(/^\/(d|f|v)\/([^/]+)/);
+  if (d) { u.pathname = "/e/" + d[2]; return u.toString(); }
+  return url;
+}
+
+function cvResolveEmbed(rawUrl: string, type?: string): string {
+  const url = cvFixLink(String(rawUrl || "").trim());
   if (!url || type === "mp4" || type === "hls" || type === "dash") return "";
   let u: URL;
   try { u = new URL(url); } catch (e) { return type === "iframe" ? url : ""; }
@@ -4951,7 +4968,7 @@ const handleEditClick = (movie: Movie) => {
         desc: "Contenido añadido desde el panel de administración.",
         bgImage: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
         img: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop",
-        videoUrl: it.url, addedAt: Date.now(), originalLanguage: "ES",
+        videoUrl: cvFixLink(it.url), addedAt: Date.now(), originalLanguage: "ES",
       };
       return fetch("/api/tmdb?type=" + kind + "&q=" + encodeURIComponent(it.title), { cache: "no-store" })
         .then((r) => r.json())
@@ -7416,7 +7433,7 @@ const handleEditClick = (movie: Movie) => {
         : "https://archive.org/download/..."
     }
     value={newMovieVideoUrl}
-    onChange={(e) => setNewMovieVideoUrl(e.target.value)}
+    onChange={(e) => setNewMovieVideoUrl(cvFixLink(e.target.value))}
     className="w-full bg-[#050505] border border-gray-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
   />
 </div>
@@ -7524,7 +7541,7 @@ const handleEditClick = (movie: Movie) => {
                     <input className={"col-span-1 sm:col-span-1 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} inputMode="numeric" placeholder="T" value={epSeason} onChange={(e) => setEpSeason(e.target.value.replace(/[^0-9]/g, ""))} aria-label="Temporada" />
                     <input className={"col-span-1 sm:col-span-1 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} inputMode="numeric" placeholder="E" value={epNumber} onChange={(e) => setEpNumber(e.target.value.replace(/[^0-9]/g, ""))} aria-label="Episodio" />
                     <input className={"col-span-2 sm:col-span-3 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} placeholder="Título del episodio" value={epTitle} onChange={(e) => setEpTitle(e.target.value)} />
-                    <input className={"col-span-4 sm:col-span-5 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} placeholder="https://.../episodio.mp4" value={epUrl} onChange={(e) => setEpUrl(e.target.value)} />
+                    <input className={"col-span-4 sm:col-span-5 w-full bg-[#050505] border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"} placeholder="https://.../episodio.mp4" value={epUrl} onChange={(e) => setEpUrl(cvFixLink(e.target.value))} />
                     <button type="button" onClick={addEpisode} className="col-span-4 sm:col-span-2 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl text-xs py-2.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
                       + Agregar
                     </button>
