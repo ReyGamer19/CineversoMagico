@@ -5493,13 +5493,23 @@ const handleEditClick = (movie: Movie) => {
   const startSurprise = (exclude?: string) => {
     const p = pickSurprise(exclude || "");
     if (!p) { showToast("Todavía no hay películas para elegir."); return; }
+    // cv-ruleta-siempre: la ruleta gira siempre (también en "Otra"); con "reducir movimiento" gira más corto
     let reduce = false;
     try { reduce = !!window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
     const others = catalog.filter((x) => x.id !== p.m.id && x.bgImage);
     const reel: Movie[] = [];
-    for (let i = 0; i < 15 && others.length; i++) reel.push(others[Math.floor(Math.random() * others.length)]);
+    let lastId = "";
+    for (let i = 0; i < (reduce ? 8 : 15) && others.length; i++) {
+      // Sin repetir la misma portada dos veces seguidas, para que se note el giro
+      let pickOne = others[Math.floor(Math.random() * others.length)];
+      if (others.length > 1 && String(pickOne.id) === lastId) pickOne = others[(others.indexOf(pickOne) + 1) % others.length];
+      lastId = String(pickOne.id);
+      reel.push(pickOne);
+    }
     reel.push(p.m);
-    setSurprise({ phase: reduce || reel.length < 3 ? "done" : "spin", reel, idx: reduce ? reel.length - 1 : 0, pick: p.m, why: p.why });
+    // Precarga las portadas para que se vean al girar
+    reel.forEach((m) => { try { const im = new Image(); im.src = posterSrc(m); } catch (e) {} });
+    setSurprise({ phase: reel.length < 3 ? "done" : "spin", reel, idx: reel.length < 3 ? reel.length - 1 : 0, pick: p.m, why: p.why });
   };
   useEffect(() => {
     if (!surprise || surprise.phase !== "spin") return;
@@ -5510,9 +5520,9 @@ const handleEditClick = (movie: Movie) => {
       i++;
       if (i >= n - 1) { setSurprise((s) => (s ? { ...s, idx: n - 1, phase: "done" } : s)); return; }
       setSurprise((s) => (s ? { ...s, idx: i } : s));
-      setTimeout(step, 60 + i * i * 1.3);
+      setTimeout(step, 80 + i * i * 1.6);
     };
-    const t = setTimeout(step, 90);
+    const t = setTimeout(step, 250);
     return () => { alive = false; clearTimeout(t); };
   }, [surprise && surprise.phase, surprise && String(surprise.pick.id)]);
 
