@@ -9465,13 +9465,12 @@ const handleEditClick = (movie: Movie) => {
                     aria-label="Cambiar servidor"
                     className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black pl-3 pr-2.5 py-2 rounded-full text-xs font-black whitespace-nowrap transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white"
                   >
-                    <span className="w-2 h-2 rounded-full bg-black/70" /> Latino
-                    <span className="font-bold opacity-70">· {active.name}</span>
+                    <span data-cv="cv-boton-nombre">{active.name}</span>
                     <ChevronDown className={"w-4 h-4 transition-transform " + (serverMenuOpen ? "rotate-180" : "")} />
                   </button>
                   {serverMenuOpen && (
                     <div className="absolute bottom-full mb-2 left-0 bg-[#141414] border border-gray-700 rounded-xl p-1.5 flex flex-col min-w-[190px] shadow-2xl z-40">
-                      <div className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Latino · elige un servidor</div>
+                      <div className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Elige un servidor</div>
                       {opts.map((o) => (
                         <button
                           key={"srv-" + o.id}
