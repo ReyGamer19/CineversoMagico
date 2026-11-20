@@ -4897,10 +4897,13 @@ const handleEditClick = (movie: Movie) => {
     return () => clearInterval(iv);
   }, [chatOpen, tvMode]);
   useEffect(() => {
-    if (!chatOpen) return;
-    setChatUnread(0);
-    try { if (chatSinceRef.current) localStorage.setItem("cv_chat_read", String(chatSinceRef.current)); } catch (e) {}
+    // cv-en-linea: todos los visitantes avisan que están conectados (no solo quien abre el chat)
+    if (chatOpen) {
+      setChatUnread(0);
+      try { if (chatSinceRef.current) localStorage.setItem("cv_chat_read", String(chatSinceRef.current)); } catch (e) {}
+    }
     const ping = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       let vid = "";
       try { vid = localStorage.getItem("cv_vid") || ""; } catch (e) {}
       fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ping", vid }) })
@@ -9825,6 +9828,13 @@ const handleEditClick = (movie: Movie) => {
         >
           <span className="text-lg leading-none">💬</span>
           <span className="text-sm hidden sm:inline">Chat</span>
+          {chatOnline > 0 && (
+            <span data-cv="cv-boton-enlinea" className="flex items-center gap-1 pl-2 ml-0.5 border-l border-black/25 text-sm" title={chatOnline + " en línea"}>
+              <span className="w-2 h-2 rounded-full bg-black/70 animate-pulse" />
+              <User className="w-4 h-4" strokeWidth={3} />
+              {chatOnline}
+            </span>
+          )}
           {chatUnread > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 text-white text-[11px] font-black flex items-center justify-center border-2 border-[#050505]">{chatUnread > 9 ? "9+" : chatUnread}</span>}
         </button>
       )}
