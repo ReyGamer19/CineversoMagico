@@ -64,6 +64,7 @@ interface Movie {
   director?: string;
   production?: string;
   originalLanguage?: string;
+  audio?: string; // cv-idioma: Latino, Español, Inglés, Subtitulado u Original
   ageRating?: string;
   trailerUrl?: string;
   episodes?: Episode[];
@@ -1868,6 +1869,7 @@ export default function Home() {
   const [newMovieType, setNewMovieType] = useState<"pelicula" | "serie">("pelicula");
   const [newMovieImage, setNewMovieImage] = useState("");
   const [newMovieVideoUrl, setNewMovieVideoUrl] = useState("");
+  const [newMovieAudio, setNewMovieAudio] = useState("Latino");
   const [newMovieVideoServers, setNewMovieVideoServers] = useState<VideoServer[]>([]);
   const [newMovieYear, setNewMovieYear] = useState("");
   const [newMovieDuration, setNewMovieDuration] = useState("");
@@ -3755,6 +3757,7 @@ export default function Home() {
           introStart: parseClock(newIntroStart),
           introEnd: parseClock(newIntroEnd),
           creditsStart: parseClock(newCreditsStart),
+          audio: newMovieAudio,
           comingSoon: comingFinal || undefined,
           releaseDate: comingFinal ? newReleaseDate || undefined : undefined,
           ...(tmdbExtra ? {
@@ -3803,6 +3806,7 @@ export default function Home() {
         introStart: parseClock(newIntroStart),
         introEnd: parseClock(newIntroEnd),
         creditsStart: parseClock(newCreditsStart),
+        audio: newMovieAudio,
         comingSoon: newComingSoon || undefined,
         releaseDate: newComingSoon ? newReleaseDate || undefined : undefined,
         originalLanguage: (tmdbExtra && tmdbExtra.originalLanguage) || "ES",
@@ -3829,6 +3833,7 @@ const resetMovieForm = () => {
   setNewMovieDesc("");
   setNewMovieImage("");
   setNewMovieVideoUrl("");
+  setNewMovieAudio("Latino");
   setNewMovieVideoServers([]);
   setNewMovieYear("");
   setNewMovieDuration("");
@@ -3967,6 +3972,7 @@ const handleEditClick = (movie: Movie) => {
   setNewMovieType(movie.type || "pelicula");
   setNewMovieImage(movie.bgImage || "");
   setNewMovieVideoUrl(movie.videoUrl || "");
+  setNewMovieAudio(movie.audio || "Latino");
 
   // Recuperar los servidores guardados
   setNewMovieVideoServers(movie.videoServers || []);
@@ -7602,6 +7608,22 @@ const handleEditClick = (movie: Movie) => {
               </div>
 
               
+<div data-cv="cv-idioma-panel">
+  <label className="text-xs text-gray-400 block mb-1">Idioma del video que vas a subir</label>
+  <div className="flex flex-wrap gap-2">
+    {["Latino", "Español", "Inglés", "Subtitulado", "Original"].map((op) => (
+      <button
+        key={"aud-" + op}
+        type="button"
+        onClick={() => setNewMovieAudio(op)}
+        className={"px-3 py-2 rounded-lg text-xs font-bold border cursor-pointer transition " + (newMovieAudio === op ? "bg-green-500 text-black border-green-500" : "bg-[#0a0a0a] text-gray-300 border-gray-800 hover:border-gray-600")}
+      >
+        {op}
+      </button>
+    ))}
+  </div>
+  <p className="text-[11px] text-gray-500 mt-1">Es el idioma en que se escucha o se lee este video. La sinopsis del autocompletado puede quedarse en español.</p>
+</div>
 <div>
   <label className="text-xs text-gray-400 block mb-1">
     Enlace del Vídeo (opcional si agregas servidores abajo)
@@ -8895,6 +8917,7 @@ const handleEditClick = (movie: Movie) => {
                   {selectedMovie.year && <span className="text-gray-300">{selectedMovie.year}</span>}
                   {selectedMovie.ageRating && <span className="border border-gray-400 text-gray-200 px-1.5 rounded text-[11px] font-bold">{selectedMovie.ageRating}</span>}
                   {selectedMovie.duration && <span className="text-gray-300">{selectedMovie.duration}</span>}
+                  {selectedMovie.audio && <span className={"px-2 py-0.5 rounded text-[11px] font-black " + (selectedMovie.audio === "Latino" || selectedMovie.audio === "Español" ? "bg-green-500/15 text-green-400 border border-green-500/40" : "bg-yellow-400/15 text-yellow-300 border border-yellow-400/40")}>{selectedMovie.audio === "Subtitulado" ? "CC Subtitulado" : "🔊 " + selectedMovie.audio}</span>}
                   {selectedMovie.type === "serie" && sortedEpisodes(selectedMovie).length > 0 && (
                     <span className="text-gray-300">{sortedEpisodes(selectedMovie).map((e) => e.season).filter((v, i, a) => a.indexOf(v) === i).length} temporada(s)</span>
                   )}
@@ -9169,6 +9192,12 @@ const handleEditClick = (movie: Movie) => {
                       <div>
                         <span className="text-gray-500 block mb-1">Productora</span>
                         <span className="text-gray-200 font-medium">{selectedMovie.production}</span>
+                      </div>
+                    )}
+                    {selectedMovie.audio && (
+                      <div>
+                        <span className="text-gray-500 block mb-1">Disponible en</span>
+                        <span className="text-gray-200 font-medium">{selectedMovie.audio}</span>
                       </div>
                     )}
                     {selectedMovie.originalLanguage && (
