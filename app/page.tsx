@@ -4843,6 +4843,8 @@ const handleEditClick = (movie: Movie) => {
   const [chatErr, setChatErr] = useState("");
   const [chatUnread, setChatUnread] = useState(0);
   const [chatPinEdit, setChatPinEdit] = useState("");
+  // cv-respuestas: el admin puede responder un mensaje concreto
+  const [chatReply, setChatReply] = useState<{ id: string; uid: string; name: string; text: string } | null>(null);
   const chatSinceRef = useRef(0);
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const chatOpenRef = useRef(false);
@@ -4871,6 +4873,28 @@ const handleEditClick = (movie: Movie) => {
         if (!d || !Array.isArray(d.msgs)) return;
         setChatPinned(d.pinned || "");
         setChatOnline(d.online || 0);
+        // Aviso cuando Cineverso responde uno de tus mensajes
+        try {
+          const myUid = localStorage.getItem("cv_chat_uid") || "";
+          const mine: string[] = JSON.parse(localStorage.getItem("cv_chat_mine") || "[]");
+          const lastSeen = Number(localStorage.getItem("cv_chat_reply_seen") || 0);
+          let newest = lastSeen;
+          let last: ChatMsg | null = null;
+          (d.msgs as ChatMsg[]).forEach((m) => {
+            const rr = m.admin ? /^\[re:([^|\]]+)\|([^\]]*)\]\s*/.exec(m.text || "") : null;
+            if (!rr || m.at <= lastSeen) return;
+            const forMe = mine.indexOf(rr[1]) !== -1 || (!!myUid && rr[2] === myUid) || (!!accountUser && String(accountUser.id) === rr[2]);
+            if (!forMe) return;
+            if (m.at > newest) { newest = m.at; last = m; }
+          });
+          if (last) {
+            const lm: ChatMsg = last;
+            const who = (lm as any).owner ? "El fundador de Cineverso" : "Cineverso";
+            const body = lm.text.replace(/^\[re:[^\]]*\]\s*/, "").slice(0, 110);
+            showToast("💬 " + who + " te respondió en el chat: «" + body + "»", 8000);
+            localStorage.setItem("cv_chat_reply_seen", String(newest));
+          }
+        } catch (e) {}
         const ids: string[] | null = Array.isArray(d.ids) ? d.ids : null;
         setChatMsgs((prev) => {
           const seen = new Set(prev.map((m) => m.id));
@@ -4932,6 +4956,11 @@ const handleEditClick = (movie: Movie) => {
     setChatErr("");
     const body: any = { action: "send", text, name: activeProfile.name, avatar: activeProfile.avatar };
     if (isAdmin) { try { body.password = localStorage.getItem("cineverso_admin_pass") || ""; } catch (e) {} }
+    if (isAdmin && chatReply) {
+      const marker = "[re:" + chatReply.id + "|" + chatReply.uid + "] ";
+      if ((marker + text).length > 300) { setChatBusy(false); setChatErr("La respuesta es muy larga (máx. " + (300 - marker.length) + " caracteres)."); return; }
+      body.text = marker + text;
+    }
     fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) })
       .then((r) => r.json().catch(() => ({})).then((d: any) => ({ ok: r.ok, status: r.status, d })))
       .then(({ ok, status, d }) => {
@@ -4942,6 +4971,13 @@ const handleEditClick = (movie: Movie) => {
         setChatBusy(false);
         if (ok && d.last) {
           setChatInput("");
+          setChatReply(null);
+          try {
+            if (d.last.uid) localStorage.setItem("cv_chat_uid", String(d.last.uid));
+            const mine: string[] = JSON.parse(localStorage.getItem("cv_chat_mine") || "[]");
+            mine.push(String(d.last.id));
+            localStorage.setItem("cv_chat_mine", JSON.stringify(mine.slice(-100)));
+          } catch (e) {}
           setChatMsgs((prev) => (prev.some((m) => m.id === d.last.id) ? prev : prev.concat(d.last)));
           chatSinceRef.current = Math.max(chatSinceRef.current, d.last.at);
           setTimeout(() => { const el = chatListRef.current; if (el) el.scrollTop = el.scrollHeight; }, 50);
@@ -9863,11 +9899,22 @@ const handleEditClick = (movie: Movie) => {
                     <span className="ml-auto text-[10px] text-gray-500 shrink-0">{fmtChatTime(m.at)}</span>
                   </div>
                   {(() => {
-                    const mm = /https?:\/\/\S+\/ver\/(\d+)/.exec(m.text);
+                    const rr = m.admin ? /^\[re:([^|\]]+)\|([^\]]*)\]\s*/.exec(m.text || "") : null;
+                    const txt = rr ? m.text.replace(rr[0], "") : m.text;
+                    const orig = rr ? chatMsgs.find((x) => x.id === rr[1]) : undefined;
+                    let forMe = false;
+                    if (rr) { try { const mine: string[] = JSON.parse(localStorage.getItem("cv_chat_mine") || "[]"); forMe = mine.indexOf(rr[1]) !== -1 || rr[2] === (localStorage.getItem("cv_chat_uid") || "-") || (!!accountUser && String(accountUser.id) === rr[2]); } catch (e) {} }
+                    const mm = /https?:\/\/\S+\/ver\/(\d+)/.exec(txt);
                     const mv = mm ? catalogAll.find((x) => String(x.id) === mm[1]) : undefined;
                     return (
                       <>
-                        <p className="text-[13px] text-gray-200 leading-snug break-words whitespace-pre-wrap">{mm ? m.text.replace(mm[0], "").replace(/Míralo aquí:\s*$/, "").trim() : m.text}</p>
+                        {rr && (
+                          <div className={"mt-1 mb-1 border-l-2 pl-2 py-0.5 rounded-r " + (forMe ? "border-yellow-400 bg-yellow-400/10" : "border-green-500 bg-white/[0.04]")}>
+                            <p className={"text-[11px] font-bold " + (forMe ? "text-yellow-300" : "text-green-400")}>↩ {forMe ? "Te respondió" : "Respondiendo a " + (orig ? orig.name : "un mensaje")}</p>
+                            {orig && <p className="text-[11px] text-gray-400 truncate">{orig.text.replace(/^\[re:[^\]]*\]\s*/, "")}</p>}
+                          </div>
+                        )}
+                        <p className="text-[13px] text-gray-200 leading-snug break-words whitespace-pre-wrap">{mm ? txt.replace(mm[0], "").replace(/Míralo aquí:\s*$/, "").trim() : txt}</p>
                         {mv && (
                           <button onClick={() => { setChatOpen(false); setSelectedMovie(mv); }} className="mt-1.5 flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-gray-800 rounded-xl p-1.5 pr-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500">
                             <img decoding="async" loading="lazy" src={posterSrc(mv)} alt="" className="w-8 h-11 rounded object-cover bg-gray-900" />
@@ -9879,6 +9926,7 @@ const handleEditClick = (movie: Movie) => {
                   })()}
                   {isAdmin && (
                     <div className="flex gap-3 mt-1 opacity-60 group-hover:opacity-100">
+                      <button onClick={() => { setChatReply({ id: m.id, uid: m.uid, name: m.name, text: m.text }); setTimeout(() => { const el = document.querySelector("input[data-cv-chat-input]") as HTMLInputElement | null; if (el) el.focus(); }, 30); }} className="text-[10px] text-green-400 hover:underline cursor-pointer">Responder</button>
                       <button onClick={() => chatAdmin("delete", { id: m.id })} className="text-[10px] text-red-400 hover:underline cursor-pointer">Borrar</button>
                       {!m.admin && <button onClick={() => { if (window.confirm("¿Bloquear a " + m.name + "? Se borrarán sus mensajes y ya no podrá escribir.")) chatAdmin("ban", { uid: m.uid }); }} className="text-[10px] text-red-400 hover:underline cursor-pointer">Bloquear</button>}
                     </div>
@@ -9891,13 +9939,21 @@ const handleEditClick = (movie: Movie) => {
             {accountUser || isAdmin ? (
               <>
                 {chatErr && <p className="text-[11px] text-red-400 font-bold mb-2">{chatErr}</p>}
+                {isAdmin && chatReply && (
+                  <div className="flex items-center gap-2 mb-2 bg-green-500/10 border border-green-500/30 rounded-lg px-2.5 py-1.5">
+                    <span className="text-[11px] text-green-300 font-bold shrink-0">↩ {chatReply.name}:</span>
+                    <span className="text-[11px] text-gray-400 truncate flex-1">{chatReply.text.replace(/^\[re:[^\]]*\]\s*/, "")}</span>
+                    <button type="button" onClick={() => setChatReply(null)} aria-label="Cancelar respuesta" className="text-gray-400 hover:text-white text-xs cursor-pointer">✕</button>
+                  </div>
+                )}
                 <form onSubmit={(e) => { e.preventDefault(); sendChat(); }} className="flex items-center gap-2">
                   <input
                     type="text"
                     maxLength={300}
                     value={chatInput}
                     onChange={(e) => { setChatInput(e.target.value); if (chatErr) setChatErr(""); }}
-                    placeholder={"Escribe como " + activeProfile.name + "…"}
+                    placeholder={isAdmin && chatReply ? "Responder a " + chatReply.name + "…" : "Escribe como " + activeProfile.name + "…"}
+                    data-cv-chat-input=""
                     className="flex-1 min-w-0 bg-[#050505] border border-gray-800 rounded-full px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                   <button type="submit" disabled={chatBusy || !chatInput.trim()} aria-label="Enviar" className="w-11 h-11 rounded-full bg-green-500 hover:bg-green-400 disabled:opacity-40 text-black flex items-center justify-center cursor-pointer shrink-0 focus:outline-none focus:ring-4 focus:ring-white/60">
